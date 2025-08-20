@@ -1,0 +1,6 @@
+{
+  "name": "Technical Transcript Summarizer",
+  "description": "A React web application designed to ingest and process very large technical conversation transcripts, producing a dense, compact analysis and extracting key highlights using Gemini API.",
+  "requestFramePermissions": [],
+  "prompt": ""
+}
