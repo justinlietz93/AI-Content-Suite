@@ -1,13 +1,14 @@
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import { FileLoader } from './components/FileLoader';
 import { ProgressBar } from './components/ProgressBar';
 import { SummaryViewer } from './components/SummaryViewer';
 import { Tabs } from './components/Tabs';
 import { processTranscript } from './services/summarizationService';
 import { processStyleExtraction } from './services/styleExtractionService';
+import { processRewrite } from './services/rewriterService';
 import { generateSuggestions } from './services/geminiService';
-import type { ProcessedOutput, ProgressUpdate, AppState, ProcessingError, Mode, SummaryOutput, StyleModelOutput } from './types';
+import type { ProcessedOutput, ProgressUpdate, AppState, ProcessingError, Mode, SummaryOutput, StyleModelOutput, RewriteLength, RewriterOutput } from './types';
 import { INITIAL_PROGRESS } from './constants';
 import { CheckCircleIcon } from './components/icons/CheckCircleIcon';
 import { XCircleIcon } from './components/icons/XCircleIcon';
@@ -35,6 +36,9 @@ const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>('idle');
   const [activeMode, setActiveMode] = useState<Mode>('technical');
   const [styleTarget, setStyleTarget] = useState<string>('');
+  const [rewriteStyle, setRewriteStyle] = useState<string>('');
+  const [rewriteInstructions, setRewriteInstructions] = useState<string>('');
+  const [rewriteLength, setRewriteLength] = useState<RewriteLength>('medium');
   const [progress, setProgress] = useState<ProgressUpdate>(INITIAL_PROGRESS);
   const [processedData, setProcessedData] = useState<ProcessedOutput | null>(null);
   const [error, setError] = useState<ProcessingError | null>(null);
@@ -53,6 +57,28 @@ const App: React.FC = () => {
     setSuggestionsLoading(false);
   }, []);
 
+  const fileToGenerativePart = async (file: File): Promise<any> => {
+    if (file.type.startsWith('image/')) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+                const base64Data = (reader.result as string).split(',')[1];
+                resolve({
+                    inlineData: {
+                        mimeType: file.type,
+                        data: base64Data,
+                    },
+                });
+            };
+            reader.onerror = (error) => reject(error);
+            reader.readAsDataURL(file);
+        });
+    } else { // Assume text-based
+        const text = await readFileAsText(file);
+        return { text: `--- DOCUMENT START: ${file.name} ---\n\n${text}\n\n--- DOCUMENT END: ${file.name} ---` };
+    }
+  };
+
   const handleSubmit = useCallback(async () => {
     if (!currentFiles || currentFiles.length === 0) return;
 
@@ -64,29 +90,49 @@ const App: React.FC = () => {
     setSuggestionsLoading(false);
 
     try {
-      setProgress({ stage: 'Reading Files', percentage: 2, message: `Loading ${currentFiles.length} file(s)...` });
-      const fileContents = await Promise.all(currentFiles.map(file => readFileAsText(file)));
-      const combinedText = fileContents.join('\n\n--- DOCUMENT BREAK ---\n\n');
-      const totalSize = currentFiles.reduce((acc, file) => acc + file.size, 0);
-      const totalSizeMB = (totalSize / (1024 * 1024)).toFixed(2);
-      setProgress({ stage: 'Files Loaded', percentage: 10, message: `All file content loaded (${totalSizeMB} MB).` });
-
       let result: ProcessedOutput;
-      if (activeMode === 'technical') {
-        result = await processTranscript(combinedText, (update) => {
-          setProgress(update);
+
+      if (activeMode === 'rewriter') {
+        setProgress({ stage: 'Reading Files & Images', percentage: 2, message: `Loading ${currentFiles.length} item(s)...` });
+        const parts = await Promise.all(currentFiles.map(fileToGenerativePart));
+        const totalSize = currentFiles.reduce((acc, file) => acc + file.size, 0);
+        const totalSizeMB = (totalSize / (1024 * 1024)).toFixed(2);
+        setProgress({ stage: 'Content Loaded', percentage: 10, message: `All content loaded (${totalSizeMB} MB).` });
+        
+        result = await processRewrite(parts, rewriteStyle, rewriteInstructions, rewriteLength, (update) => {
+            setProgress(update);
         });
-      } else { // 'styleExtractor'
-        result = await processStyleExtraction(combinedText, styleTarget, (update) => {
-          setProgress(update);
-        });
+      } else {
+        setProgress({ stage: 'Reading Files', percentage: 2, message: `Loading ${currentFiles.length} file(s)...` });
+        const fileContents = await Promise.all(currentFiles.map(file => readFileAsText(file)));
+        const combinedText = fileContents.join('\n\n--- DOCUMENT BREAK ---\n\n');
+        const totalSize = currentFiles.reduce((acc, file) => acc + file.size, 0);
+        const totalSizeMB = (totalSize / (1024 * 1024)).toFixed(2);
+        setProgress({ stage: 'Files Loaded', percentage: 10, message: `All file content loaded (${totalSizeMB} MB).` });
+
+        if (activeMode === 'technical') {
+          result = await processTranscript(combinedText, (update) => {
+            setProgress(update);
+          });
+        } else { // 'styleExtractor'
+          result = await processStyleExtraction(combinedText, styleTarget, (update) => {
+            setProgress(update);
+          });
+        }
       }
+
       const endTime = Date.now();
       const durationSeconds = Math.round((endTime - (startTime ?? endTime)) / 1000);
       const fullResult = { ...result, processingTimeSeconds: durationSeconds };
       setProcessedData(fullResult);
       setAppState('completed');
       
+      if (activeMode === 'rewriter') {
+        setSuggestionsLoading(false);
+        setNextStepSuggestions(null);
+        return; // No suggestions for rewriter mode yet
+      }
+
       // Asynchronously fetch suggestions after primary processing is complete
       setSuggestionsLoading(true);
       (async () => {
@@ -120,7 +166,7 @@ const App: React.FC = () => {
       setAppState('error');
       setSuggestionsLoading(false);
     }
-  }, [currentFiles, startTime, activeMode, styleTarget]);
+  }, [currentFiles, startTime, activeMode, styleTarget, rewriteStyle, rewriteInstructions, rewriteLength]);
 
   const handleReset = useCallback(() => {
     setCurrentFiles(null);
@@ -130,6 +176,9 @@ const App: React.FC = () => {
     setProgress(INITIAL_PROGRESS);
     setStartTime(null);
     setStyleTarget('');
+    setRewriteStyle('');
+    setRewriteInstructions('');
+    setRewriteLength('medium');
     setNextStepSuggestions(null);
     setSuggestionsLoading(false);
   }, []);
@@ -137,17 +186,26 @@ const App: React.FC = () => {
   const TABS = [
     { id: 'technical', label: 'Technical Summarizer' },
     { id: 'styleExtractor', label: 'Style Extractor' },
+    { id: 'rewriter', label: 'Rewriter' },
   ];
 
   const descriptionText = {
     technical: "Upload one or more large transcript files to get a concise summary and key highlights.",
-    styleExtractor: "Upload one or more text files to analyze and extract a unique writing style model."
+    styleExtractor: "Upload one or more text files to analyze and extract a unique writing style model.",
+    rewriter: "Upload documents and images, provide a style and instructions, and rewrite them into a new narrative."
   };
 
   const buttonText = {
     technical: currentFiles && currentFiles.length > 0 ? `Summarize ${currentFiles.length} file(s)` : 'Summarize',
     styleExtractor: currentFiles && currentFiles.length > 0 ? `Extract Style from ${currentFiles.length} file(s)` : 'Extract Style',
+    rewriter: currentFiles && currentFiles.length > 0 ? `Rewrite ${currentFiles.length} item(s)` : 'Rewrite',
   };
+
+  const resetButtonText = {
+      technical: 'Summarize Another',
+      styleExtractor: 'Extract Another',
+      rewriter: 'Rewrite Another',
+  }
 
   return (
     <>
@@ -155,7 +213,7 @@ const App: React.FC = () => {
         <div className="w-full max-w-3xl bg-surface shadow-2xl rounded-lg p-6 sm:p-10">
           <header className="mb-6 text-center">
             <h1 className="text-3xl sm:text-4xl font-bold text-text-primary">
-              AI Text Analyzer
+              AI Content Suite
             </h1>
             <p className="text-text-secondary mt-2 text-sm sm:text-base">
               {descriptionText[activeMode]}
@@ -170,7 +228,7 @@ const App: React.FC = () => {
           </div>
 
           {activeMode === 'styleExtractor' && (appState === 'idle' || appState === 'fileSelected') && (
-            <div className="my-4 px-4 sm:px-0">
+            <div className="my-4 px-4 sm:px-0 animate-fade-in-scale">
               <label htmlFor="styleTargetInput" className="block text-sm font-medium text-text-secondary mb-1">
                 Specify Person/Character for Style Analysis (optional):
               </label>
@@ -189,8 +247,61 @@ const App: React.FC = () => {
             </div>
           )}
 
+          {activeMode === 'rewriter' && (appState === 'idle' || appState === 'fileSelected') && (
+            <div className="my-4 px-4 sm:px-0 space-y-4 animate-fade-in-scale">
+              <div>
+                <label htmlFor="rewriteStyleInput" className="block text-sm font-medium text-text-secondary mb-1">
+                  Desired Writing Style:
+                </label>
+                <textarea
+                  id="rewriteStyleInput"
+                  rows={2}
+                  value={rewriteStyle}
+                  onChange={(e) => setRewriteStyle(e.target.value)}
+                  placeholder="e.g., A witty, informal blog post; a formal, academic paper; a thrilling short story..."
+                  className="w-full px-3 py-2 bg-slate-700 border border-border-color rounded-md shadow-sm focus:ring-primary focus:border-primary text-text-primary placeholder-slate-500 text-sm"
+                />
+              </div>
+              <div>
+                <label htmlFor="rewriteInstructionsInput" className="block text-sm font-medium text-text-secondary mb-1">
+                  Other Instructions (optional):
+                </label>
+                <textarea
+                  id="rewriteInstructionsInput"
+                  rows={2}
+                  value={rewriteInstructions}
+                  onChange={(e) => setRewriteInstructions(e.target.value)}
+                  placeholder="e.g., The target audience is children. Focus on the emotional journey. End with a surprising twist."
+                  className="w-full px-3 py-2 bg-slate-700 border border-border-color rounded-md shadow-sm focus:ring-primary focus:border-primary text-text-primary placeholder-slate-500 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-text-secondary mb-2">
+                  Desired Length:
+                </label>
+                <div className="flex items-center space-x-2 bg-slate-700 rounded-lg p-1" role="radiogroup">
+                  {(['short', 'medium', 'long'] as RewriteLength[]).map(len => (
+                    <button
+                      key={len}
+                      onClick={() => setRewriteLength(len)}
+                      role="radio"
+                      aria-checked={rewriteLength === len}
+                      className={`flex-1 py-1.5 text-sm rounded-md transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-slate-700 ${
+                        rewriteLength === len
+                          ? 'bg-primary text-white font-semibold shadow'
+                          : 'text-text-secondary hover:bg-slate-600'
+                      }`}
+                    >
+                      {len.charAt(0).toUpperCase() + len.slice(1)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
           {appState === 'idle' || appState === 'fileSelected' ? (
-            <FileLoader onFileSelect={handleFileSelect} selectedFiles={currentFiles} />
+            <FileLoader onFileSelect={handleFileSelect} selectedFiles={currentFiles} mode={activeMode} />
           ) : null}
 
           {currentFiles && currentFiles.length > 0 && (appState === 'fileSelected' || appState === 'processing') && (
@@ -213,7 +324,7 @@ const App: React.FC = () => {
           )}
 
           {appState === 'completed' && processedData && (
-            <div className="mt-8">
+            <div className="mt-8 animate-fade-in-scale">
               <div className="flex items-center justify-center text-green-400 mb-4">
                 <CheckCircleIcon className="w-8 h-8 mr-2" aria-hidden="true" />
                 <p className="text-xl font-semibold">Processing Complete!</p>
@@ -255,7 +366,7 @@ const App: React.FC = () => {
                       onClick={handleReset}
                       className="w-full px-6 py-3 bg-secondary text-text-primary font-semibold rounded-lg hover:bg-slate-600 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-secondary focus:ring-offset-2 focus:ring-offset-surface flex items-center justify-center gap-2"
                   >
-                      {activeMode === 'technical' ? 'Summarize Another' : 'Extract Another'}
+                      {resetButtonText[activeMode]}
                   </button>
                   <button
                       onClick={() => setIsReportModalOpen(true)}
@@ -270,7 +381,7 @@ const App: React.FC = () => {
           )}
 
           {appState === 'error' && error && (
-            <div className="mt-8 p-4 bg-red-900 border border-red-700 rounded-lg text-red-100" role="alert">
+            <div className="mt-8 p-4 bg-red-900 border border-red-700 rounded-lg text-red-100 animate-fade-in-scale" role="alert">
               <div className="flex items-center mb-2">
                 <XCircleIcon className="w-6 h-6 mr-2" aria-hidden="true"/>
                 <h3 className="text-lg font-semibold">Error</h3>
@@ -292,7 +403,7 @@ const App: React.FC = () => {
           )}
         </div>
         <footer className="text-center mt-8 text-text-secondary text-xs">
-            <p>&copy; {new Date().getFullYear()} AI Text Tools. Powered by Gemini.</p>
+            <p>&copy; {new Date().getFullYear()} AI Content Suite. Powered by Gemini.</p>
         </footer>
       </div>
 

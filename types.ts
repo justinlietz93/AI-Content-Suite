@@ -14,7 +14,12 @@ export interface StyleModelOutput {
   processingTimeSeconds?: number;
 }
 
-export type ProcessedOutput = SummaryOutput | StyleModelOutput;
+export interface RewriterOutput {
+  rewrittenContent: string;
+  processingTimeSeconds?: number;
+}
+
+export type ProcessedOutput = SummaryOutput | StyleModelOutput | RewriterOutput;
 
 export interface ProgressUpdate {
   stage: string;
@@ -27,7 +32,9 @@ export interface ProgressUpdate {
 }
 
 export type AppState = 'idle' | 'fileSelected' | 'processing' | 'completed' | 'error';
-export type Mode = 'technical' | 'styleExtractor';
+export type Mode = 'technical' | 'styleExtractor' | 'rewriter';
+export type RewriteLength = 'short' | 'medium' | 'long';
+
 
 export interface ProcessingError {
     message: string;

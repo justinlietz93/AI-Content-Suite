@@ -1,5 +1,5 @@
 
-import type { ProcessedOutput, Mode, SummaryOutput, StyleModelOutput } from '../types';
+import type { ProcessedOutput, Mode, SummaryOutput, StyleModelOutput, RewriterOutput } from '../types';
 
 declare var marked: any;
 declare var hljs: any;
@@ -32,10 +32,17 @@ const generateHtmlReport = (output: ProcessedOutput, mode: Mode, styleTarget?: s
   const generationDate = formatDate(new Date());
   const isTechnical = mode === 'technical' && 'finalSummary' in output;
   const isStyle = mode === 'styleExtractor' && 'styleDescription' in output;
+  const isRewriter = mode === 'rewriter' && 'rewrittenContent' in output;
+
   const techOutput = isTechnical ? output as SummaryOutput : null;
   const styleOutput = isStyle ? output as StyleModelOutput : null;
+  const rewriterOutput = isRewriter ? output as RewriterOutput : null;
 
-  const title = isTechnical ? 'Technical Summary Report' : `Writing Style Analysis Report${styleTarget ? ` for "${styleTarget}"` : ''}`;
+  const title = isTechnical 
+    ? 'Technical Summary Report' 
+    : isStyle 
+    ? `Writing Style Analysis Report${styleTarget ? ` for "${styleTarget}"` : ''}`
+    : 'Rewritten Narrative Report';
   
   const parseMarkdown = (text: string): string => {
       try {
@@ -77,6 +84,15 @@ const generateHtmlReport = (output: ProcessedOutput, mode: Mode, styleTarget?: s
       </div>
     ` : ''}
     
+    ${isRewriter && rewriterOutput ? `
+      <div class="section">
+        <h2>Generated Narrative</h2>
+        <div class="content-box">
+          ${parseMarkdown(rewriterOutput.rewrittenContent)}
+        </div>
+      </div>
+    ` : ''}
+
     ${suggestions && suggestions.length > 0 ? `
       <div class="section">
         <h2>Next Steps & Suggestions</h2>
@@ -210,7 +226,7 @@ const generateHtmlReport = (output: ProcessedOutput, mode: Mode, styleTarget?: s
     </div>
     ${bodyContent}
     <div class="footer">
-      <p>Powered by AI Text Analyzer & Gemini</p>
+      <p>Powered by AI Content Suite & Gemini</p>
     </div>
   </div>
 </body>
@@ -222,10 +238,17 @@ const generateMarkdownReport = (output: ProcessedOutput, mode: Mode, styleTarget
   const generationDate = formatDate(new Date());
   const isTechnical = mode === 'technical' && 'finalSummary' in output;
   const isStyle = mode === 'styleExtractor' && 'styleDescription' in output;
+  const isRewriter = mode === 'rewriter' && 'rewrittenContent' in output;
+
   const techOutput = isTechnical ? output as SummaryOutput : null;
   const styleOutput = isStyle ? output as StyleModelOutput : null;
+  const rewriterOutput = isRewriter ? output as RewriterOutput : null;
 
-  const title = isTechnical ? 'Technical Summary Report' : `Writing Style Analysis Report${styleTarget ? ` for "${styleTarget}"` : ''}`;
+  const title = isTechnical 
+    ? 'Technical Summary Report' 
+    : isStyle 
+    ? `Writing Style Analysis Report${styleTarget ? ` for "${styleTarget}"` : ''}`
+    : 'Rewritten Narrative Report';
 
   let content = ``;
   content += `# ${title}\n\n`;
@@ -247,6 +270,11 @@ const generateMarkdownReport = (output: ProcessedOutput, mode: Mode, styleTarget
     content += `${styleOutput.styleDescription}\n\n`;
   }
   
+  if (isRewriter && rewriterOutput) {
+    content += `## Generated Narrative\n\n`;
+    content += `${rewriterOutput.rewrittenContent}\n\n`;
+  }
+  
   if (suggestions && suggestions.length > 0) {
     content += `## Next Steps & Suggestions\n\n`;
     content += suggestions.map(s => `* ${s}`).join('\n');
@@ -254,7 +282,7 @@ const generateMarkdownReport = (output: ProcessedOutput, mode: Mode, styleTarget
   }
 
   content += `---\n\n`;
-  content += `*Powered by AI Text Analyzer & Gemini*\n`;
+  content += `*Powered by AI Content Suite & Gemini*\n`;
 
   return content;
 };

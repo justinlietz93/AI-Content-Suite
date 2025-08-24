@@ -1,13 +1,15 @@
 
 import React, { useCallback, useState } from 'react';
 import { UploadIcon } from './icons/UploadIcon';
+import type { Mode } from '../types';
 
 interface FileLoaderProps {
   onFileSelect: (files: File[]) => void;
   selectedFiles: File[] | null;
+  mode: Mode;
 }
 
-export const FileLoader: React.FC<FileLoaderProps> = ({ onFileSelect, selectedFiles }) => {
+export const FileLoader: React.FC<FileLoaderProps> = ({ onFileSelect, selectedFiles, mode }) => {
   const [isDragging, setIsDragging] = useState(false);
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -47,6 +49,14 @@ export const FileLoader: React.FC<FileLoaderProps> = ({ onFileSelect, selectedFi
   };
 
   const hasFiles = selectedFiles && selectedFiles.length > 0;
+  const acceptTypes = mode === 'rewriter'
+    ? ".txt,.md,text/plain,text/markdown,image/png,image/jpeg,image/webp"
+    : ".txt,.md,text/plain,text/markdown";
+
+  const supportedFormatsText = mode === 'rewriter'
+    ? "(Supported formats: .txt, .md, .png, .jpg, .webp)"
+    : "(Supported formats: .txt, .md)";
+
 
   return (
     <div className="w-full p-4 sm:p-6">
@@ -58,20 +68,20 @@ export const FileLoader: React.FC<FileLoaderProps> = ({ onFileSelect, selectedFi
         onClick={openFileDialog}
         className={`flex flex-col items-center justify-center w-full min-h-[16rem] sm:min-h-[20rem] p-4 border-2 border-dashed rounded-xl cursor-pointer transition-all duration-200
                     ${isDragging ? 'border-primary bg-sky-900 scale-105' : 'border-border-color hover:border-sky-500'}
-                    ${hasFiles ? 'border-green-500 bg-green-900' : ''} `}
+                    ${hasFiles ? 'border-green-500 bg-green-900/50' : ''} `}
       >
         <input
           type="file"
           id="fileInput"
           className="hidden"
           onChange={handleFileChange}
-          accept=".txt,.md,text/plain,text/markdown" 
+          accept={acceptTypes} 
           multiple
         />
-        <UploadIcon className={`w-12 h-12 sm:w-16 sm:h-16 mb-4 transition-colors duration-200 ${isDragging || hasFiles ? 'text-primary' : 'text-text-secondary'}`} />
+        <UploadIcon className={`w-12 h-12 sm:w-16 sm:h-16 mb-4 transition-colors duration-200 ${isDragging ? 'text-primary' : hasFiles ? 'text-green-400' : 'text-text-secondary'}`} />
         {hasFiles ? (
           <>
-            <p className="text-lg sm:text-xl font-semibold text-green-300">{selectedFiles.length} file(s) selected</p>
+            <p className="text-lg sm:text-xl font-semibold text-green-300">{selectedFiles.length} item(s) selected</p>
             <p className="text-xs sm:text-sm text-green-400">
               Total size: {(selectedFiles.reduce((total, file) => total + file.size, 0) / (1024 * 1024)).toFixed(2)} MB
             </p>
@@ -84,9 +94,9 @@ export const FileLoader: React.FC<FileLoaderProps> = ({ onFileSelect, selectedFi
           </>
         ) : (
           <>
-            <p className="text-lg sm:text-xl font-semibold text-text-primary">Drag & drop your file(s) here</p>
-            <p className="text-sm text-text-secondary mt-1">or click to select files</p>
-            <p className="text-xs text-text-secondary mt-3">(Supported formats: .txt, .md)</p>
+            <p className="text-lg sm:text-xl font-semibold text-text-primary">Drag & drop your content here</p>
+            <p className="text-sm text-text-secondary mt-1">or click to select</p>
+            <p className="text-xs text-text-secondary mt-3">{supportedFormatsText}</p>
           </>
         )}
       </div>

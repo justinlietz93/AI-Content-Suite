@@ -1,5 +1,7 @@
-import React from 'react';
-import type { SummaryOutput, StyleModelOutput, ProcessedOutput, Highlight, Mode } from '../types';
+import React, { useEffect, useRef } from 'react';
+import type { SummaryOutput, StyleModelOutput, ProcessedOutput, Highlight, Mode, RewriterOutput } from '../types';
+
+declare var marked: any;
 
 interface SummaryViewerProps {
   output: ProcessedOutput;
@@ -16,6 +18,8 @@ const HighlightItem: React.FC<{ highlight: Highlight }> = ({ highlight }) => (
 );
 
 export const SummaryViewer: React.FC<SummaryViewerProps> = ({ output, mode }) => {
+  const contentRef = useRef<HTMLDivElement>(null);
+
   const copyToClipboard = (text: string, type: string) => {
     navigator.clipboard.writeText(text).then(() => {
       // TODO: Consider adding a toast notification for feedback
@@ -26,7 +30,22 @@ export const SummaryViewer: React.FC<SummaryViewerProps> = ({ output, mode }) =>
     });
   };
 
-  if (mode === 'technical' && output && 'finalSummary' in output) {
+  useEffect(() => {
+    if (mode === 'rewriter' && 'rewrittenContent' in output && contentRef.current) {
+        if (typeof marked !== 'undefined' && output.rewrittenContent) {
+            contentRef.current.innerHTML = marked.parse(output.rewrittenContent);
+        } else if (contentRef.current) {
+            // Fallback to plain text if marked is not available or content is empty
+            const p = document.createElement('p');
+            p.className = 'whitespace-pre-wrap';
+            p.textContent = output.rewrittenContent;
+            contentRef.current.innerHTML = '';
+            contentRef.current.appendChild(p);
+        }
+    }
+  }, [output, mode]);
+
+  if (mode === 'technical' && 'finalSummary' in output) {
     const techOutput = output as SummaryOutput;
     return (
       <div className="space-y-8">
@@ -73,7 +92,7 @@ export const SummaryViewer: React.FC<SummaryViewerProps> = ({ output, mode }) =>
         )}
       </div>
     );
-  } else if (mode === 'styleExtractor' && output && 'styleDescription' in output) {
+  } else if (mode === 'styleExtractor' && 'styleDescription' in output) {
     const styleOutput = output as StyleModelOutput;
     return (
       <div className="space-y-8">
@@ -96,6 +115,36 @@ export const SummaryViewer: React.FC<SummaryViewerProps> = ({ output, mode }) =>
           </div>
           <div className="p-4 bg-slate-800 rounded-lg max-h-[32rem] overflow-y-auto shadow-inner">
             <p className="text-text-primary whitespace-pre-wrap text-sm leading-relaxed">{styleOutput.styleDescription}</p>
+          </div>
+        </div>
+      </div>
+    );
+  } else if (mode === 'rewriter' && 'rewrittenContent' in output) {
+    const rewriterOutput = output as RewriterOutput;
+    return (
+      <div className="space-y-8">
+        {rewriterOutput.processingTimeSeconds !== undefined && (
+          <div className="text-center text-sm text-text-secondary">
+            Processing completed in {rewriterOutput.processingTimeSeconds} seconds.
+          </div>
+        )}
+        
+        <div>
+          <div className="flex justify-between items-center mb-2">
+            <h2 className="text-2xl font-semibold text-text-primary">Generated Narrative</h2>
+            <button 
+              onClick={() => copyToClipboard(rewriterOutput.rewrittenContent, "Narrative")}
+              className="text-xs px-3 py-1 bg-sky-700 text-sky-100 rounded hover:bg-sky-600 transition-colors"
+              aria-label="Copy narrative markdown to clipboard"
+            >
+              Copy Markdown
+            </button>
+          </div>
+          <div 
+            className="p-4 bg-slate-800 rounded-lg max-h-[32rem] overflow-y-auto shadow-inner prose prose-sm prose-invert max-w-none" 
+            ref={contentRef}
+          >
+            {/* Content is rendered here by the useEffect hook */}
           </div>
         </div>
       </div>

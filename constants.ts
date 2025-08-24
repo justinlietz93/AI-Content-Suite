@@ -1,7 +1,7 @@
 
-import type { ProgressUpdate } from './types';
+import type { ProgressUpdate, RewriteLength } from './types';
 
-export const GEMINI_TEXT_MODEL = 'gemini-2.5-pro';
+export const GEMINI_FLASH_MODEL = 'gemini-2.5-flash';
 
 // Approximate token estimation: 1 token ~ 4 characters.
 // Target chunk size for LLM processing. Drastically increased to maximize model's context window.
@@ -104,7 +104,7 @@ Detailed Style Model Description for ${targetDescription}:`;
 export const CHUNK_STYLE_ANALYSIS_PROMPT_TEMPLATE = (textChunk: string, target?: string): string => {
   const { focusInstruction, targetDescription } = getFocusInstructionAndTargetDescription(target);
   return `You will be given a segment of a larger text. ${focusInstruction}
-Focus ONLY on the style elements present within THIS SEGMENT.
+Focus ONLY on the style elements present within THIS SEGUMENT.
 ${BASE_STYLE_ANALYSIS_INSTRUCTIONS}
 Text Segment:
 ---
@@ -129,6 +129,54 @@ ${styleAnalysesText}
 ---
 Combined and Unified Style Model Description${targetInfo}:`;
 };
+
+// --- Prompts for Rewriter ---
+export const REWRITER_PROMPT_TEMPLATE = (
+  style: string, 
+  instructions: string, 
+  length: RewriteLength
+): string => {
+  const lengthMap = {
+    short: 'a short piece, approximately 250 words.',
+    medium: 'a medium-length piece, approximately 750 words.',
+    long: 'a long, detailed piece, approximately 2000 words.',
+  };
+
+  let prompt = `You are an expert writer and content synthesizer. Your task is to analyze the following user-provided content (which may include text documents and images) and rewrite it into a single, cohesive narrative.
+
+**Primary Goal:** Create a new, original piece of writing based on the provided materials.
+
+---
+
+**1. Writing Style:**
+Adopt the following style for your response:
+${style || 'A clear, engaging, and well-structured narrative. The tone should be neutral and informative.'}
+
+---
+
+**2. Desired Length:**
+The final output should be ${lengthMap[length]}
+
+---
+`;
+
+  if (instructions) {
+    prompt += `**3. Additional Instructions:**\nFollow these instructions carefully:\n${instructions}\n\n---\n\n`;
+  }
+
+  prompt += `**4. Content to Synthesize:**
+The user has provided the content in the subsequent parts of this prompt. Please analyze all text and images to inform your narrative.
+
+---
+
+**Final Output Instructions:**
+- The output must be a single, continuous piece of writing.
+- Format the entire response in Markdown.
+- Do not add any conversational preamble or concluding remarks. Begin directly with the narrative.`;
+
+  return prompt;
+};
+
 
 // --- Prompts for Next Step Suggestions ---
 // Max 3000 chars for summary/styleDescription to keep suggestion prompt focused and within limits.
