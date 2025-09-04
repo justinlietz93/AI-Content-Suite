@@ -1,3 +1,4 @@
+
 export interface Highlight {
   text: string;
   relevance?: number; // Optional, depends on LLM output
@@ -19,7 +20,12 @@ export interface RewriterOutput {
   processingTimeSeconds?: number;
 }
 
-export type ProcessedOutput = SummaryOutput | StyleModelOutput | RewriterOutput;
+export interface MathFormatterOutput {
+  formattedContent: string;
+  processingTimeSeconds?: number;
+}
+
+export type ProcessedOutput = SummaryOutput | StyleModelOutput | RewriterOutput | MathFormatterOutput;
 
 export interface ProgressUpdate {
   stage: string;
@@ -32,7 +38,7 @@ export interface ProgressUpdate {
 }
 
 export type AppState = 'idle' | 'fileSelected' | 'processing' | 'completed' | 'error';
-export type Mode = 'technical' | 'styleExtractor' | 'rewriter';
+export type Mode = 'technical' | 'styleExtractor' | 'rewriter' | 'mathFormatter';
 export type RewriteLength = 'short' | 'medium' | 'long';
 
 

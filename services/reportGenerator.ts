@@ -1,5 +1,5 @@
 
-import type { ProcessedOutput, Mode, SummaryOutput, StyleModelOutput, RewriterOutput } from '../types';
+import type { ProcessedOutput, Mode, SummaryOutput, StyleModelOutput, RewriterOutput, MathFormatterOutput } from '../types';
 
 declare var marked: any;
 declare var hljs: any;
@@ -33,16 +33,20 @@ const generateHtmlReport = (output: ProcessedOutput, mode: Mode, styleTarget?: s
   const isTechnical = mode === 'technical' && 'finalSummary' in output;
   const isStyle = mode === 'styleExtractor' && 'styleDescription' in output;
   const isRewriter = mode === 'rewriter' && 'rewrittenContent' in output;
+  const isFormatter = mode === 'mathFormatter' && 'formattedContent' in output;
 
   const techOutput = isTechnical ? output as SummaryOutput : null;
   const styleOutput = isStyle ? output as StyleModelOutput : null;
   const rewriterOutput = isRewriter ? output as RewriterOutput : null;
+  const formatterOutput = isFormatter ? output as MathFormatterOutput : null;
 
   const title = isTechnical 
     ? 'Technical Summary Report' 
     : isStyle 
     ? `Writing Style Analysis Report${styleTarget ? ` for "${styleTarget}"` : ''}`
-    : 'Rewritten Narrative Report';
+    : isRewriter
+    ? 'Rewritten Narrative Report'
+    : 'Formatted Document Report';
   
   const parseMarkdown = (text: string): string => {
       try {
@@ -93,6 +97,15 @@ const generateHtmlReport = (output: ProcessedOutput, mode: Mode, styleTarget?: s
       </div>
     ` : ''}
 
+    ${isFormatter && formatterOutput ? `
+      <div class="section">
+        <h2>Formatted Document</h2>
+        <div class="content-box">
+          ${parseMarkdown(formatterOutput.formattedContent)}
+        </div>
+      </div>
+    ` : ''}
+
     ${suggestions && suggestions.length > 0 ? `
       <div class="section">
         <h2>Next Steps & Suggestions</h2>
@@ -110,6 +123,20 @@ const generateHtmlReport = (output: ProcessedOutput, mode: Mode, styleTarget?: s
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${title}</title>
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']],
+        displayMath: [['$$', '$$'], ['\\[', '\\]']]
+      },
+      svg: {
+        fontCache: 'global'
+      }
+    };
+  </script>
+  <script type="text/javascript" id="MathJax-script" async
+    src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js">
+  </script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
     body {
@@ -239,16 +266,20 @@ const generateMarkdownReport = (output: ProcessedOutput, mode: Mode, styleTarget
   const isTechnical = mode === 'technical' && 'finalSummary' in output;
   const isStyle = mode === 'styleExtractor' && 'styleDescription' in output;
   const isRewriter = mode === 'rewriter' && 'rewrittenContent' in output;
+  const isFormatter = mode === 'mathFormatter' && 'formattedContent' in output;
 
   const techOutput = isTechnical ? output as SummaryOutput : null;
   const styleOutput = isStyle ? output as StyleModelOutput : null;
   const rewriterOutput = isRewriter ? output as RewriterOutput : null;
+  const formatterOutput = isFormatter ? output as MathFormatterOutput : null;
 
   const title = isTechnical 
     ? 'Technical Summary Report' 
     : isStyle 
     ? `Writing Style Analysis Report${styleTarget ? ` for "${styleTarget}"` : ''}`
-    : 'Rewritten Narrative Report';
+    : isRewriter
+    ? 'Rewritten Narrative Report'
+    : 'Formatted Document Report';
 
   let content = ``;
   content += `# ${title}\n\n`;
@@ -273,6 +304,11 @@ const generateMarkdownReport = (output: ProcessedOutput, mode: Mode, styleTarget
   if (isRewriter && rewriterOutput) {
     content += `## Generated Narrative\n\n`;
     content += `${rewriterOutput.rewrittenContent}\n\n`;
+  }
+
+  if (isFormatter && formatterOutput) {
+    content += `## Formatted Document\n\n`;
+    content += `${formatterOutput.formattedContent}\n\n`;
   }
   
   if (suggestions && suggestions.length > 0) {

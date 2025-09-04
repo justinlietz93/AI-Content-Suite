@@ -8,6 +8,50 @@ import {
   NEXT_STEPS_STYLE_MODEL_PROMPT_TEMPLATE
 } from '../constants';
 
+
+// --- Retry Logic for API calls ---
+const MAX_RETRIES = 5;
+const INITIAL_BACKOFF_MS = 1000;
+
+const isRateLimitError = (error: any): boolean => {
+    if (!error) return false;
+    const errorString = String(error).toLowerCase();
+    return errorString.includes('429') || errorString.includes('resource_exhausted') || errorString.includes('rate limit');
+}
+
+/**
+ * Wraps a Gemini API call with retry logic for rate limiting errors.
+ * @param apiCall The function that makes the Gemini API call.
+ * @returns The result of the API call.
+ */
+const callGeminiWithRetry = async <T>(apiCall: () => Promise<T>): Promise<T> => {
+    let retries = 0;
+    let backoffMs = INITIAL_BACKOFF_MS;
+
+    while (true) {
+        try {
+            return await apiCall();
+        } catch (error) {
+            if (isRateLimitError(error) && retries < MAX_RETRIES) {
+                retries++;
+                const jitter = Math.random() * 500;
+                const waitTime = backoffMs + jitter;
+                console.warn(`Rate limit exceeded. Retrying in ${waitTime.toFixed(0)}ms... (Attempt ${retries}/${MAX_RETRIES})`);
+                await new Promise(resolve => setTimeout(resolve, waitTime));
+                backoffMs *= 2; // Exponential backoff
+            } else {
+                if (isRateLimitError(error)) {
+                    console.error(`Exceeded maximum retries (${MAX_RETRIES}) for Gemini API call due to persistent rate limiting.`);
+                }
+                // Re-throw the error if it's not a rate limit error or if we've exhausted retries
+                throw error;
+            }
+        }
+    }
+};
+
+
+// --- Original Service Code ---
 const getApiKey = (): string => {
   const apiKey = typeof process !== 'undefined' && process.env && process.env.API_KEY
     ? process.env.API_KEY
@@ -31,10 +75,12 @@ try {
 export const generateText = async (prompt: string): Promise<string> => {
   if (!ai) throw new Error("Gemini AI SDK not initialized. API Key might be missing.");
   try {
-    const response: GenerateContentResponse = await ai.models.generateContent({
-      model: GEMINI_FLASH_MODEL,
-      contents: prompt,
-    });
+    const response: GenerateContentResponse = await callGeminiWithRetry(() => 
+      ai!.models.generateContent({
+        model: GEMINI_FLASH_MODEL,
+        contents: prompt,
+      })
+    );
     return response.text;
   } catch (error) {
     console.error('Error generating text from Gemini:', error);
@@ -45,10 +91,12 @@ export const generateText = async (prompt: string): Promise<string> => {
 export const generateMultiModalContent = async (parts: any[]): Promise<string> => {
     if (!ai) throw new Error("Gemini AI SDK not initialized. API Key might be missing.");
     try {
-        const response: GenerateContentResponse = await ai.models.generateContent({
+        const response: GenerateContentResponse = await callGeminiWithRetry(() =>
+          ai!.models.generateContent({
             model: GEMINI_FLASH_MODEL,
             contents: { parts },
-        });
+          })
+        );
         return response.text;
     } catch (error) {
         console.error('Error generating multimodal content from Gemini:', error);
@@ -60,13 +108,15 @@ export const extractHighlightsFromJson = async (summaryText: string): Promise<Hi
   if (!ai) throw new Error("Gemini AI SDK not initialized. API Key might be missing.");
   const prompt = HIGHLIGHT_EXTRACTION_PROMPT_TEMPLATE(summaryText);
   try {
-    const response: GenerateContentResponse = await ai.models.generateContent({
-      model: GEMINI_FLASH_MODEL,
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-      }
-    });
+    const response: GenerateContentResponse = await callGeminiWithRetry(() =>
+      ai!.models.generateContent({
+        model: GEMINI_FLASH_MODEL,
+        contents: prompt,
+        config: {
+          responseMimeType: "application/json",
+        }
+      })
+    );
 
     let jsonStr = response.text.trim();
     const fenceRegex = /^```(\w*)?\s*\n?([\s\S]*?)\n?\s*```$/; 
@@ -129,13 +179,15 @@ export const generateSuggestions = async (
   }
 
   try {
-    const response: GenerateContentResponse = await ai.models.generateContent({
-      model: GEMINI_FLASH_MODEL,
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-      }
-    });
+    const response: GenerateContentResponse = await callGeminiWithRetry(() =>
+      ai!.models.generateContent({
+        model: GEMINI_FLASH_MODEL,
+        contents: prompt,
+        config: {
+          responseMimeType: "application/json",
+        }
+      })
+    );
 
     let jsonStr = response.text.trim();
     const fenceRegex = /^```(\w*)?\s*\n?([\s\S]*?)\n?\s*```$/;

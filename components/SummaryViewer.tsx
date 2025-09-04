@@ -1,7 +1,14 @@
+
 import React, { useEffect, useRef } from 'react';
-import type { SummaryOutput, StyleModelOutput, ProcessedOutput, Highlight, Mode, RewriterOutput } from '../types';
+import type { SummaryOutput, StyleModelOutput, ProcessedOutput, Highlight, Mode, RewriterOutput, MathFormatterOutput } from '../types';
 
 declare var marked: any;
+declare global {
+    interface Window {
+        MathJax: any;
+    }
+}
+
 
 interface SummaryViewerProps {
   output: ProcessedOutput;
@@ -31,17 +38,34 @@ export const SummaryViewer: React.FC<SummaryViewerProps> = ({ output, mode }) =>
   };
 
   useEffect(() => {
-    if (mode === 'rewriter' && 'rewrittenContent' in output && contentRef.current) {
-        if (typeof marked !== 'undefined' && output.rewrittenContent) {
-            contentRef.current.innerHTML = marked.parse(output.rewrittenContent);
-        } else if (contentRef.current) {
-            // Fallback to plain text if marked is not available or content is empty
-            const p = document.createElement('p');
-            p.className = 'whitespace-pre-wrap';
-            p.textContent = output.rewrittenContent;
-            contentRef.current.innerHTML = '';
-            contentRef.current.appendChild(p);
+    const renderMarkdownContent = () => {
+        if (!contentRef.current) return;
+
+        let contentToRender = '';
+        if (mode === 'rewriter' && 'rewrittenContent' in output) {
+            contentToRender = (output as RewriterOutput).rewrittenContent;
+        } else if (mode === 'mathFormatter' && 'formattedContent' in output) {
+            contentToRender = (output as MathFormatterOutput).formattedContent;
         }
+
+        if (contentToRender) {
+            if (typeof marked !== 'undefined') {
+                contentRef.current.innerHTML = marked.parse(contentToRender);
+                if (mode === 'mathFormatter' && window.MathJax) {
+                    window.MathJax.typesetPromise([contentRef.current]).catch((err: any) => console.error('MathJax typesetting failed:', err));
+                }
+            } else {
+                // Fallback to plain text if marked is not available
+                const p = document.createElement('p');
+                p.className = 'whitespace-pre-wrap';
+                p.textContent = contentToRender;
+                contentRef.current.innerHTML = '';
+                contentRef.current.appendChild(p);
+            }
+        }
+    };
+    if (mode === 'rewriter' || mode === 'mathFormatter') {
+        renderMarkdownContent();
     }
   }, [output, mode]);
 
@@ -119,23 +143,27 @@ export const SummaryViewer: React.FC<SummaryViewerProps> = ({ output, mode }) =>
         </div>
       </div>
     );
-  } else if (mode === 'rewriter' && 'rewrittenContent' in output) {
-    const rewriterOutput = output as RewriterOutput;
+  } else if ((mode === 'rewriter' && 'rewrittenContent' in output) || (mode === 'mathFormatter' && 'formattedContent' in output)) {
+    const renderOutput = output as (RewriterOutput | MathFormatterOutput);
+    const content = 'rewrittenContent' in renderOutput ? renderOutput.rewrittenContent : renderOutput.formattedContent;
+    const title = mode === 'rewriter' ? 'Generated Narrative' : 'Formatted Document';
+    const copyType = mode === 'rewriter' ? 'Narrative Markdown' : 'Formatted Markdown';
+    
     return (
       <div className="space-y-8">
-        {rewriterOutput.processingTimeSeconds !== undefined && (
+        {renderOutput.processingTimeSeconds !== undefined && (
           <div className="text-center text-sm text-text-secondary">
-            Processing completed in {rewriterOutput.processingTimeSeconds} seconds.
+            Processing completed in {renderOutput.processingTimeSeconds} seconds.
           </div>
         )}
         
         <div>
           <div className="flex justify-between items-center mb-2">
-            <h2 className="text-2xl font-semibold text-text-primary">Generated Narrative</h2>
+            <h2 className="text-2xl font-semibold text-text-primary">{title}</h2>
             <button 
-              onClick={() => copyToClipboard(rewriterOutput.rewrittenContent, "Narrative")}
+              onClick={() => copyToClipboard(content, copyType)}
               className="text-xs px-3 py-1 bg-sky-700 text-sky-100 rounded hover:bg-sky-600 transition-colors"
-              aria-label="Copy narrative markdown to clipboard"
+              aria-label={`Copy ${copyType} to clipboard`}
             >
               Copy Markdown
             </button>

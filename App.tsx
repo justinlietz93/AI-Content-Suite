@@ -7,8 +7,10 @@ import { Tabs } from './components/Tabs';
 import { processTranscript } from './services/summarizationService';
 import { processStyleExtraction } from './services/styleExtractionService';
 import { processRewrite } from './services/rewriterService';
+import { processMathFormatting } from './services/mathFormattingService';
 import { generateSuggestions } from './services/geminiService';
-import type { ProcessedOutput, ProgressUpdate, AppState, ProcessingError, Mode, SummaryOutput, StyleModelOutput, RewriteLength, RewriterOutput } from './types';
+import { ocrPdf } from './services/ocrService';
+import type { ProcessedOutput, ProgressUpdate, AppState, ProcessingError, Mode, SummaryOutput, StyleModelOutput, RewriteLength, RewriterOutput, MathFormatterOutput } from './types';
 import { INITIAL_PROGRESS } from './constants';
 import { CheckCircleIcon } from './components/icons/CheckCircleIcon';
 import { XCircleIcon } from './components/icons/XCircleIcon';
@@ -31,6 +33,40 @@ const readFileAsText = (file: File): Promise<string> => {
   });
 };
 
+const HierarchicalToggle: React.FC<{ enabled: boolean; onChange: (enabled: boolean) => void; }> = ({ enabled, onChange }) => {
+    return (
+      <div className="flex items-center justify-between bg-slate-700/50 p-3 rounded-lg my-4">
+        <div>
+          <label htmlFor="hierarchical-toggle" className="font-semibold text-text-primary cursor-pointer">
+            Hierarchical Processing
+          </label>
+          <p id="hierarchical-description" className="text-xs text-text-secondary mt-1 max-w-sm">
+            For very large documents. Uses more parallel agents for faster, potentially more detailed results.
+          </p>
+        </div>
+        <button
+          type="button"
+          id="hierarchical-toggle"
+          role="switch"
+          aria-checked={enabled}
+          aria-describedby='hierarchical-description'
+          onClick={() => onChange(!enabled)}
+          className={`${
+            enabled ? 'bg-primary' : 'bg-slate-600'
+          } relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-surface`}
+        >
+          <span
+            aria-hidden="true"
+            className={`${
+              enabled ? 'translate-x-6' : 'translate-x-1'
+            } inline-block h-4 w-4 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out`}
+          />
+        </button>
+      </div>
+    );
+};
+
+
 const App: React.FC = () => {
   const [currentFiles, setCurrentFiles] = useState<File[] | null>(null);
   const [appState, setAppState] = useState<AppState>('idle');
@@ -46,6 +82,7 @@ const App: React.FC = () => {
   const [nextStepSuggestions, setNextStepSuggestions] = useState<string[] | null>(null);
   const [suggestionsLoading, setSuggestionsLoading] = useState<boolean>(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  const [useHierarchical, setUseHierarchical] = useState(false);
 
   const handleFileSelect = useCallback((files: File[]) => {
     setCurrentFiles(files);
@@ -91,33 +128,71 @@ const App: React.FC = () => {
 
     try {
       let result: ProcessedOutput;
+      
+      // --- New Unified File Processing Logic ---
+      const processedParts: any[] = []; // For rewriter mode
+      const processedTexts: string[] = []; // For text-based modes
 
+      for (let i = 0; i < currentFiles.length; i++) {
+        const file = currentFiles[i];
+        const basePercentage = 2;
+        const range = 8; // Files loading/processing occupies the 2% to 10% progress range
+        const fileProgressStart = basePercentage + (i / currentFiles.length) * range;
+        const fileProgressEnd = basePercentage + ((i + 1) / currentFiles.length) * range;
+
+        if (file.type === 'application/pdf') {
+          const ocrText = await ocrPdf(file, (ocrUpdate) => {
+            const overallFileProgress = fileProgressStart + (fileProgressEnd - fileProgressStart) * ocrUpdate.progress;
+            setProgress({
+              stage: 'Processing PDF...',
+              percentage: overallFileProgress,
+              message: `[${i + 1}/${currentFiles.length}] ${file.name}: ${ocrUpdate.status}`,
+              thinkingHint: ocrUpdate.totalPages > 0 ? `Page ${ocrUpdate.page} of ${ocrUpdate.totalPages}` : 'Preparing...'
+            });
+          });
+          const textWithContext = `--- DOCUMENT START: ${file.name} ---\n\n${ocrText}\n\n--- DOCUMENT END: ${file.name} ---`;
+          processedTexts.push(textWithContext);
+          if (activeMode === 'rewriter') {
+            processedParts.push({ text: textWithContext });
+          }
+        } else if (file.type.startsWith('image/') && activeMode === 'rewriter') {
+          setProgress({ stage: 'Processing Files', percentage: fileProgressStart, message: `[${i + 1}/${currentFiles.length}] Reading image ${file.name}...` });
+          processedParts.push(await fileToGenerativePart(file));
+        } else { // Assume text file, or image in a non-rewriter mode (which gets treated as text)
+          setProgress({ stage: 'Processing Files', percentage: fileProgressStart, message: `[${i + 1}/${currentFiles.length}] Reading file ${file.name}...` });
+          const text = await readFileAsText(file);
+          const textWithContext = `--- DOCUMENT START: ${file.name} ---\n\n${text}\n\n--- DOCUMENT END: ${file.name} ---`;
+          processedTexts.push(textWithContext);
+          if (activeMode === 'rewriter') {
+            processedParts.push({ text: textWithContext });
+          }
+        }
+      }
+      // --- End New File Processing Logic ---
+
+      const totalSize = currentFiles.reduce((acc, file) => acc + file.size, 0);
+      const totalSizeMB = (totalSize / (1024 * 1024)).toFixed(2);
+      setProgress({ stage: 'Content Loaded', percentage: 10, message: `All content loaded (${totalSizeMB} MB).` });
+      
       if (activeMode === 'rewriter') {
-        setProgress({ stage: 'Reading Files & Images', percentage: 2, message: `Loading ${currentFiles.length} item(s)...` });
-        const parts = await Promise.all(currentFiles.map(fileToGenerativePart));
-        const totalSize = currentFiles.reduce((acc, file) => acc + file.size, 0);
-        const totalSizeMB = (totalSize / (1024 * 1024)).toFixed(2);
-        setProgress({ stage: 'Content Loaded', percentage: 10, message: `All content loaded (${totalSizeMB} MB).` });
-        
-        result = await processRewrite(parts, rewriteStyle, rewriteInstructions, rewriteLength, (update) => {
+        result = await processRewrite(processedParts, rewriteStyle, rewriteInstructions, rewriteLength, (update) => {
             setProgress(update);
         });
       } else {
-        setProgress({ stage: 'Reading Files', percentage: 2, message: `Loading ${currentFiles.length} file(s)...` });
-        const fileContents = await Promise.all(currentFiles.map(file => readFileAsText(file)));
-        const combinedText = fileContents.join('\n\n--- DOCUMENT BREAK ---\n\n');
-        const totalSize = currentFiles.reduce((acc, file) => acc + file.size, 0);
-        const totalSizeMB = (totalSize / (1024 * 1024)).toFixed(2);
-        setProgress({ stage: 'Files Loaded', percentage: 10, message: `All file content loaded (${totalSizeMB} MB).` });
+        const combinedText = processedTexts.join('\n\n--- DOCUMENT BREAK ---\n\n');
 
         if (activeMode === 'technical') {
           result = await processTranscript(combinedText, (update) => {
             setProgress(update);
-          });
-        } else { // 'styleExtractor'
+          }, useHierarchical);
+        } else if (activeMode === 'styleExtractor') {
           result = await processStyleExtraction(combinedText, styleTarget, (update) => {
             setProgress(update);
           });
+        } else { // 'mathFormatter'
+            result = await processMathFormatting(combinedText, (update) => {
+                setProgress(update);
+            });
         }
       }
 
@@ -127,10 +202,10 @@ const App: React.FC = () => {
       setProcessedData(fullResult);
       setAppState('completed');
       
-      if (activeMode === 'rewriter') {
+      if (activeMode === 'rewriter' || activeMode === 'mathFormatter') {
         setSuggestionsLoading(false);
         setNextStepSuggestions(null);
-        return; // No suggestions for rewriter mode yet
+        return; // No suggestions for these modes
       }
 
       // Asynchronously fetch suggestions after primary processing is complete
@@ -166,7 +241,7 @@ const App: React.FC = () => {
       setAppState('error');
       setSuggestionsLoading(false);
     }
-  }, [currentFiles, startTime, activeMode, styleTarget, rewriteStyle, rewriteInstructions, rewriteLength]);
+  }, [currentFiles, startTime, activeMode, styleTarget, rewriteStyle, rewriteInstructions, rewriteLength, useHierarchical]);
 
   const handleReset = useCallback(() => {
     setCurrentFiles(null);
@@ -181,30 +256,35 @@ const App: React.FC = () => {
     setRewriteLength('medium');
     setNextStepSuggestions(null);
     setSuggestionsLoading(false);
+    setUseHierarchical(false);
   }, []);
 
   const TABS = [
     { id: 'technical', label: 'Technical Summarizer' },
     { id: 'styleExtractor', label: 'Style Extractor' },
     { id: 'rewriter', label: 'Rewriter' },
+    { id: 'mathFormatter', label: 'Math Formatter' },
   ];
 
   const descriptionText = {
-    technical: "Upload one or more large transcript files to get a concise summary and key highlights.",
-    styleExtractor: "Upload one or more text files to analyze and extract a unique writing style model.",
-    rewriter: "Upload documents and images, provide a style and instructions, and rewrite them into a new narrative."
+    technical: "Upload one or more large transcript or PDF files to get a concise summary and key highlights.",
+    styleExtractor: "Upload one or more text or PDF files to analyze and extract a unique writing style model.",
+    rewriter: "Upload documents, PDFs, and images, provide a style and instructions, and rewrite them into a new narrative.",
+    mathFormatter: "Upload one or more LaTeX/Markdown or PDF documents to reformat mathematical notations for proper MathJax rendering."
   };
 
   const buttonText = {
     technical: currentFiles && currentFiles.length > 0 ? `Summarize ${currentFiles.length} file(s)` : 'Summarize',
     styleExtractor: currentFiles && currentFiles.length > 0 ? `Extract Style from ${currentFiles.length} file(s)` : 'Extract Style',
     rewriter: currentFiles && currentFiles.length > 0 ? `Rewrite ${currentFiles.length} item(s)` : 'Rewrite',
+    mathFormatter: currentFiles && currentFiles.length > 0 ? `Format ${currentFiles.length} file(s)` : 'Format Math',
   };
 
   const resetButtonText = {
       technical: 'Summarize Another',
       styleExtractor: 'Extract Another',
       rewriter: 'Rewrite Another',
+      mathFormatter: 'Format Another',
   }
 
   return (
@@ -226,6 +306,12 @@ const App: React.FC = () => {
               handleReset(); 
             }} />
           </div>
+
+          {activeMode === 'technical' && (appState === 'idle' || appState === 'fileSelected') && (
+            <div className="animate-fade-in-scale">
+              <HierarchicalToggle enabled={useHierarchical} onChange={setUseHierarchical} />
+            </div>
+          )}
 
           {activeMode === 'styleExtractor' && (appState === 'idle' || appState === 'fileSelected') && (
             <div className="my-4 px-4 sm:px-0 animate-fade-in-scale">

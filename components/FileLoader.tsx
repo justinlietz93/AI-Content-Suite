@@ -50,12 +50,12 @@ export const FileLoader: React.FC<FileLoaderProps> = ({ onFileSelect, selectedFi
 
   const hasFiles = selectedFiles && selectedFiles.length > 0;
   const acceptTypes = mode === 'rewriter'
-    ? ".txt,.md,text/plain,text/markdown,image/png,image/jpeg,image/webp"
-    : ".txt,.md,text/plain,text/markdown";
+    ? ".txt,.md,text/plain,text/markdown,image/png,image/jpeg,image/webp,application/pdf"
+    : ".txt,.md,text/plain,text/markdown,application/pdf";
 
   const supportedFormatsText = mode === 'rewriter'
-    ? "(Supported formats: .txt, .md, .png, .jpg, .webp)"
-    : "(Supported formats: .txt, .md)";
+    ? "(Supported formats: .txt, .md, .pdf, .png, .jpg, .webp)"
+    : "(Supported formats: .txt, .md, .pdf)";
 
 
   return (
