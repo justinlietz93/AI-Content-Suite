@@ -30,7 +30,92 @@ export interface MathFormatterOutput {
   processingTimeSeconds?: number;
 }
 
-export type ProcessedOutput = SummaryOutput | StyleModelOutput | RewriterOutput | MathFormatterOutput;
+// --- New types for Reasoning Studio ---
+export type EvidenceMode = 'none' | 'rag' | 'web';
+export type Persona = 'none' | 'physicist' | 'software_engineer' | 'project_manager' | 'strategist' | 'data_scientist' | 'custom';
+export type ReasoningStyle = 'plain' | 'technical' | 'executive' | 'custom';
+
+export interface ReasoningSafetySettings {
+  pii: boolean;
+  claimCheck: boolean;
+  jailbreak: boolean;
+}
+
+export interface ReasoningSettings {
+  depth: number;
+  breadth: number;
+  criticRounds: number;
+  evidenceMode: EvidenceMode;
+  style: ReasoningStyle;
+  customStyle?: string;
+  persona: Persona;
+  customPersonaDirective?: string;
+  temperature: number;
+  seed: number;
+  budget: number;
+  safety: ReasoningSafetySettings;
+}
+
+export type ReasoningNodeType = 'goal' | 'phase' | 'task' | 'step' | 'validate' | 'correction';
+
+export interface ReasoningNode {
+  id: string;
+  type: ReasoningNodeType;
+  title: string;
+  content: string;
+  children?: string[];
+  // Task-specific
+  assumptions?: string[];
+  risks?: string[];
+  // Step-specific
+  outputs?: string[];
+  citations?: { kind: 'file' | 'url'; ref: string; span: [number, number]; title: string }[];
+  // Validate-specific
+  checks?: {
+    evidence: string[];
+    constraints: string[];
+    success_criteria: string[];
+    persona_checks: string[];
+  };
+  result?: {
+    status: 'pass' | 'fail';
+    confidence: number;
+    failures?: { check: string; reason: string; impacted_steps: string[] }[];
+  };
+  // Correction-specific
+  target_steps?: string[];
+  actions?: string[];
+}
+
+
+export interface ReasoningTree {
+  version: string;
+  goal: string;
+  constraints: string[];
+  success_criteria: string[];
+  settings: ReasoningSettings & { persona: { name: string, directive: string } };
+  nodes: ReasoningNode[];
+  artifacts: {
+    final_md: string;
+    exported_at: string;
+  };
+  audit: {
+    model: string;
+    tokens_in: number;
+    tokens_out: number;
+    cost_usd: number;
+  };
+}
+
+export interface ReasoningOutput {
+  finalResponseMd: string;
+  reasoningTreeJson: ReasoningTree;
+  processingTimeSeconds?: number;
+}
+// --- End new types ---
+
+
+export type ProcessedOutput = SummaryOutput | StyleModelOutput | RewriterOutput | MathFormatterOutput | ReasoningOutput;
 
 export interface ProgressUpdate {
   stage: string;
@@ -43,7 +128,7 @@ export interface ProgressUpdate {
 }
 
 export type AppState = 'idle' | 'fileSelected' | 'processing' | 'completed' | 'error';
-export type Mode = 'technical' | 'styleExtractor' | 'rewriter' | 'mathFormatter';
+export type Mode = 'technical' | 'styleExtractor' | 'rewriter' | 'mathFormatter' | 'reasoningStudio';
 export type RewriteLength = 'short' | 'medium' | 'long';
 
 

@@ -1,4 +1,5 @@
-import type { ProgressUpdate } from './types';
+
+import type { ProgressUpdate, ReasoningSettings } from './types';
 
 // Import all summary prompts from the new modular structure
 import * as summaryPrompts from './prompts/summaries';
@@ -9,7 +10,9 @@ import { NEXT_STEPS_TECHNICAL_SUMMARY_PROMPT_TEMPLATE, NEXT_STEPS_STYLE_MODEL_PR
 import { SINGLE_TEXT_STYLE_EXTRACTION_PROMPT_TEMPLATE, CHUNK_STYLE_ANALYSIS_PROMPT_TEMPLATE, REDUCE_STYLE_ANALYSES_PROMPT_TEMPLATE } from './prompts/styleExtraction';
 import { REWRITER_PROMPT_TEMPLATE } from './prompts/rewriter';
 import { CHUNK_MATH_FORMAT_PROMPT_TEMPLATE } from './prompts/mathFormatting';
-import { GENERATE_MERMAID_FROM_DIGEST_PROMPT, GENERATE_SIMPLIFIED_MERMAID_PROMPT, MERMAID_RULES_DOCS } from './prompts/mermaid';
+// FIX: Removed MERMAID_RULES_DOCS as it's not exported from './prompts/mermaid' and is not used.
+import { GENERATE_MERMAID_FROM_DIGEST_PROMPT, GENERATE_SIMPLIFIED_MERMAID_PROMPT } from './prompts/mermaid';
+import { REASONING_STUDIO_PROMPT_TEMPLATE } from './prompts/reasoning';
 
 
 export const GEMINI_FLASH_MODEL = 'gemini-2.5-flash';
@@ -34,6 +37,25 @@ export const INITIAL_PROGRESS: ProgressUpdate = {
   stage: 'Idle',
   percentage: 0,
   message: 'Waiting for file selection.'
+};
+
+export const INITIAL_REASONING_SETTINGS: ReasoningSettings = {
+    depth: 3,
+    breadth: 2,
+    criticRounds: 1,
+    evidenceMode: 'none',
+    style: 'plain',
+    customStyle: '',
+    persona: 'none',
+    customPersonaDirective: '',
+    temperature: 0.3,
+    seed: 42,
+    budget: 0.25,
+    safety: {
+        pii: true,
+        claimCheck: true,
+        jailbreak: true
+    }
 };
 
 // --- Prompt Collections (Re-constructed from imports) ---
@@ -92,10 +114,10 @@ export const REDUCE_SUMMARIES_PROMPTS = {
 };
 
 // Re-export other prompts so other files don't need to change their imports
+// FIX: Removed MERMAID_RULES_DOCS as it's not exported from './prompts/mermaid' and is not used.
 export { 
     GENERATE_MERMAID_FROM_DIGEST_PROMPT, 
     GENERATE_SIMPLIFIED_MERMAID_PROMPT, 
-    MERMAID_RULES_DOCS,
     HIGHLIGHT_EXTRACTION_PROMPT_TEMPLATE,
     NEXT_STEPS_TECHNICAL_SUMMARY_PROMPT_TEMPLATE,
     NEXT_STEPS_STYLE_MODEL_PROMPT_TEMPLATE,
@@ -103,5 +125,6 @@ export {
     CHUNK_STYLE_ANALYSIS_PROMPT_TEMPLATE,
     REDUCE_STYLE_ANALYSES_PROMPT_TEMPLATE,
     REWRITER_PROMPT_TEMPLATE,
-    CHUNK_MATH_FORMAT_PROMPT_TEMPLATE
+    CHUNK_MATH_FORMAT_PROMPT_TEMPLATE,
+    REASONING_STUDIO_PROMPT_TEMPLATE
 };

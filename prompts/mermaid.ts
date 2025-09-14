@@ -19,7 +19,7 @@ ${digest}
 **Mermaid Diagram:**
 `;
 
-export const GENERATE_SIMPLIFIED_MERMAID_PROMPT = (digest: string, rules: string) => `
+export const GENERATE_SIMPLIFIED_MERMAID_PROMPT = (digest: string) => `
 You are a Mermaid.js expert specializing in data visualization for documentation.
 Based on the following detailed entity-relationship digest, create a **simplified**, high-level Mermaid.js graph diagram (\`graph TD\`).
 
@@ -34,7 +34,7 @@ Based on the following detailed entity-relationship digest, create a **simplifie
     *   The goal is to show the high-level structure, not every single detail.
 3.  **Create a \`graph TD\` diagram:** The final output MUST be ONLY the Mermaid code inside a Markdown code fence (\`\`\`mermaid ... \`\`\`).
 4.  **Do not add any explanations or other text** before or after the code fence.
-5.  **Adhere to Mermaid.js syntax rules:** Use the provided syntax documentation to ensure the diagram is valid. Pay close attention to link labeling.
+5.  **Adhere to Mermaid.js syntax rules:** Pay close attention to link labeling.
 
 **CRITICAL SYNTAX FOR LINKS:** To add a label to a link, you MUST use the format: \`NodeA -- Link Label --> NodeB\`. Do NOT use quotes around the link label.
     *   **Correct:** \`User -- writes --> Document\`
@@ -45,47 +45,36 @@ Based on the following detailed entity-relationship digest, create a **simplifie
 ${digest}
 ---
 
----
-**MERMAID SYNTAX RULES REFERENCE:**
-${rules}
----
-
 **Simplified Mermaid Diagram:**
 `;
 
 
-// A clear, concise, and correct set of rules for the AI to follow for Mermaid syntax.
-// This replaces the previous verbose and confusing documentation.
-export const MERMAID_RULES_DOCS = `
-# Mermaid.js \`graph TD\` Syntax Rules
+export const CORRECT_MERMAID_SYNTAX_PROMPT = (invalidCode: string, errorMessage: string, relevantDocs: string) => `
+You are a Mermaid.js syntax correction expert.
+You previously generated a Mermaid diagram, but it contained a syntax error.
+Your task is to fix the error and provide the corrected code.
 
-## 1. Basic Structure
-- Start with \`graph TD;\` or \`graph TD\`.
-- \`TD\` means Top to Down.
-
-## 2. Nodes
-- A node is defined by an ID and optional text.
-- Example: \`nodeId[Node Text]\` defines a node with ID \`nodeId\` and label "Node Text".
-- If no text is provided, the ID is used as the label: \`nodeId\`.
-- Node IDs should not contain spaces or special characters. Use alphanumeric characters and underscores.
-
-## 3. CRITICAL: Links and Link Labels
-- A link connects two nodes.
-- To add a label (text) to a link, you **MUST** use this exact format: \`nodeA -- Link Text --> nodeB\`
-- The text goes between two dashes \`--\` on each side.
-- **DO NOT** use quotes around the link label.
-- **DO NOT** use the pipe character like \`-->|text|\`. Use the double-dash format.
-
-### Correct Syntax Example:
-\`\`\`
-graph TD
-    User[User] -- submits form --> WebServer[Web Server];
-    WebServer -- queries data from --> Database[Database];
-    Database -- returns results to --> WebServer;
-    WebServer -- displays page to --> User;
+**Original (Incorrect) Code:**
+\`\`\`mermaid
+${invalidCode}
 \`\`\`
 
-### Incorrect Syntax Examples (DO NOT USE):
-- \`User -- "submits form" --> WebServer\` (Incorrect: uses quotes)
-- \`User -->|submits form| WebServer\` (Incorrect: uses pipes)
+**Error Message from Validator:**
+\`\`\`
+${errorMessage}
+\`\`\`
+
+**Relevant Documentation / Rules:**
+---
+${relevantDocs}
+---
+
+**Instructions:**
+1. Analyze the error message and the incorrect code.
+2. Use the provided documentation to understand the correct syntax.
+3. Rewrite the Mermaid code to fix the error.
+4. The final output MUST be ONLY the corrected Mermaid code inside a Markdown code fence (\`\`\`mermaid ... \`\`\`).
+5. Do not add any explanations, apologies, or any other text before or after the code fence.
+
+**Corrected Mermaid Diagram:**
 `;

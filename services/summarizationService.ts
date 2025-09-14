@@ -1,4 +1,4 @@
-import type { ProgressUpdate, SummaryOutput, Highlight, SummaryFormat } from '../types';
+import type { ProgressUpdate, SummaryOutput, SummaryFormat } from '../types';
 import { generateText, extractHighlightsFromJson } from './geminiService';
 import { 
   TARGET_CHUNK_CHAR_SIZE, 
@@ -11,8 +11,11 @@ import {
   REDUCE_SUMMARIES_PROMPTS,
   GENERATE_MERMAID_FROM_DIGEST_PROMPT,
   GENERATE_SIMPLIFIED_MERMAID_PROMPT,
-  MERMAID_RULES_DOCS
 } from '../constants';
+import { validateMermaidSyntax } from './validationService';
+import * as MermaidDocs from '../mermaid-docs-ts';
+import { CORRECT_MERMAID_SYNTAX_PROMPT } from '../prompts/mermaid';
+
 
 /**
  * Chunks a large text into smaller pieces with overlap.
@@ -51,6 +54,85 @@ const getNextChunkHint = (chunks: string[], nextIndex: number): string | undefin
     const nextChunkText = chunks[nextIndex];
     const hintWords = nextChunkText.substring(0, 75).split(' ').slice(0, 7).join(' ');
     return `Analyzing content starting with "${hintWords}..."`;
+};
+
+/**
+ * Selects the most relevant documentation based on a Mermaid syntax error message.
+ * @param errorMessage The error message from the validator.
+ * @returns A string containing the most relevant documentation.
+ */
+const getRelevantMermaidDocs = (errorMessage: string): string => {
+    const lowerError = errorMessage.toLowerCase();
+    if (lowerError.includes('link') || lowerError.includes('arrow') || lowerError.includes('label')) {
+        return MermaidDocs.MERMAID_RULES_2;
+    }
+    if (lowerError.includes('node') || lowerError.includes('shape')) {
+        return MermaidDocs.MERMAID_RULES_3;
+    }
+    if (lowerError.includes('style') || lowerError.includes('class')) {
+        return MermaidDocs.MERMAID_RULES_4;
+    }
+    if (lowerError.includes('subgraph')) {
+        return MermaidDocs.MERMAID_RULES_5;
+    }
+    // Default fallback with general syntax and best practices
+    return `${MermaidDocs.MERMAID_RULES_5}\n\n${MermaidDocs.MERMAID_RULES_6}`;
+};
+
+
+/**
+ * Generates Mermaid code, validates it, and attempts to correct it if necessary.
+ * @param generationPrompt The initial prompt to generate the diagram.
+ * @param onProgress Progress update callback.
+ * @param progressMessage The message to display during generation.
+ * @returns A promise that resolves to the validated Mermaid code string.
+ */
+const generateAndValidateMermaid = async (
+    generationPrompt: string,
+    onProgress: (update: ProgressUpdate) => void,
+    progressMessage: string,
+): Promise<string> => {
+    const rawDiagramResult = await generateText(generationPrompt);
+
+    // Extract code from markdown fence
+    const mermaidBlockRegex = /```mermaid\s*([\s\S]+?)\s*```/;
+    const match = rawDiagramResult.match(mermaidBlockRegex);
+    let initialCode = match && match[1] ? match[1].trim() : rawDiagramResult.trim();
+
+    // First validation attempt
+    const validationResult = await validateMermaidSyntax(initialCode);
+
+    if (validationResult.isValid) {
+        return initialCode; // Success on the first try
+    }
+    
+    // Validation failed, begin correction loop
+    console.warn("Initial Mermaid generation failed validation. Attempting self-correction.", validationResult.error);
+    onProgress({ 
+        stage: 'Correcting Diagram', 
+        percentage: 85, 
+        message: 'AI is correcting a syntax error in the diagram...',
+        thinkingHint: 'Analyzing validation failure...'
+    });
+
+    const relevantDocs = getRelevantMermaidDocs(validationResult.error?.message || '');
+    const correctionPrompt = CORRECT_MERMAID_SYNTAX_PROMPT(initialCode, validationResult.error?.message || 'Unknown error', relevantDocs);
+    
+    const correctedResultText = await generateText(correctionPrompt);
+    const correctedMatch = correctedResultText.match(mermaidBlockRegex);
+    let correctedCode = correctedMatch && correctedMatch[1] ? correctedMatch[1].trim() : correctedResultText.trim();
+
+    // Second validation attempt
+    const finalValidation = await validateMermaidSyntax(correctedCode);
+
+    if (finalValidation.isValid) {
+        console.log("Mermaid self-correction successful.");
+        return correctedCode;
+    } else {
+        console.error("Mermaid self-correction failed. Using the last attempted code.", finalValidation.error);
+        // Return the corrected (but still invalid) code with a warning for debugging.
+        return `%% ACCURACY WARNING: Auto-correction failed. The following diagram may not render correctly. %% \n\n${correctedCode}`;
+    }
 };
 
 
@@ -223,53 +305,37 @@ export const processTranscript = async (
   let mermaidDiagramSimple: string | undefined = undefined;
 
 
-  // STEP 2: If the format is entityRelationshipDigest, generate the diagram(s) in separate steps.
+  // STEP 2: If the format is entityRelationshipDigest, generate the diagram(s) with validation.
   if (summaryFormat === 'entityRelationshipDigest') {
-    onProgress({ 
-        stage: 'Generating Diagram', 
-        percentage: 70, 
-        message: 'Generating detailed entity-relationship diagram...',
-        thinkingHint: 'Creating visual representation of entities...'
-    });
-    try {
-        const diagramPrompt = GENERATE_MERMAID_FROM_DIGEST_PROMPT(finalSummaryText);
-        const rawDiagramResult = await generateText(diagramPrompt);
-        
-        const mermaidBlockRegex = /```mermaid\s*([\s\S]+?)\s*```/;
-        const match = rawDiagramResult.match(mermaidBlockRegex);
-        if (match && match[1]) {
-            mermaidDiagram = match[1].trim();
-        } else {
-            mermaidDiagram = rawDiagramResult.trim();
-        }
-    } catch (e) {
-        console.warn("Failed to generate detailed Mermaid diagram:", e);
-        mermaidDiagram = "Error: Detailed diagram could not be generated.";
-    }
+      onProgress({ 
+          stage: 'Generating Diagram', 
+          percentage: 70, 
+          message: 'Generating detailed entity-relationship diagram...',
+          thinkingHint: 'Creating visual representation of entities...'
+      });
 
-    onProgress({ 
-        stage: 'Simplifying Diagram', 
-        percentage: 80, 
-        message: 'Generating simplified diagram for documents...',
-        thinkingHint: 'Creating a high-level overview...'
-    });
-    try {
-        const simpleDiagramPrompt = GENERATE_SIMPLIFIED_MERMAID_PROMPT(finalSummaryText, MERMAID_RULES_DOCS);
-        const rawSimpleDiagramResult = await generateText(simpleDiagramPrompt);
-        
-        const mermaidBlockRegex = /```mermaid\s*([\s\S]+?)\s*```/;
-        const match = rawSimpleDiagramResult.match(mermaidBlockRegex);
-        if (match && match[1]) {
-            mermaidDiagramSimple = match[1].trim();
-        } else {
-            mermaidDiagramSimple = rawSimpleDiagramResult.trim();
-        }
+      try {
+          const diagramPrompt = GENERATE_MERMAID_FROM_DIGEST_PROMPT(finalSummaryText);
+          mermaidDiagram = await generateAndValidateMermaid(diagramPrompt, onProgress, 'Generating detailed diagram...');
+      } catch (e) {
+          console.error("Failed to generate and validate detailed Mermaid diagram:", e);
+          mermaidDiagram = "Error: Detailed diagram could not be generated.";
+      }
 
-    } catch(e) {
-        console.warn("Failed to generate simplified Mermaid diagram:", e);
-        // Do not assign an error string, just leave it undefined.
-    }
+      onProgress({ 
+          stage: 'Simplifying Diagram', 
+          percentage: 80, 
+          message: 'Generating simplified diagram for documents...',
+          thinkingHint: 'Creating a high-level overview...'
+      });
+      try {
+          const simpleDiagramPrompt = GENERATE_SIMPLIFIED_MERMAID_PROMPT(finalSummaryText);
+          mermaidDiagramSimple = await generateAndValidateMermaid(simpleDiagramPrompt, onProgress, 'Generating simplified diagram...');
+      } catch(e) {
+          console.error("Failed to generate and validate simplified Mermaid diagram:", e);
+      }
   }
+
 
   const highlightStartPercentage = 90;
   onProgress({ 

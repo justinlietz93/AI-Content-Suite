@@ -3,21 +3,24 @@ import React, { useState, useCallback, useMemo } from 'react';
 import { FileLoader } from './components/FileLoader';
 import { ProgressBar } from './components/ProgressBar';
 import { SummaryViewer } from './components/SummaryViewer';
+import { ReasoningViewer } from './components/ReasoningViewer';
 import { Tabs } from './components/Tabs';
 import { processTranscript } from './services/summarizationService';
 import { processStyleExtraction } from './services/styleExtractionService';
 import { processRewrite } from './services/rewriterService';
 import { processMathFormatting } from './services/mathFormattingService';
+import { processReasoningRequest } from './services/reasoningService';
 import { generateSuggestions } from './services/geminiService';
 import { ocrPdf } from './services/ocrService';
-import type { ProcessedOutput, ProgressUpdate, AppState, ProcessingError, Mode, SummaryOutput, StyleModelOutput, RewriteLength, RewriterOutput, MathFormatterOutput, SummaryFormat } from './types';
-import { INITIAL_PROGRESS } from './constants';
+import type { ProcessedOutput, ProgressUpdate, AppState, ProcessingError, Mode, SummaryOutput, StyleModelOutput, RewriteLength, RewriterOutput, MathFormatterOutput, SummaryFormat, ReasoningOutput, ReasoningSettings } from './types';
+import { INITIAL_PROGRESS, INITIAL_REASONING_SETTINGS } from './constants';
 import { SUMMARY_FORMAT_OPTIONS } from './data/summaryFormats';
 import { CheckCircleIcon } from './components/icons/CheckCircleIcon';
 import { XCircleIcon } from './components/icons/XCircleIcon';
 import { Spinner } from './components/Spinner';
 import { ReportModal } from './components/ReportModal';
 import { DownloadIcon } from './components/icons/DownloadIcon';
+import { ReasoningControls } from './components/ReasoningControls';
 
 
 /**
@@ -86,6 +89,10 @@ const App: React.FC = () => {
   const [useHierarchical, setUseHierarchical] = useState(false);
   const [summaryFormat, setSummaryFormat] = useState<SummaryFormat>('default');
   const [summarySearchTerm, setSummarySearchTerm] = useState('');
+  
+  // State for Reasoning Studio
+  const [reasoningPrompt, setReasoningPrompt] = useState('');
+  const [reasoningSettings, setReasoningSettings] = useState<ReasoningSettings>(INITIAL_REASONING_SETTINGS);
 
 
   const handleFileSelect = useCallback((files: File[]) => {
@@ -121,7 +128,7 @@ const App: React.FC = () => {
   };
 
   const handleSubmit = useCallback(async () => {
-    if (!currentFiles || currentFiles.length === 0) return;
+    if ((activeMode !== 'reasoningStudio' && (!currentFiles || currentFiles.length === 0)) || (activeMode === 'reasoningStudio' && !reasoningPrompt)) return;
 
     setAppState('processing');
     setError(null);
@@ -133,54 +140,62 @@ const App: React.FC = () => {
     try {
       let result: ProcessedOutput;
       
-      // --- New Unified File Processing Logic ---
-      const processedParts: any[] = []; // For rewriter mode
+      const processedParts: any[] = []; // For rewriter & reasoning modes
       const processedTexts: string[] = []; // For text-based modes
 
-      for (let i = 0; i < currentFiles.length; i++) {
-        const file = currentFiles[i];
-        const basePercentage = 2;
-        const range = 8; // Files loading/processing occupies the 2% to 10% progress range
-        const fileProgressStart = basePercentage + (i / currentFiles.length) * range;
-        const fileProgressEnd = basePercentage + ((i + 1) / currentFiles.length) * range;
+      if(currentFiles && currentFiles.length > 0) {
+        for (let i = 0; i < currentFiles.length; i++) {
+          const file = currentFiles[i];
+          const basePercentage = 2;
+          const range = 8;
+          const fileProgressStart = basePercentage + (i / currentFiles.length) * range;
+          const fileProgressEnd = basePercentage + ((i + 1) / currentFiles.length) * range;
 
-        if (file.type === 'application/pdf') {
-          const ocrText = await ocrPdf(file, (ocrUpdate) => {
-            const overallFileProgress = fileProgressStart + (fileProgressEnd - fileProgressStart) * ocrUpdate.progress;
-            setProgress({
-              stage: 'Processing PDF...',
-              percentage: overallFileProgress,
-              message: `[${i + 1}/${currentFiles.length}] ${file.name}: ${ocrUpdate.status}`,
-              thinkingHint: ocrUpdate.totalPages > 0 ? `Page ${ocrUpdate.page} of ${ocrUpdate.totalPages}` : 'Preparing...'
+          if (file.type === 'application/pdf') {
+            const ocrText = await ocrPdf(file, (ocrUpdate) => {
+              const overallFileProgress = fileProgressStart + (fileProgressEnd - fileProgressStart) * ocrUpdate.progress;
+              setProgress({
+                stage: 'Processing PDF...',
+                percentage: overallFileProgress,
+                message: `[${i + 1}/${currentFiles.length}] ${file.name}: ${ocrUpdate.status}`,
+                thinkingHint: ocrUpdate.totalPages > 0 ? `Page ${ocrUpdate.page} of ${ocrUpdate.totalPages}` : 'Preparing...'
+              });
             });
-          });
-          const textWithContext = `--- DOCUMENT START: ${file.name} ---\n\n${ocrText}\n\n--- DOCUMENT END: ${file.name} ---`;
-          processedTexts.push(textWithContext);
-          if (activeMode === 'rewriter') {
-            processedParts.push({ text: textWithContext });
-          }
-        } else if (file.type.startsWith('image/') && activeMode === 'rewriter') {
-          setProgress({ stage: 'Processing Files', percentage: fileProgressStart, message: `[${i + 1}/${currentFiles.length}] Reading image ${file.name}...` });
-          processedParts.push(await fileToGenerativePart(file));
-        } else { // Assume text file, or image in a non-rewriter mode (which gets treated as text)
-          setProgress({ stage: 'Processing Files', percentage: fileProgressStart, message: `[${i + 1}/${currentFiles.length}] Reading file ${file.name}...` });
-          const text = await readFileAsText(file);
-          const textWithContext = `--- DOCUMENT START: ${file.name} ---\n\n${text}\n\n--- DOCUMENT END: ${file.name} ---`;
-          processedTexts.push(textWithContext);
-          if (activeMode === 'rewriter') {
-            processedParts.push({ text: textWithContext });
+            const textWithContext = `--- DOCUMENT START: ${file.name} ---\n\n${ocrText}\n\n--- DOCUMENT END: ${file.name} ---`;
+            processedTexts.push(textWithContext);
+            if (activeMode === 'rewriter' || activeMode === 'reasoningStudio') {
+              processedParts.push({ text: textWithContext });
+            }
+          } else if (file.type.startsWith('image/') && (activeMode === 'rewriter')) {
+            setProgress({ stage: 'Processing Files', percentage: fileProgressStart, message: `[${i + 1}/${currentFiles.length}] Reading image ${file.name}...` });
+            processedParts.push(await fileToGenerativePart(file));
+          } else { 
+            setProgress({ stage: 'Processing Files', percentage: fileProgressStart, message: `[${i + 1}/${currentFiles.length}] Reading file ${file.name}...` });
+            const text = await readFileAsText(file);
+            const textWithContext = `--- DOCUMENT START: ${file.name} ---\n\n${text}\n\n--- DOCUMENT END: ${file.name} ---`;
+            processedTexts.push(textWithContext);
+            if (activeMode === 'rewriter' || activeMode === 'reasoningStudio') {
+              processedParts.push({ text: textWithContext });
+            }
           }
         }
       }
-      // --- End New File Processing Logic ---
 
-      const totalSize = currentFiles.reduce((acc, file) => acc + file.size, 0);
-      const totalSizeMB = (totalSize / (1024 * 1024)).toFixed(2);
-      setProgress({ stage: 'Content Loaded', percentage: 10, message: `All content loaded (${totalSizeMB} MB).` });
+      if (currentFiles && currentFiles.length > 0) {
+        const totalSize = currentFiles.reduce((acc, file) => acc + file.size, 0);
+        const totalSizeMB = (totalSize / (1024 * 1024)).toFixed(2);
+        setProgress({ stage: 'Content Loaded', percentage: 10, message: `All content loaded (${totalSizeMB} MB).` });
+      } else {
+        setProgress({ stage: 'Ready', percentage: 10, message: `Prompt ready for processing.` });
+      }
       
       if (activeMode === 'rewriter') {
         result = await processRewrite(processedParts, rewriteStyle, rewriteInstructions, rewriteLength, (update) => {
             setProgress(update);
+        });
+      } else if (activeMode === 'reasoningStudio') {
+        result = await processReasoningRequest(reasoningPrompt, reasoningSettings, processedParts, (update) => {
+          setProgress(update);
         });
       } else {
         const combinedText = processedTexts.join('\n\n--- DOCUMENT BREAK ---\n\n');
@@ -206,7 +221,7 @@ const App: React.FC = () => {
       setProcessedData(fullResult);
       setAppState('completed');
       
-      if (activeMode === 'rewriter' || activeMode === 'mathFormatter') {
+      if (['rewriter', 'mathFormatter', 'reasoningStudio'].includes(activeMode)) {
         setSuggestionsLoading(false);
         setNextStepSuggestions(null);
         return; // No suggestions for these modes
@@ -245,7 +260,7 @@ const App: React.FC = () => {
       setAppState('error');
       setSuggestionsLoading(false);
     }
-  }, [currentFiles, startTime, activeMode, styleTarget, rewriteStyle, rewriteInstructions, rewriteLength, useHierarchical, summaryFormat]);
+  }, [currentFiles, startTime, activeMode, styleTarget, rewriteStyle, rewriteInstructions, rewriteLength, useHierarchical, summaryFormat, reasoningPrompt, reasoningSettings]);
 
   const handleReset = useCallback(() => {
     setCurrentFiles(null);
@@ -263,6 +278,8 @@ const App: React.FC = () => {
     setUseHierarchical(false);
     setSummaryFormat('default');
     setSummarySearchTerm('');
+    setReasoningPrompt('');
+    setReasoningSettings(INITIAL_REASONING_SETTINGS);
   }, []);
 
   const TABS = [
@@ -270,13 +287,15 @@ const App: React.FC = () => {
     { id: 'styleExtractor', label: 'Style Extractor' },
     { id: 'rewriter', label: 'Rewriter' },
     { id: 'mathFormatter', label: 'Math Formatter' },
+    { id: 'reasoningStudio', label: 'Reasoning Studio' },
   ];
 
   const descriptionText = {
     technical: "Upload one or more large transcript or PDF files to get a concise summary and key highlights.",
     styleExtractor: "Upload one or more text or PDF files to analyze and extract a unique writing style model.",
     rewriter: "Upload documents, PDFs, and images, provide a style and instructions, and rewrite them into a new narrative.",
-    mathFormatter: "Upload one or more LaTeX/Markdown or PDF documents to reformat mathematical notations for proper MathJax rendering."
+    mathFormatter: "Upload one or more LaTeX/Markdown or PDF documents to reformat mathematical notations for proper MathJax rendering.",
+    reasoningStudio: "Input a complex goal, configure the reasoning pipeline, and receive a polished answer with a full, interactive reasoning trace."
   };
 
   const buttonText = {
@@ -284,6 +303,7 @@ const App: React.FC = () => {
     styleExtractor: currentFiles && currentFiles.length > 0 ? `Extract Style from ${currentFiles.length} file(s)` : 'Extract Style',
     rewriter: currentFiles && currentFiles.length > 0 ? `Rewrite ${currentFiles.length} item(s)` : 'Rewrite',
     mathFormatter: currentFiles && currentFiles.length > 0 ? `Format ${currentFiles.length} file(s)` : 'Format Math',
+    reasoningStudio: 'Run Reasoning Engine',
   };
 
   const resetButtonText = {
@@ -291,6 +311,7 @@ const App: React.FC = () => {
       styleExtractor: 'Extract Another',
       rewriter: 'Rewrite Another',
       mathFormatter: 'Format Another',
+      reasoningStudio: 'New Reasoning Task',
   }
 
   const filteredSummaryFormats = useMemo(() => {
@@ -307,6 +328,35 @@ const App: React.FC = () => {
   const selectedFormatDescription = useMemo(() => {
       return SUMMARY_FORMAT_OPTIONS.find(f => f.value === summaryFormat)?.description || '';
   }, [summaryFormat]);
+
+  const downloadReasoningArtifact = (type: 'md' | 'json') => {
+    if (!processedData || activeMode !== 'reasoningStudio') return;
+    const reasoningOutput = processedData as ReasoningOutput;
+    
+    let content = '';
+    let mimeType = '';
+    let fileExtension = '';
+
+    if (type === 'md') {
+        content = reasoningOutput.finalResponseMd;
+        mimeType = 'text/markdown';
+        fileExtension = 'md';
+    } else {
+        content = JSON.stringify(reasoningOutput.reasoningTreeJson, null, 2);
+        mimeType = 'application/json';
+        fileExtension = 'json';
+    }
+
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `reasoning_${type === 'md' ? 'response' : 'trace'}.${fileExtension}`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+};
 
 
   return (
@@ -363,6 +413,15 @@ const App: React.FC = () => {
                   </p>
                 </div>
             </div>
+          )}
+          
+          {activeMode === 'reasoningStudio' && (appState === 'idle' || appState === 'fileSelected') && (
+            <ReasoningControls 
+                prompt={reasoningPrompt}
+                onPromptChange={setReasoningPrompt}
+                settings={reasoningSettings}
+                onSettingsChange={setReasoningSettings}
+            />
           )}
 
           {activeMode === 'styleExtractor' && (appState === 'idle' || appState === 'fileSelected') && (
@@ -442,7 +501,7 @@ const App: React.FC = () => {
             <FileLoader onFileSelect={handleFileSelect} selectedFiles={currentFiles} mode={activeMode} />
           ) : null}
 
-          {currentFiles && currentFiles.length > 0 && (appState === 'fileSelected' || appState === 'processing') && (
+          {( (currentFiles && currentFiles.length > 0) || activeMode === 'reasoningStudio' && reasoningPrompt) && (appState === 'fileSelected' || appState === 'processing') && (
             <div className="mt-6 text-center">
               <button
                 onClick={handleSubmit}
@@ -467,7 +526,13 @@ const App: React.FC = () => {
                 <CheckCircleIcon className="w-8 h-8 mr-2" aria-hidden="true" />
                 <p className="text-xl font-semibold">Processing Complete!</p>
               </div>
-              <SummaryViewer output={processedData} mode={activeMode} />
+              
+              {activeMode === 'reasoningStudio' ? (
+                  <ReasoningViewer output={processedData as ReasoningOutput} />
+              ) : (
+                  <SummaryViewer output={processedData} mode={activeMode} />
+              )}
+
 
               {/* Next Steps & Suggestions Section */}
               {suggestionsLoading && (
@@ -506,13 +571,32 @@ const App: React.FC = () => {
                   >
                       {resetButtonText[activeMode]}
                   </button>
-                  <button
-                      onClick={() => setIsReportModalOpen(true)}
-                      className="w-full px-6 py-3 bg-primary text-white font-semibold rounded-lg hover:bg-primary-hover transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-surface flex items-center justify-center gap-2"
-                  >
-                      <DownloadIcon className="w-5 h-5" />
-                      Download Report
-                  </button>
+                  {activeMode === 'reasoningStudio' ? (
+                      <div className="grid grid-cols-2 gap-2">
+                          <button
+                              onClick={() => downloadReasoningArtifact('md')}
+                              className="w-full px-4 py-3 bg-primary text-white font-semibold rounded-lg hover:bg-primary-hover transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-surface flex items-center justify-center gap-2 text-sm"
+                          >
+                              <DownloadIcon className="w-5 h-5" />
+                              Final (.md)
+                          </button>
+                          <button
+                              onClick={() => downloadReasoningArtifact('json')}
+                              className="w-full px-4 py-3 bg-sky-700 text-white font-semibold rounded-lg hover:bg-sky-600 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 focus:ring-offset-surface flex items-center justify-center gap-2 text-sm"
+                          >
+                              <DownloadIcon className="w-5 h-5" />
+                              Trace (.json)
+                          </button>
+                      </div>
+                  ) : (
+                      <button
+                          onClick={() => setIsReportModalOpen(true)}
+                          className="w-full px-6 py-3 bg-primary text-white font-semibold rounded-lg hover:bg-primary-hover transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-surface flex items-center justify-center gap-2"
+                      >
+                          <DownloadIcon className="w-5 h-5" />
+                          Download Report
+                      </button>
+                  )}
               </div>
 
             </div>
