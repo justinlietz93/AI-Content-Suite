@@ -333,6 +333,8 @@ const App: React.FC = () => {
         return "Compresses a project timeline into discrete, accountable checkpoints (milestones), making delivery progress transparent and traceable.";
       case 'glossaryTermMap':
         return "Distills key concepts and their relationships into a structured reference, ensuring clarity and consistency across complex contexts.";
+      case 'hierarchyOfNeeds':
+        return "Distills layered dependencies and priorities into a structured stack, highlighting what must be built first to sustain higher-level outcomes.";
       default:
         return "";
     }
@@ -392,6 +394,7 @@ const App: React.FC = () => {
                     <option value="riskRegister">Risk Register Digest</option>
                     <option value="milestoneTracker">Milestone Tracker</option>
                     <option value="glossaryTermMap">Glossary / Term Map</option>
+                    <option value="hierarchyOfNeeds">Hierarchy of Needs / Pyramid</option>
                   </select>
                   <p className="mt-1 text-xs text-text-secondary">
                     {getSummaryFormatDescription(summaryFormat)}
