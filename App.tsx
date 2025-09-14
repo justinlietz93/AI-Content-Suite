@@ -337,6 +337,8 @@ const App: React.FC = () => {
         return "Distills layered dependencies and priorities into a structured stack, highlighting what must be built first to sustain higher-level outcomes.";
       case 'stakeholderMap':
         return "Distills who is involved, what they want, and their influence into a clear map of project dynamics and communication priorities.";
+      case 'constraintList':
+        return "Condenses project essentials, priorities, and trade-offs into a structured MoSCoW list (Must/Should/Could/Won't).";
       default:
         return "";
     }
@@ -398,6 +400,7 @@ const App: React.FC = () => {
                     <option value="glossaryTermMap">Glossary / Term Map</option>
                     <option value="hierarchyOfNeeds">Hierarchy of Needs / Pyramid</option>
                     <option value="stakeholderMap">Stakeholder Map</option>
+                    <option value="constraintList">Constraint / Requirement List</option>
                   </select>
                   <p className="mt-1 text-xs text-text-secondary">
                     {getSummaryFormatDescription(summaryFormat)}
