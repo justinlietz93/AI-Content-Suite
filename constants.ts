@@ -1,5 +1,5 @@
 
-import type { ProgressUpdate, ReasoningSettings } from './types';
+import type { ProgressUpdate, ReasoningSettings, ScaffolderSettings } from './types';
 
 // Import all summary prompts from the new modular structure
 import * as summaryPrompts from './prompts/summaries';
@@ -10,9 +10,9 @@ import { NEXT_STEPS_TECHNICAL_SUMMARY_PROMPT_TEMPLATE, NEXT_STEPS_STYLE_MODEL_PR
 import { SINGLE_TEXT_STYLE_EXTRACTION_PROMPT_TEMPLATE, CHUNK_STYLE_ANALYSIS_PROMPT_TEMPLATE, REDUCE_STYLE_ANALYSES_PROMPT_TEMPLATE } from './prompts/styleExtraction';
 import { REWRITER_PROMPT_TEMPLATE } from './prompts/rewriter';
 import { CHUNK_MATH_FORMAT_PROMPT_TEMPLATE } from './prompts/mathFormatting';
-// FIX: Removed MERMAID_RULES_DOCS as it's not exported from './prompts/mermaid' and is not used.
 import { GENERATE_MERMAID_FROM_DIGEST_PROMPT, GENERATE_SIMPLIFIED_MERMAID_PROMPT } from './prompts/mermaid';
 import { REASONING_STUDIO_PROMPT_TEMPLATE } from './prompts/reasoning';
+import { SCAFFOLDER_PROMPT_TEMPLATE } from './prompts/scaffolder';
 
 
 export const GEMINI_FLASH_MODEL = 'gemini-2.5-flash';
@@ -56,6 +56,15 @@ export const INITIAL_REASONING_SETTINGS: ReasoningSettings = {
         claimCheck: true,
         jailbreak: true
     }
+};
+
+export const INITIAL_SCAFFOLDER_SETTINGS: ScaffolderSettings = {
+    language: 'python',
+    template: 'api',
+    packageManager: 'pip',
+    license: 'mit',
+    depth: 2,
+    criticRounds: 1
 };
 
 // --- Prompt Collections (Re-constructed from imports) ---
@@ -114,7 +123,6 @@ export const REDUCE_SUMMARIES_PROMPTS = {
 };
 
 // Re-export other prompts so other files don't need to change their imports
-// FIX: Removed MERMAID_RULES_DOCS as it's not exported from './prompts/mermaid' and is not used.
 export { 
     GENERATE_MERMAID_FROM_DIGEST_PROMPT, 
     GENERATE_SIMPLIFIED_MERMAID_PROMPT, 
@@ -126,5 +134,6 @@ export {
     REDUCE_STYLE_ANALYSES_PROMPT_TEMPLATE,
     REWRITER_PROMPT_TEMPLATE,
     CHUNK_MATH_FORMAT_PROMPT_TEMPLATE,
-    REASONING_STUDIO_PROMPT_TEMPLATE
+    REASONING_STUDIO_PROMPT_TEMPLATE,
+    SCAFFOLDER_PROMPT_TEMPLATE
 };

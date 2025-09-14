@@ -112,10 +112,78 @@ export interface ReasoningOutput {
   reasoningTreeJson: ReasoningTree;
   processingTimeSeconds?: number;
 }
-// --- End new types ---
+// --- End Reasoning Studio types ---
 
+// --- New types for Project Scaffolder ---
+export type ScriptLanguage = 'python' | 'bash';
+export type ProjectTemplate = 'api' | 'cli' | 'service' | 'library' | 'web' | 'pipeline' | 'custom';
+export type PackageManager = 'pip' | 'uv' | 'npm' | 'pnpm' | 'cargo' | 'go' | 'none';
+export type License = 'mit' | 'apache' | 'unlicense' | 'custom';
 
-export type ProcessedOutput = SummaryOutput | StyleModelOutput | RewriterOutput | MathFormatterOutput | ReasoningOutput;
+export interface ScaffolderSettings {
+    language: ScriptLanguage;
+    template: ProjectTemplate;
+    packageManager: PackageManager;
+    license: License;
+    depth: number;
+    criticRounds: number;
+}
+
+export interface ScaffoldTreeItem {
+    path: string;
+    layer: 'presentation' | 'application' | 'domain' | 'infrastructure' | 'shared' | 'tests';
+    purpose: string;
+    prompt: string; // The generated pseudocode prompt for this file
+}
+
+export interface ScaffoldDependency {
+    from: string; // file path
+    to: string[]; // array of file paths
+}
+
+export interface ScaffoldTask {
+    goal: string;
+    phases: {
+        name: string;
+        tasks: {
+            name: string;
+            outputs: string[];
+            validate: {
+                checks: string[];
+                status: 'pending' | 'pass' | 'fail';
+            };
+        }[];
+    }[];
+}
+
+export interface ScaffoldPlan {
+    project: {
+        name: string;
+        language: ScriptLanguage;
+        template: ProjectTemplate;
+        packageManager: PackageManager;
+        license: License;
+    };
+    layers: string[];
+    tree: ScaffoldTreeItem[];
+    dependencies: ScaffoldDependency[];
+    constraints: {
+        max_loc_per_file: number;
+        enforce_layering: boolean;
+        repository_pattern: boolean;
+        framework_free_layers: string[];
+    };
+    tasks: ScaffoldTask[];
+}
+
+export interface ScaffolderOutput {
+    scaffoldScript: string;
+    scaffoldPlanJson: ScaffoldPlan;
+    processingTimeSeconds?: number;
+}
+// --- End Scaffolder types ---
+
+export type ProcessedOutput = SummaryOutput | StyleModelOutput | RewriterOutput | MathFormatterOutput | ReasoningOutput | ScaffolderOutput;
 
 export interface ProgressUpdate {
   stage: string;
@@ -128,7 +196,7 @@ export interface ProgressUpdate {
 }
 
 export type AppState = 'idle' | 'fileSelected' | 'processing' | 'completed' | 'error';
-export type Mode = 'technical' | 'styleExtractor' | 'rewriter' | 'mathFormatter' | 'reasoningStudio';
+export type Mode = 'technical' | 'styleExtractor' | 'rewriter' | 'mathFormatter' | 'reasoningStudio' | 'scaffolder';
 export type RewriteLength = 'short' | 'medium' | 'long';
 
 

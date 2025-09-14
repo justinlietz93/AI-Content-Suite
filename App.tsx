@@ -4,16 +4,18 @@ import { FileLoader } from './components/FileLoader';
 import { ProgressBar } from './components/ProgressBar';
 import { SummaryViewer } from './components/SummaryViewer';
 import { ReasoningViewer } from './components/ReasoningViewer';
+import { ScaffolderViewer } from './components/ScaffolderViewer';
 import { Tabs } from './components/Tabs';
 import { processTranscript } from './services/summarizationService';
 import { processStyleExtraction } from './services/styleExtractionService';
 import { processRewrite } from './services/rewriterService';
 import { processMathFormatting } from './services/mathFormattingService';
 import { processReasoningRequest } from './services/reasoningService';
+import { processScaffoldingRequest } from './services/scaffolderService';
 import { generateSuggestions } from './services/geminiService';
 import { ocrPdf } from './services/ocrService';
-import type { ProcessedOutput, ProgressUpdate, AppState, ProcessingError, Mode, SummaryOutput, StyleModelOutput, RewriteLength, RewriterOutput, MathFormatterOutput, SummaryFormat, ReasoningOutput, ReasoningSettings } from './types';
-import { INITIAL_PROGRESS, INITIAL_REASONING_SETTINGS } from './constants';
+import type { ProcessedOutput, ProgressUpdate, AppState, ProcessingError, Mode, SummaryOutput, StyleModelOutput, RewriteLength, RewriterOutput, MathFormatterOutput, SummaryFormat, ReasoningOutput, ReasoningSettings, ScaffolderOutput, ScaffolderSettings } from './types';
+import { INITIAL_PROGRESS, INITIAL_REASONING_SETTINGS, INITIAL_SCAFFOLDER_SETTINGS } from './constants';
 import { SUMMARY_FORMAT_OPTIONS } from './data/summaryFormats';
 import { CheckCircleIcon } from './components/icons/CheckCircleIcon';
 import { XCircleIcon } from './components/icons/XCircleIcon';
@@ -21,6 +23,7 @@ import { Spinner } from './components/Spinner';
 import { ReportModal } from './components/ReportModal';
 import { DownloadIcon } from './components/icons/DownloadIcon';
 import { ReasoningControls } from './components/ReasoningControls';
+import { ScaffolderControls } from './components/ScaffolderControls';
 
 
 /**
@@ -94,6 +97,10 @@ const App: React.FC = () => {
   const [reasoningPrompt, setReasoningPrompt] = useState('');
   const [reasoningSettings, setReasoningSettings] = useState<ReasoningSettings>(INITIAL_REASONING_SETTINGS);
 
+  // State for Project Scaffolder
+  const [scaffolderPrompt, setScaffolderPrompt] = useState('');
+  const [scaffolderSettings, setScaffolderSettings] = useState<ScaffolderSettings>(INITIAL_SCAFFOLDER_SETTINGS);
+
 
   const handleFileSelect = useCallback((files: File[]) => {
     setCurrentFiles(files);
@@ -128,7 +135,12 @@ const App: React.FC = () => {
   };
 
   const handleSubmit = useCallback(async () => {
-    if ((activeMode !== 'reasoningStudio' && (!currentFiles || currentFiles.length === 0)) || (activeMode === 'reasoningStudio' && !reasoningPrompt)) return;
+    const isReadyForSubmit = 
+      (activeMode === 'reasoningStudio' && reasoningPrompt) ||
+      (activeMode === 'scaffolder' && scaffolderPrompt) ||
+      (currentFiles && currentFiles.length > 0);
+
+    if (!isReadyForSubmit) return;
 
     setAppState('processing');
     setError(null);
@@ -163,7 +175,7 @@ const App: React.FC = () => {
             });
             const textWithContext = `--- DOCUMENT START: ${file.name} ---\n\n${ocrText}\n\n--- DOCUMENT END: ${file.name} ---`;
             processedTexts.push(textWithContext);
-            if (activeMode === 'rewriter' || activeMode === 'reasoningStudio') {
+            if (activeMode === 'rewriter' || activeMode === 'reasoningStudio' || activeMode === 'scaffolder') {
               processedParts.push({ text: textWithContext });
             }
           } else if (file.type.startsWith('image/') && (activeMode === 'rewriter')) {
@@ -174,7 +186,7 @@ const App: React.FC = () => {
             const text = await readFileAsText(file);
             const textWithContext = `--- DOCUMENT START: ${file.name} ---\n\n${text}\n\n--- DOCUMENT END: ${file.name} ---`;
             processedTexts.push(textWithContext);
-            if (activeMode === 'rewriter' || activeMode === 'reasoningStudio') {
+            if (activeMode === 'rewriter' || activeMode === 'reasoningStudio' || activeMode === 'scaffolder') {
               processedParts.push({ text: textWithContext });
             }
           }
@@ -195,6 +207,10 @@ const App: React.FC = () => {
         });
       } else if (activeMode === 'reasoningStudio') {
         result = await processReasoningRequest(reasoningPrompt, reasoningSettings, processedParts, (update) => {
+          setProgress(update);
+        });
+      } else if (activeMode === 'scaffolder') {
+        result = await processScaffoldingRequest(scaffolderPrompt, scaffolderSettings, processedParts, (update) => {
           setProgress(update);
         });
       } else {
@@ -221,7 +237,7 @@ const App: React.FC = () => {
       setProcessedData(fullResult);
       setAppState('completed');
       
-      if (['rewriter', 'mathFormatter', 'reasoningStudio'].includes(activeMode)) {
+      if (['rewriter', 'mathFormatter', 'reasoningStudio', 'scaffolder'].includes(activeMode)) {
         setSuggestionsLoading(false);
         setNextStepSuggestions(null);
         return; // No suggestions for these modes
@@ -260,7 +276,7 @@ const App: React.FC = () => {
       setAppState('error');
       setSuggestionsLoading(false);
     }
-  }, [currentFiles, startTime, activeMode, styleTarget, rewriteStyle, rewriteInstructions, rewriteLength, useHierarchical, summaryFormat, reasoningPrompt, reasoningSettings]);
+  }, [currentFiles, startTime, activeMode, styleTarget, rewriteStyle, rewriteInstructions, rewriteLength, useHierarchical, summaryFormat, reasoningPrompt, reasoningSettings, scaffolderPrompt, scaffolderSettings]);
 
   const handleReset = useCallback(() => {
     setCurrentFiles(null);
@@ -280,6 +296,8 @@ const App: React.FC = () => {
     setSummarySearchTerm('');
     setReasoningPrompt('');
     setReasoningSettings(INITIAL_REASONING_SETTINGS);
+    setScaffolderPrompt('');
+    setScaffolderSettings(INITIAL_SCAFFOLDER_SETTINGS);
   }, []);
 
   const TABS = [
@@ -288,6 +306,7 @@ const App: React.FC = () => {
     { id: 'rewriter', label: 'Rewriter' },
     { id: 'mathFormatter', label: 'Math Formatter' },
     { id: 'reasoningStudio', label: 'Reasoning Studio' },
+    { id: 'scaffolder', label: 'Project Scaffolder' },
   ];
 
   const descriptionText = {
@@ -295,7 +314,8 @@ const App: React.FC = () => {
     styleExtractor: "Upload one or more text or PDF files to analyze and extract a unique writing style model.",
     rewriter: "Upload documents, PDFs, and images, provide a style and instructions, and rewrite them into a new narrative.",
     mathFormatter: "Upload one or more LaTeX/Markdown or PDF documents to reformat mathematical notations for proper MathJax rendering.",
-    reasoningStudio: "Input a complex goal, configure the reasoning pipeline, and receive a polished answer with a full, interactive reasoning trace."
+    reasoningStudio: "Input a complex goal, configure the reasoning pipeline, and receive a polished answer with a full, interactive reasoning trace.",
+    scaffolder: "Describe a project to generate a complete, standards-compliant code scaffold with prompts for an AI coding agent."
   };
 
   const buttonText = {
@@ -304,6 +324,7 @@ const App: React.FC = () => {
     rewriter: currentFiles && currentFiles.length > 0 ? `Rewrite ${currentFiles.length} item(s)` : 'Rewrite',
     mathFormatter: currentFiles && currentFiles.length > 0 ? `Format ${currentFiles.length} file(s)` : 'Format Math',
     reasoningStudio: 'Run Reasoning Engine',
+    scaffolder: 'Generate Project Scaffold',
   };
 
   const resetButtonText = {
@@ -312,6 +333,7 @@ const App: React.FC = () => {
       rewriter: 'Rewrite Another',
       mathFormatter: 'Format Another',
       reasoningStudio: 'New Reasoning Task',
+      scaffolder: 'New Project Scaffold',
   }
 
   const filteredSummaryFormats = useMemo(() => {
@@ -356,7 +378,36 @@ const App: React.FC = () => {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-};
+  };
+
+  const downloadScaffoldArtifact = (type: 'script' | 'plan') => {
+    if (!processedData || activeMode !== 'scaffolder') return;
+    const scaffolderOutput = processedData as ScaffolderOutput;
+    
+    let content = '';
+    let mimeType = '';
+    let fileExtension = '';
+
+    if (type === 'script') {
+        content = scaffolderOutput.scaffoldScript;
+        fileExtension = scaffolderSettings.language === 'python' ? 'py' : 'sh';
+        mimeType = scaffolderSettings.language === 'python' ? 'text/x-python' : 'application/x-sh';
+    } else { // plan
+        content = JSON.stringify(scaffolderOutput.scaffoldPlanJson, null, 2);
+        mimeType = 'application/json';
+        fileExtension = 'json';
+    }
+
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `scaffold_${type}.${fileExtension}`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
 
   return (
@@ -421,6 +472,15 @@ const App: React.FC = () => {
                 onPromptChange={setReasoningPrompt}
                 settings={reasoningSettings}
                 onSettingsChange={setReasoningSettings}
+            />
+          )}
+
+          {activeMode === 'scaffolder' && (appState === 'idle' || appState === 'fileSelected') && (
+            <ScaffolderControls
+                prompt={scaffolderPrompt}
+                onPromptChange={setScaffolderPrompt}
+                settings={scaffolderSettings}
+                onSettingsChange={setScaffolderSettings}
             />
           )}
 
@@ -501,7 +561,7 @@ const App: React.FC = () => {
             <FileLoader onFileSelect={handleFileSelect} selectedFiles={currentFiles} mode={activeMode} />
           ) : null}
 
-          {( (currentFiles && currentFiles.length > 0) || activeMode === 'reasoningStudio' && reasoningPrompt) && (appState === 'fileSelected' || appState === 'processing') && (
+          {((currentFiles && currentFiles.length > 0) || (activeMode === 'reasoningStudio' && reasoningPrompt) || (activeMode === 'scaffolder' && scaffolderPrompt)) && (appState === 'fileSelected' || appState === 'processing') && (
             <div className="mt-6 text-center">
               <button
                 onClick={handleSubmit}
@@ -529,6 +589,8 @@ const App: React.FC = () => {
               
               {activeMode === 'reasoningStudio' ? (
                   <ReasoningViewer output={processedData as ReasoningOutput} />
+              ) : activeMode === 'scaffolder' ? (
+                  <ScaffolderViewer output={processedData as ScaffolderOutput} />
               ) : (
                   <SummaryViewer output={processedData} mode={activeMode} />
               )}
@@ -586,6 +648,23 @@ const App: React.FC = () => {
                           >
                               <DownloadIcon className="w-5 h-5" />
                               Trace (.json)
+                          </button>
+                      </div>
+                  ) : activeMode === 'scaffolder' ? (
+                     <div className="grid grid-cols-2 gap-2">
+                          <button
+                              onClick={() => downloadScaffoldArtifact('script')}
+                              className="w-full px-4 py-3 bg-primary text-white font-semibold rounded-lg hover:bg-primary-hover transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-surface flex items-center justify-center gap-2 text-sm"
+                          >
+                              <DownloadIcon className="w-5 h-5" />
+                              Script
+                          </button>
+                          <button
+                              onClick={() => downloadScaffoldArtifact('plan')}
+                              className="w-full px-4 py-3 bg-sky-700 text-white font-semibold rounded-lg hover:bg-sky-600 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 focus:ring-offset-surface flex items-center justify-center gap-2 text-sm"
+                          >
+                              <DownloadIcon className="w-5 h-5" />
+                              Plan (.json)
                           </button>
                       </div>
                   ) : (
