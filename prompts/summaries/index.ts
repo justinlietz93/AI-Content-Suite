@@ -13,6 +13,7 @@ export * from './metricsDashboard';
 export * from './milestoneTracker';
 export * from './pitchGenerator';
 export * from './processFlow';
+export * from './priorityRanking';
 export * from './prosConsTable';
 export * from './qaPairs';
 export * from './raciSnapshot';

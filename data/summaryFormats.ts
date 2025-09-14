@@ -158,5 +158,11 @@ export const SUMMARY_FORMAT_OPTIONS: SummaryFormatOption[] = [
     label: 'Pros & Cons Table',
     description: "Distills trade-offs into a simple, scannable grid, making evaluations faster and reasoning more transparent.",
     tags: ['comparison', 'analysis', 'table', 'business', 'trade-off', 'decision']
+  },
+  {
+    value: 'priorityRanking',
+    label: 'Priority Ranking',
+    description: "Compresses what matters most and in what order into a single ordered list, guiding focus and execution.",
+    tags: ['project management', 'ranking', 'priorities', 'tasks', 'strategy', 'list']
   }
 ];
