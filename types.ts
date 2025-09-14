@@ -4,7 +4,7 @@ export interface Highlight {
   relevance?: number; // Optional, depends on LLM output
 }
 
-export type SummaryFormat = 'default' | 'sessionHandoff' | 'readme' | 'solutionFinder' | 'timeline' | 'decisionMatrix' | 'pitchGenerator' | 'causeEffectChain' | 'swotAnalysis' | 'checklist' | 'dialogCondensation' | 'graphTreeOutline' | 'entityRelationshipDigest' | 'rulesDistiller' | 'metricsDashboard' | 'qaPairs' | 'processFlow' | 'raciSnapshot' | 'riskRegister' | 'milestoneTracker';
+export type SummaryFormat = 'default' | 'sessionHandoff' | 'readme' | 'solutionFinder' | 'timeline' | 'decisionMatrix' | 'pitchGenerator' | 'causeEffectChain' | 'swotAnalysis' | 'checklist' | 'dialogCondensation' | 'graphTreeOutline' | 'entityRelationshipDigest' | 'rulesDistiller' | 'metricsDashboard' | 'qaPairs' | 'processFlow' | 'raciSnapshot' | 'riskRegister' | 'milestoneTracker' | 'glossaryTermMap';
 
 export interface SummaryOutput {
   finalSummary: string;

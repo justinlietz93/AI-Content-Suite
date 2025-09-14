@@ -331,6 +331,8 @@ const App: React.FC = () => {
         return "Distills uncertainties, their severity, and their countermeasures into a single compact risk register table. Ideal for project management.";
       case 'milestoneTracker':
         return "Compresses a project timeline into discrete, accountable checkpoints (milestones), making delivery progress transparent and traceable.";
+      case 'glossaryTermMap':
+        return "Distills key concepts and their relationships into a structured reference, ensuring clarity and consistency across complex contexts.";
       default:
         return "";
     }
@@ -389,6 +391,7 @@ const App: React.FC = () => {
                     <option value="raciSnapshot">RACI Snapshot</option>
                     <option value="riskRegister">Risk Register Digest</option>
                     <option value="milestoneTracker">Milestone Tracker</option>
+                    <option value="glossaryTermMap">Glossary / Term Map</option>
                   </select>
                   <p className="mt-1 text-xs text-text-secondary">
                     {getSummaryFormatDescription(summaryFormat)}
