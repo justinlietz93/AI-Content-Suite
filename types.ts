@@ -183,7 +183,37 @@ export interface ScaffolderOutput {
 }
 // --- End Scaffolder types ---
 
-export type ProcessedOutput = SummaryOutput | StyleModelOutput | RewriterOutput | MathFormatterOutput | ReasoningOutput | ScaffolderOutput;
+// --- New types for Request Splitter ---
+export type SplitterPersona = 'none' | 'engineer' | 'project_manager' | 'physicist' | 'custom';
+
+export interface RequestSplitterSettings {
+    projectName: string;
+    persona: SplitterPersona;
+    customPersonaDirective?: string;
+}
+
+export interface SplitPlanJson {
+    project: {
+        name: string;
+        architecture: string;
+        invariants: string[];
+    };
+    prompts: {
+        id: number;
+        title: string;
+        prompt: string;
+    }[];
+}
+
+export interface RequestSplitterOutput {
+    orderedPromptsMd: string;
+    splitPlanJson: SplitPlanJson;
+    processingTimeSeconds?: number;
+}
+// --- End Request Splitter types ---
+
+
+export type ProcessedOutput = SummaryOutput | StyleModelOutput | RewriterOutput | MathFormatterOutput | ReasoningOutput | ScaffolderOutput | RequestSplitterOutput;
 
 export interface ProgressUpdate {
   stage: string;
@@ -196,7 +226,7 @@ export interface ProgressUpdate {
 }
 
 export type AppState = 'idle' | 'fileSelected' | 'processing' | 'completed' | 'error';
-export type Mode = 'technical' | 'styleExtractor' | 'rewriter' | 'mathFormatter' | 'reasoningStudio' | 'scaffolder';
+export type Mode = 'technical' | 'styleExtractor' | 'rewriter' | 'mathFormatter' | 'reasoningStudio' | 'scaffolder' | 'requestSplitter';
 export type RewriteLength = 'short' | 'medium' | 'long';
 
 

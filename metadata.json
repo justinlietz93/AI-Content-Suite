@@ -1,6 +1,6 @@
 {
   "name": "AI Content Suite",
-  "description": "An AI-powered text analysis and content generation tool. It can summarize technical transcripts, extract writing styles, and rewrite documents and images into new narratives using the Gemini API.",
+  "description": "An AI-powered text analysis and content generation tool. It can summarize technical transcripts, extract writing styles, rewrite documents, and decompose large requests into independent prompts using the Gemini API.",
   "requestFramePermissions": [],
   "prompt": ""
 }

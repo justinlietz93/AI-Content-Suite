@@ -1,5 +1,5 @@
 
-import type { ProgressUpdate, ReasoningSettings, ScaffolderSettings } from './types';
+import type { ProgressUpdate, ReasoningSettings, ScaffolderSettings, RequestSplitterSettings } from './types';
 
 // Import all summary prompts from the new modular structure
 import * as summaryPrompts from './prompts/summaries';
@@ -13,6 +13,7 @@ import { CHUNK_MATH_FORMAT_PROMPT_TEMPLATE } from './prompts/mathFormatting';
 import { GENERATE_MERMAID_FROM_DIGEST_PROMPT, GENERATE_SIMPLIFIED_MERMAID_PROMPT } from './prompts/mermaid';
 import { REASONING_STUDIO_PROMPT_TEMPLATE } from './prompts/reasoning';
 import { SCAFFOLDER_PROMPT_TEMPLATE } from './prompts/scaffolder';
+import { REQUEST_SPLITTER_PROMPT_TEMPLATE } from './prompts/requestSplitter';
 
 
 export const GEMINI_FLASH_MODEL = 'gemini-2.5-flash';
@@ -65,6 +66,12 @@ export const INITIAL_SCAFFOLDER_SETTINGS: ScaffolderSettings = {
     license: 'mit',
     depth: 2,
     criticRounds: 1
+};
+
+export const INITIAL_REQUEST_SPLITTER_SETTINGS: RequestSplitterSettings = {
+    projectName: '',
+    persona: 'none',
+    customPersonaDirective: '',
 };
 
 // --- Prompt Collections (Re-constructed from imports) ---
@@ -139,5 +146,6 @@ export {
     REWRITER_PROMPT_TEMPLATE,
     CHUNK_MATH_FORMAT_PROMPT_TEMPLATE,
     REASONING_STUDIO_PROMPT_TEMPLATE,
-    SCAFFOLDER_PROMPT_TEMPLATE
+    SCAFFOLDER_PROMPT_TEMPLATE,
+    REQUEST_SPLITTER_PROMPT_TEMPLATE
 };
