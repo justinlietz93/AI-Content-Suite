@@ -1,5 +1,5 @@
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { FileLoader } from './components/FileLoader';
 import { ProgressBar } from './components/ProgressBar';
 import { SummaryViewer } from './components/SummaryViewer';
@@ -12,6 +12,7 @@ import { generateSuggestions } from './services/geminiService';
 import { ocrPdf } from './services/ocrService';
 import type { ProcessedOutput, ProgressUpdate, AppState, ProcessingError, Mode, SummaryOutput, StyleModelOutput, RewriteLength, RewriterOutput, MathFormatterOutput, SummaryFormat } from './types';
 import { INITIAL_PROGRESS } from './constants';
+import { SUMMARY_FORMAT_OPTIONS } from './data/summaryFormats';
 import { CheckCircleIcon } from './components/icons/CheckCircleIcon';
 import { XCircleIcon } from './components/icons/XCircleIcon';
 import { Spinner } from './components/Spinner';
@@ -84,6 +85,8 @@ const App: React.FC = () => {
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [useHierarchical, setUseHierarchical] = useState(false);
   const [summaryFormat, setSummaryFormat] = useState<SummaryFormat>('default');
+  const [summarySearchTerm, setSummarySearchTerm] = useState('');
+
 
   const handleFileSelect = useCallback((files: File[]) => {
     setCurrentFiles(files);
@@ -259,6 +262,7 @@ const App: React.FC = () => {
     setSuggestionsLoading(false);
     setUseHierarchical(false);
     setSummaryFormat('default');
+    setSummarySearchTerm('');
   }, []);
 
   const TABS = [
@@ -289,60 +293,21 @@ const App: React.FC = () => {
       mathFormatter: 'Format Another',
   }
 
-  const getSummaryFormatDescription = (format: SummaryFormat) => {
-    switch (format) {
-      case 'default':
-        return "A concise, readable summary of the key points.";
-      case 'sessionHandoff':
-        return "A structured, detailed summary for another AI to process.";
-      case 'readme':
-        return "Formats the summary as a project README.md file.";
-      case 'solutionFinder':
-        return "Identifies solutions in the text and formats them as a step-by-step guide with copyable commands.";
-      case 'timeline':
-        return "Generates a chronological list of key events, dates, and outcomes. Good for projects, history, or step-by-step processes.";
-      case 'decisionMatrix':
-        return "Extracts and organizes comparisons into a structured decision matrix table. Ideal for analyzing trade-offs.";
-      case 'pitchGenerator':
-        return "Generates a multi-audience pitch (Technical, Investor, User) from the content, covering problem, solution, benefits, and more.";
-      case 'causeEffectChain':
-        return "Identifies and links root causes (drivers) to their immediate outcomes and broader consequences. Excellent for root cause analysis.";
-      case 'swotAnalysis':
-        return "Generates a SWOT matrix (Strengths, Weaknesses, Opportunities, Threats) for strategic planning or product evaluation.";
-      case 'checklist':
-        return "Distills discussions and documents into a concrete, trackable list of action items with completion statuses.";
-      case 'dialogCondensation':
-        return "Condenses conversations into a compact, speaker-tagged log of key statements, decisions, and actions. Ideal for meeting minutes.";
-      case 'graphTreeOutline':
-        return "Organizes content into a hierarchical tree structure with a root, branches, and leaves. Excellent for showing dependencies and structure.";
-      case 'entityRelationshipDigest':
-        return "Extracts key entities, their attributes, and their relationships to create a lightweight semantic map of the content. Ideal for data-heavy docs.";
-      case 'rulesDistiller':
-        return "Extracts all hard technical rules, syntax, and constraints into a dense, imperative-style reference list. Ideal for compliance checks.";
-      case 'metricsDashboard':
-        return "Distills raw data into a numeric baseline table of key indicators (KPIs) and their values like current, min, max, and average.";
-      case 'qaPairs':
-        return "Transforms unstructured text into a clear, searchable list of questions and answers. Ideal for meeting minutes, FAQs, and knowledge capture.";
-      case 'processFlow':
-        return "Converts complex procedures into a clear, sequential map of states and transitions. Excellent for workflows, protocols, and troubleshooting guides.";
-      case 'raciSnapshot':
-        return "Condenses tasks and ownership for AI agents into a single responsibility map (Responsible, Accountable, Consulted, Informed).";
-      case 'riskRegister':
-        return "Distills uncertainties, their severity, and their countermeasures into a single compact risk register table. Ideal for project management.";
-      case 'milestoneTracker':
-        return "Compresses a project timeline into discrete, accountable checkpoints (milestones), making delivery progress transparent and traceable.";
-      case 'glossaryTermMap':
-        return "Distills key concepts and their relationships into a structured reference, ensuring clarity and consistency across complex contexts.";
-      case 'hierarchyOfNeeds':
-        return "Distills layered dependencies and priorities into a structured stack, highlighting what must be built first to sustain higher-level outcomes.";
-      case 'stakeholderMap':
-        return "Distills who is involved, what they want, and their influence into a clear map of project dynamics and communication priorities.";
-      case 'constraintList':
-        return "Condenses project essentials, priorities, and trade-offs into a structured MoSCoW list (Must/Should/Could/Won't).";
-      default:
-        return "";
+  const filteredSummaryFormats = useMemo(() => {
+    if (!summarySearchTerm.trim()) {
+        return SUMMARY_FORMAT_OPTIONS;
     }
-  };
+    const lowercasedTerm = summarySearchTerm.toLowerCase();
+    return SUMMARY_FORMAT_OPTIONS.filter(format =>
+        format.label.toLowerCase().includes(lowercasedTerm) ||
+        format.tags.some(tag => tag.toLowerCase().includes(lowercasedTerm))
+    );
+  }, [summarySearchTerm]);
+
+  const selectedFormatDescription = useMemo(() => {
+      return SUMMARY_FORMAT_OPTIONS.find(f => f.value === summaryFormat)?.description || '';
+  }, [summaryFormat]);
+
 
   return (
     <>
@@ -371,39 +336,30 @@ const App: React.FC = () => {
                   <label htmlFor="summaryFormatSelect" className="block text-sm font-medium text-text-secondary mb-1">
                     Summary Format:
                   </label>
+                  <input
+                    type="search"
+                    placeholder="Search formats by name or tag (e.g., table, project)..."
+                    value={summarySearchTerm}
+                    onChange={(e) => setSummarySearchTerm(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-700 border border-border-color rounded-md shadow-sm focus:ring-primary focus:border-primary text-text-primary placeholder-slate-500 text-sm mb-2"
+                    aria-controls="summaryFormatSelect"
+                  />
                   <select
                     id="summaryFormatSelect"
                     value={summaryFormat}
                     onChange={(e) => setSummaryFormat(e.target.value as SummaryFormat)}
                     className="w-full px-3 py-2 bg-slate-700 border border-border-color rounded-md shadow-sm focus:ring-primary focus:border-primary text-text-primary placeholder-slate-500 text-sm"
                   >
-                    <option value="default">Default Summary</option>
-                    <option value="sessionHandoff">Session Handoff for AI Agent</option>
-                    <option value="readme">README.md Format</option>
-                    <option value="solutionFinder">Solution Finder Guide</option>
-                    <option value="timeline">Timeline Format</option>
-                    <option value="decisionMatrix">Decision Matrix</option>
-                    <option value="pitchGenerator">Multi-Audience Pitch Generator</option>
-                    <option value="causeEffectChain">Cause-Effect Chain</option>
-                    <option value="swotAnalysis">SWOT Analysis</option>
-                    <option value="checklist">Checklist Format</option>
-                    <option value="dialogCondensation">Dialog-Style Condensation</option>
-                    <option value="graphTreeOutline">Graph / Tree Outline</option>
-                    <option value="entityRelationshipDigest">Entity-Relationship Digest</option>
-                    <option value="rulesDistiller">Rules Distiller</option>
-                    <option value="metricsDashboard">Metrics Dashboard Snapshot</option>
-                    <option value="qaPairs">Q&amp;A Pairs</option>
-                    <option value="processFlow">Process Flow / Stepwise Map</option>
-                    <option value="raciSnapshot">RACI Snapshot</option>
-                    <option value="riskRegister">Risk Register Digest</option>
-                    <option value="milestoneTracker">Milestone Tracker</option>
-                    <option value="glossaryTermMap">Glossary / Term Map</option>
-                    <option value="hierarchyOfNeeds">Hierarchy of Needs / Pyramid</option>
-                    <option value="stakeholderMap">Stakeholder Map</option>
-                    <option value="constraintList">Constraint / Requirement List</option>
+                    {filteredSummaryFormats.length > 0 ? (
+                        filteredSummaryFormats.map(format => (
+                            <option key={format.value} value={format.value}>{format.label}</option>
+                        ))
+                    ) : (
+                        <option disabled>No formats found for "{summarySearchTerm}"</option>
+                    )}
                   </select>
                   <p className="mt-1 text-xs text-text-secondary">
-                    {getSummaryFormatDescription(summaryFormat)}
+                    {selectedFormatDescription}
                   </p>
                 </div>
             </div>
