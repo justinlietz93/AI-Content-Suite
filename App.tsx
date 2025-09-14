@@ -6,6 +6,7 @@ import { SummaryViewer } from './components/SummaryViewer';
 import { ReasoningViewer } from './components/ReasoningViewer';
 import { ScaffolderViewer } from './components/ScaffolderViewer';
 import { RequestSplitterViewer } from './components/RequestSplitterViewer';
+import { PromptEnhancerViewer } from './components/PromptEnhancerViewer';
 import { Tabs } from './components/Tabs';
 import { processTranscript } from './services/summarizationService';
 import { processStyleExtraction } from './services/styleExtractionService';
@@ -14,10 +15,11 @@ import { processMathFormatting } from './services/mathFormattingService';
 import { processReasoningRequest } from './services/reasoningService';
 import { processScaffoldingRequest } from './services/scaffolderService';
 import { processRequestSplitting } from './services/requestSplitterService';
+import { processPromptEnhancement } from './services/promptEnhancerService';
 import { generateSuggestions } from './services/geminiService';
 import { ocrPdf } from './services/ocrService';
-import type { ProcessedOutput, ProgressUpdate, AppState, ProcessingError, Mode, SummaryOutput, StyleModelOutput, RewriteLength, RewriterOutput, MathFormatterOutput, SummaryFormat, ReasoningOutput, ReasoningSettings, ScaffolderOutput, ScaffolderSettings, RequestSplitterOutput, RequestSplitterSettings } from './types';
-import { INITIAL_PROGRESS, INITIAL_REASONING_SETTINGS, INITIAL_SCAFFOLDER_SETTINGS, INITIAL_REQUEST_SPLITTER_SETTINGS } from './constants';
+import type { ProcessedOutput, ProgressUpdate, AppState, ProcessingError, Mode, SummaryOutput, StyleModelOutput, RewriteLength, RewriterOutput, MathFormatterOutput, SummaryFormat, ReasoningOutput, ReasoningSettings, ScaffolderOutput, ScaffolderSettings, RequestSplitterOutput, RequestSplitterSettings, PromptEnhancerOutput, PromptEnhancerSettings } from './types';
+import { INITIAL_PROGRESS, INITIAL_REASONING_SETTINGS, INITIAL_SCAFFOLDER_SETTINGS, INITIAL_REQUEST_SPLITTER_SETTINGS, INITIAL_PROMPT_ENHANCER_SETTINGS } from './constants';
 import { SUMMARY_FORMAT_OPTIONS } from './data/summaryFormats';
 import { CheckCircleIcon } from './components/icons/CheckCircleIcon';
 import { XCircleIcon } from './components/icons/XCircleIcon';
@@ -27,6 +29,7 @@ import { DownloadIcon } from './components/icons/DownloadIcon';
 import { ReasoningControls } from './components/ReasoningControls';
 import { ScaffolderControls } from './components/ScaffolderControls';
 import { RequestSplitterControls } from './components/RequestSplitterControls';
+import { PromptEnhancerControls } from './components/PromptEnhancerControls';
 
 
 /**
@@ -108,9 +111,21 @@ const App: React.FC = () => {
   const [requestSplitterSpec, setRequestSplitterSpec] = useState('');
   const [requestSplitterSettings, setRequestSplitterSettings] = useState<RequestSplitterSettings>(INITIAL_REQUEST_SPLITTER_SETTINGS);
 
+  // State for Prompt Enhancer
+  const [promptEnhancerSettings, setPromptEnhancerSettings] = useState<PromptEnhancerSettings>(INITIAL_PROMPT_ENHANCER_SETTINGS);
+
   const handleRequestSplitterSpecChange = useCallback((spec: string) => {
     setRequestSplitterSpec(spec);
     if (spec.trim() || (currentFiles && currentFiles.length > 0)) {
+        setAppState('fileSelected');
+    } else {
+        setAppState('idle');
+    }
+  }, [currentFiles]);
+
+  const handlePromptEnhancerSettingsChange = useCallback((settings: PromptEnhancerSettings) => {
+    setPromptEnhancerSettings(settings);
+    if (settings.rawPrompt.trim() || (currentFiles && currentFiles.length > 0)) {
         setAppState('fileSelected');
     } else {
         setAppState('idle');
@@ -130,7 +145,11 @@ const App: React.FC = () => {
     if (activeMode === 'requestSplitter' && (files.length > 0 || requestSplitterSpec.trim())) {
         setAppState('fileSelected');
     }
-  }, [activeMode, requestSplitterSpec]);
+    // Readiness for prompt enhancer
+    if (activeMode === 'promptEnhancer' && (files.length > 0 || promptEnhancerSettings.rawPrompt.trim())) {
+        setAppState('fileSelected');
+    }
+  }, [activeMode, requestSplitterSpec, promptEnhancerSettings.rawPrompt]);
 
   const fileToGenerativePart = async (file: File): Promise<any> => {
     if (file.type.startsWith('image/')) {
@@ -159,6 +178,7 @@ const App: React.FC = () => {
       (activeMode === 'reasoningStudio' && reasoningPrompt) ||
       (activeMode === 'scaffolder' && scaffolderPrompt) ||
       (activeMode === 'requestSplitter' && (requestSplitterSpec || (currentFiles && currentFiles.length > 0))) ||
+      (activeMode === 'promptEnhancer' && (promptEnhancerSettings.rawPrompt.trim() || (currentFiles && currentFiles.length > 0))) ||
       (currentFiles && currentFiles.length > 0);
 
     if (!isReadyForSubmit) return;
@@ -173,7 +193,7 @@ const App: React.FC = () => {
     try {
       let result: ProcessedOutput;
       
-      const processedParts: any[] = []; // For rewriter, reasoning, scaffolder, splitter
+      const processedParts: any[] = []; // For rewriter, reasoning, scaffolder, splitter, enhancer
       const processedTexts: string[] = []; // For text-based modes
 
       if(currentFiles && currentFiles.length > 0) {
@@ -196,7 +216,7 @@ const App: React.FC = () => {
             });
             const textWithContext = `--- DOCUMENT START: ${file.name} ---\n\n${ocrText}\n\n--- DOCUMENT END: ${file.name} ---`;
             processedTexts.push(textWithContext);
-            if (['rewriter', 'reasoningStudio', 'scaffolder', 'requestSplitter'].includes(activeMode)) {
+            if (['rewriter', 'reasoningStudio', 'scaffolder', 'requestSplitter', 'promptEnhancer'].includes(activeMode)) {
               processedParts.push({ text: textWithContext });
             }
           } else if (file.type.startsWith('image/') && (activeMode === 'rewriter')) {
@@ -207,7 +227,7 @@ const App: React.FC = () => {
             const text = await readFileAsText(file);
             const textWithContext = `--- DOCUMENT START: ${file.name} ---\n\n${text}\n\n--- DOCUMENT END: ${file.name} ---`;
             processedTexts.push(textWithContext);
-            if (['rewriter', 'reasoningStudio', 'scaffolder', 'requestSplitter'].includes(activeMode)) {
+            if (['rewriter', 'reasoningStudio', 'scaffolder', 'requestSplitter', 'promptEnhancer'].includes(activeMode)) {
               processedParts.push({ text: textWithContext });
             }
           }
@@ -238,6 +258,10 @@ const App: React.FC = () => {
         result = await processRequestSplitting(requestSplitterSpec, requestSplitterSettings, processedParts, (update) => {
             setProgress(update);
         });
+      } else if (activeMode === 'promptEnhancer') {
+        result = await processPromptEnhancement(promptEnhancerSettings, processedParts, (update) => {
+            setProgress(update);
+        });
       } else {
         const combinedText = processedTexts.join('\n\n--- DOCUMENT BREAK ---\n\n');
 
@@ -262,7 +286,7 @@ const App: React.FC = () => {
       setProcessedData(fullResult);
       setAppState('completed');
       
-      if (['rewriter', 'mathFormatter', 'reasoningStudio', 'scaffolder', 'requestSplitter'].includes(activeMode)) {
+      if (['rewriter', 'mathFormatter', 'reasoningStudio', 'scaffolder', 'requestSplitter', 'promptEnhancer'].includes(activeMode)) {
         setSuggestionsLoading(false);
         setNextStepSuggestions(null);
         return; // No suggestions for these modes
@@ -301,7 +325,7 @@ const App: React.FC = () => {
       setAppState('error');
       setSuggestionsLoading(false);
     }
-  }, [currentFiles, startTime, activeMode, styleTarget, rewriteStyle, rewriteInstructions, rewriteLength, useHierarchical, summaryFormat, reasoningPrompt, reasoningSettings, scaffolderPrompt, scaffolderSettings, requestSplitterSpec, requestSplitterSettings]);
+  }, [currentFiles, startTime, activeMode, styleTarget, rewriteStyle, rewriteInstructions, rewriteLength, useHierarchical, summaryFormat, reasoningPrompt, reasoningSettings, scaffolderPrompt, scaffolderSettings, requestSplitterSpec, requestSplitterSettings, promptEnhancerSettings]);
 
   const handleReset = useCallback(() => {
     setCurrentFiles(null);
@@ -325,6 +349,7 @@ const App: React.FC = () => {
     setScaffolderSettings(INITIAL_SCAFFOLDER_SETTINGS);
     setRequestSplitterSpec('');
     setRequestSplitterSettings(INITIAL_REQUEST_SPLITTER_SETTINGS);
+    setPromptEnhancerSettings(INITIAL_PROMPT_ENHANCER_SETTINGS);
   }, []);
 
   const TABS = [
@@ -335,6 +360,7 @@ const App: React.FC = () => {
     { id: 'reasoningStudio', label: 'Reasoning Studio' },
     { id: 'scaffolder', label: 'Project Scaffolder' },
     { id: 'requestSplitter', label: 'Request Splitter' },
+    { id: 'promptEnhancer', label: 'Prompt Enhancer' },
   ];
 
   const descriptionText = {
@@ -345,6 +371,7 @@ const App: React.FC = () => {
     reasoningStudio: "Input a complex goal, configure the reasoning pipeline, and receive a polished answer with a full, interactive reasoning trace.",
     scaffolder: "Describe a project to generate a complete, standards-compliant code scaffold with prompts for an AI coding agent.",
     requestSplitter: "Input a large specification to decompose it into a sequence of actionable, buildable implementation prompts.",
+    promptEnhancer: "Take a raw request and transform it into a structured, agent-ready prompt using reusable templates.",
   };
 
   const buttonText = {
@@ -355,6 +382,7 @@ const App: React.FC = () => {
     reasoningStudio: 'Run Reasoning Engine',
     scaffolder: 'Generate Project Scaffold',
     requestSplitter: 'Split Request',
+    promptEnhancer: 'Enhance Prompt',
   };
 
   const resetButtonText = {
@@ -365,6 +393,7 @@ const App: React.FC = () => {
       reasoningStudio: 'New Reasoning Task',
       scaffolder: 'New Project Scaffold',
       requestSplitter: 'New Split Request',
+      promptEnhancer: 'Enhance Another Prompt',
   }
 
   const filteredSummaryFormats = useMemo(() => {
@@ -469,6 +498,35 @@ const App: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
+  const downloadPromptEnhancerArtifact = (type: 'md' | 'json') => {
+    if (!processedData || activeMode !== 'promptEnhancer') return;
+    const enhancerOutput = processedData as PromptEnhancerOutput;
+    
+    let content = '';
+    let mimeType = '';
+    let fileExtension = '';
+
+    if (type === 'md') {
+        content = enhancerOutput.enhancedPromptMd;
+        mimeType = 'text/markdown';
+        fileExtension = 'md';
+    } else {
+        content = JSON.stringify(enhancerOutput.enhancedPromptJson, null, 2);
+        mimeType = 'application/json';
+        fileExtension = 'json';
+    }
+
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `enhanced_prompt_${enhancerOutput.enhancedPromptJson.template}.${fileExtension}`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
 
   return (
     <>
@@ -553,6 +611,13 @@ const App: React.FC = () => {
               />
           )}
 
+          {activeMode === 'promptEnhancer' && (appState === 'idle' || appState === 'fileSelected') && (
+              <PromptEnhancerControls
+                  settings={promptEnhancerSettings}
+                  onSettingsChange={handlePromptEnhancerSettingsChange}
+              />
+          )}
+
           {activeMode === 'styleExtractor' && (appState === 'idle' || appState === 'fileSelected') && (
             <div className="my-4 px-4 sm:px-0 animate-fade-in-scale">
               <label htmlFor="styleTargetInput" className="block text-sm font-medium text-text-secondary mb-1">
@@ -630,7 +695,7 @@ const App: React.FC = () => {
             <FileLoader onFileSelect={handleFileSelect} selectedFiles={currentFiles} mode={activeMode} />
           )}
 
-          {((currentFiles && currentFiles.length > 0) || (activeMode === 'reasoningStudio' && reasoningPrompt) || (activeMode === 'scaffolder' && scaffolderPrompt) || (activeMode === 'requestSplitter' && (requestSplitterSpec.trim() || (currentFiles && currentFiles.length > 0)))) && (appState === 'fileSelected' || appState === 'processing') && (
+          {((currentFiles && currentFiles.length > 0) || (activeMode === 'reasoningStudio' && reasoningPrompt) || (activeMode === 'scaffolder' && scaffolderPrompt) || (activeMode === 'requestSplitter' && (requestSplitterSpec.trim() || (currentFiles && currentFiles.length > 0))) || (activeMode === 'promptEnhancer' && (promptEnhancerSettings.rawPrompt.trim() || (currentFiles && currentFiles.length > 0)))) && (appState === 'fileSelected' || appState === 'processing') && (
             <div className="mt-6 text-center">
               <button
                 onClick={handleSubmit}
@@ -662,6 +727,8 @@ const App: React.FC = () => {
                   <ScaffolderViewer output={processedData as ScaffolderOutput} />
               ) : activeMode === 'requestSplitter' ? (
                   <RequestSplitterViewer output={processedData as RequestSplitterOutput} />
+              ) : activeMode === 'promptEnhancer' ? (
+                  <PromptEnhancerViewer output={processedData as PromptEnhancerOutput} />
               ) : (
                   <SummaryViewer output={processedData} mode={activeMode} />
               )}
@@ -753,6 +820,23 @@ const App: React.FC = () => {
                           >
                               <DownloadIcon className="w-5 h-5" />
                               Plan (.json)
+                          </button>
+                      </div>
+                  ) : activeMode === 'promptEnhancer' ? (
+                     <div className="grid grid-cols-2 gap-2">
+                          <button
+                              onClick={() => downloadPromptEnhancerArtifact('md')}
+                              className="w-full px-4 py-3 bg-primary text-white font-semibold rounded-lg hover:bg-primary-hover transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-surface flex items-center justify-center gap-2 text-sm"
+                          >
+                              <DownloadIcon className="w-5 h-5" />
+                              Prompt (.md)
+                          </button>
+                          <button
+                              onClick={() => downloadPromptEnhancerArtifact('json')}
+                              className="w-full px-4 py-3 bg-sky-700 text-white font-semibold rounded-lg hover:bg-sky-600 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 focus:ring-offset-surface flex items-center justify-center gap-2 text-sm"
+                          >
+                              <DownloadIcon className="w-5 h-5" />
+                              Data (.json)
                           </button>
                       </div>
                   ) : (

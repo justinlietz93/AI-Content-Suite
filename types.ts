@@ -192,18 +192,22 @@ export interface RequestSplitterSettings {
     customPersonaDirective?: string;
 }
 
+export interface SplitPlanPrompt {
+    id: number;
+    title: string;
+    prompt: string;
+    dependencies?: number[];
+}
+
 export interface SplitPlanJson {
     project: {
         name: string;
         architecture: string;
         invariants: string[];
     };
-    prompts: {
-        id: number;
-        title: string;
-        prompt: string;
-    }[];
+    prompts: SplitPlanPrompt[];
 }
+
 
 export interface RequestSplitterOutput {
     orderedPromptsMd: string;
@@ -212,8 +216,28 @@ export interface RequestSplitterOutput {
 }
 // --- End Request Splitter types ---
 
+// --- New types for Prompt Enhancer ---
+export type PromptEnhancerTemplate = 'featureBuilder' | 'bugFix' | 'codeReview' | 'architecturalDesign' | 'refactoring' | 'testing' | 'dataAnalysis' | 'custom';
 
-export type ProcessedOutput = SummaryOutput | StyleModelOutput | RewriterOutput | MathFormatterOutput | ReasoningOutput | ScaffolderOutput | RequestSplitterOutput;
+export interface PromptEnhancerSettings {
+    rawPrompt: string;
+    template: PromptEnhancerTemplate;
+}
+
+export interface EnhancedPromptJson {
+    template: PromptEnhancerTemplate;
+    [key: string]: any; // The rest of the JSON is dynamic
+}
+
+export interface PromptEnhancerOutput {
+    enhancedPromptMd: string;
+    enhancedPromptJson: EnhancedPromptJson;
+    processingTimeSeconds?: number;
+}
+// --- End Prompt Enhancer types ---
+
+
+export type ProcessedOutput = SummaryOutput | StyleModelOutput | RewriterOutput | MathFormatterOutput | ReasoningOutput | ScaffolderOutput | RequestSplitterOutput | PromptEnhancerOutput;
 
 export interface ProgressUpdate {
   stage: string;
@@ -226,7 +250,7 @@ export interface ProgressUpdate {
 }
 
 export type AppState = 'idle' | 'fileSelected' | 'processing' | 'completed' | 'error';
-export type Mode = 'technical' | 'styleExtractor' | 'rewriter' | 'mathFormatter' | 'reasoningStudio' | 'scaffolder' | 'requestSplitter';
+export type Mode = 'technical' | 'styleExtractor' | 'rewriter' | 'mathFormatter' | 'reasoningStudio' | 'scaffolder' | 'requestSplitter' | 'promptEnhancer';
 export type RewriteLength = 'short' | 'medium' | 'long';
 
 

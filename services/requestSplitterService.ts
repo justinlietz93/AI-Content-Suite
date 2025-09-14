@@ -1,4 +1,5 @@
-import type { ProgressUpdate, RequestSplitterOutput, RequestSplitterSettings, SplitPlanJson } from '../types';
+
+import type { ProgressUpdate, RequestSplitterOutput, RequestSplitterSettings, SplitPlanJson, SplitPlanPrompt } from '../types';
 import { generateText } from './geminiService';
 import { REQUEST_SPLITTER_PLANNING_PROMPT_TEMPLATE, REQUEST_SPLITTER_GENERATION_PROMPT_TEMPLATE } from '../constants';
 
@@ -29,6 +30,7 @@ interface PlanningResponse {
     plan: {
         id: number;
         title: string;
+        dependencies?: number[];
     }[];
 }
 
@@ -55,8 +57,8 @@ export const processRequestSplitting = async (
     onProgress({
         stage: 'Planning Decomposition',
         percentage: 10,
-        message: 'AI architect is analyzing the specification to create a high-level plan...',
-        thinkingHint: 'Identifying core components and sequence.'
+        message: 'AI architect is analyzing the specification to create a dependency graph...',
+        thinkingHint: 'Identifying tasks and their prerequisites.'
     });
 
     const planningPrompt = REQUEST_SPLITTER_PLANNING_PROMPT_TEMPLATE(combinedSpec, settings);
@@ -70,13 +72,13 @@ export const processRequestSplitting = async (
     onProgress({
         stage: 'Plan Generated',
         percentage: 20,
-        message: `Plan created with ${plan.length} sequential prompts.`,
+        message: `Dependency graph created with ${plan.length} tasks.`,
         thinkingHint: `Now generating content for each prompt...`
     });
 
     // --- STAGE 2: GENERATION ---
-    const finalPrompts: { id: number; title: string; prompt: string; }[] = [];
-    const completedTitles: string[] = [];
+    const finalPrompts: SplitPlanPrompt[] = [];
+    const planMap = new Map(plan.map(p => [p.id, p]));
     const totalPrompts = plan.length;
     const generationPhaseStart = 20;
     const generationPhaseRange = 75; // 20% to 95%
@@ -93,11 +95,20 @@ export const processRequestSplitting = async (
             total: totalPrompts,
             thinkingHint: 'Crafting self-contained instructions...'
         });
+        
+        const prerequisites = (currentPlanItem.dependencies || [])
+            .map(depId => {
+                const depPrompt = planMap.get(depId);
+                return depPrompt ? { id: depPrompt.id, title: depPrompt.title } : null;
+            })
+            .filter(p => p !== null) as { id: number; title: string }[];
+
 
         const generationPrompt = REQUEST_SPLITTER_GENERATION_PROMPT_TEMPLATE(
             project,
             currentPlanItem.title,
-            completedTitles
+            currentPlanItem.id,
+            prerequisites
         );
 
         const promptContent = await generateText(generationPrompt);
@@ -106,8 +117,8 @@ export const processRequestSplitting = async (
             id: currentPlanItem.id,
             title: currentPlanItem.title,
             prompt: promptContent.trim(),
+            dependencies: currentPlanItem.dependencies || [],
         });
-        completedTitles.push(currentPlanItem.title);
     }
 
     // --- STAGE 3: ASSEMBLY ---
@@ -116,6 +127,9 @@ export const processRequestSplitting = async (
         percentage: 98,
         message: 'Compiling final Markdown and JSON plan...',
     });
+
+    // Ensure prompts are sorted by ID in the final JSON for consistency
+    finalPrompts.sort((a, b) => a.id - b.id);
 
     const splitPlanJson: SplitPlanJson = {
         project,

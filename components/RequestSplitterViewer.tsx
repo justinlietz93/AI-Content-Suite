@@ -1,100 +1,167 @@
-
-import React, { useState, useEffect, useRef } from 'react';
-import type { RequestSplitterOutput, SplitPlanJson } from '../types';
+import React, { useState, useEffect, useRef, useLayoutEffect, useMemo } from 'react';
+import type { RequestSplitterOutput, SplitPlanPrompt } from '../types';
 
 declare var marked: any;
-declare var mermaid: any;
-declare var svgPanZoom: any;
 
-const convertSplitPlanToMermaid = (plan: SplitPlanJson): string => {
-    let mermaidStr = 'graph TD;\n\n';
-    const { prompts } = plan;
+interface NodePosition {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  cx: number;
+  cy: number;
+}
 
-    if (!prompts || prompts.length === 0) {
-        mermaidStr += '    A["No prompts generated in the plan."];\n';
-        return mermaidStr;
-    }
+const CustomGraphViewer: React.FC<{ prompts: SplitPlanPrompt[] }> = ({ prompts }) => {
+    const [nodePositions, setNodePositions] = useState<Map<number, NodePosition>>(new Map());
+    const nodeRefs = useRef<Map<number, HTMLDivElement>>(new Map());
+    const containerRef = useRef<HTMLDivElement>(null);
 
-    // Define nodes
-    prompts.forEach(prompt => {
-        const nodeId = `P${prompt.id}`;
-        // Escape quotes and special characters for mermaid label
-        const title = prompt.title.replace(/"/g, '#quot;').replace(/\n/g, '<br/>');
-        mermaidStr += `    ${nodeId}["[#${prompt.id}]<br/>${title}"];\n`;
-    });
+    const graphLayout = useMemo(() => {
+        const levels: number[][] = [];
+        const nodeLevels = new Map<number, number>();
+        let nodes = [...prompts];
+        let level = 0;
 
-    // Define links sequentially
-    for (let i = 0; i < prompts.length - 1; i++) {
-        const fromNodeId = `P${prompts[i].id}`;
-        const toNodeId = `P${prompts[i+1].id}`;
-        mermaidStr += `    ${fromNodeId} --> ${toNodeId};\n`;
-    }
+        while(nodes.length > 0) {
+            const currentLevelNodes = nodes.filter(node => 
+                (node.dependencies || []).every(depId => nodeLevels.has(depId))
+            );
+            
+            if(currentLevelNodes.length === 0 && nodes.length > 0) {
+                console.error("Circular dependency or missing node detected in graph layout.", nodes);
+                // As a fallback, place remaining nodes in the next level
+                levels.push(nodes.map(n => n.id));
+                nodes.forEach(n => nodeLevels.set(n.id, level));
+                break;
+            }
 
-    return mermaidStr;
+            levels[level] = currentLevelNodes.map(n => n.id);
+            currentLevelNodes.forEach(n => nodeLevels.set(n.id, level));
+            nodes = nodes.filter(n => !nodeLevels.has(n.id));
+            level++;
+        }
+        return { levels, nodeLevels };
+    }, [prompts]);
+    
+    useLayoutEffect(() => {
+        const newPositions = new Map<number, NodePosition>();
+        let allNodesMeasured = true;
+        
+        for (const prompt of prompts) {
+            const el = nodeRefs.current.get(prompt.id);
+            if (el && containerRef.current) {
+                const rect = el.getBoundingClientRect();
+                const containerRect = containerRef.current.getBoundingClientRect();
+                
+                const position = {
+                    x: rect.left - containerRect.left + containerRef.current.scrollLeft,
+                    y: rect.top - containerRect.top + containerRef.current.scrollTop,
+                    width: rect.width,
+                    height: rect.height,
+                    cx: rect.left - containerRect.left + containerRef.current.scrollLeft + rect.width / 2,
+                    cy: rect.top - containerRect.top + containerRef.current.scrollTop + rect.height / 2,
+                };
+                newPositions.set(prompt.id, position);
+            } else {
+                allNodesMeasured = false;
+            }
+        }
+
+        if (allNodesMeasured && newPositions.size > 0 && newPositions.size !== nodePositions.size) {
+            setNodePositions(newPositions);
+        }
+    }, [prompts, graphLayout]);
+
+    const ConnectorLine: React.FC<{ d: string }> = ({ d }) => (
+        <path d={d} stroke="#475569" strokeWidth="2" fill="none" markerEnd="url(#arrowhead)" />
+    );
+
+    const connectors = useMemo(() => {
+        if (nodePositions.size === 0) return [];
+        const lines: JSX.Element[] = [];
+        
+        prompts.forEach(prompt => {
+            const endPos = nodePositions.get(prompt.id);
+            if (!endPos) return;
+
+            (prompt.dependencies || []).forEach(depId => {
+                const startPos = nodePositions.get(depId);
+                if (!startPos) return;
+
+                const startX = startPos.x + startPos.width;
+                const startY = startPos.cy;
+                const endX = endPos.x;
+                const endY = endPos.cy;
+                
+                // Simple Bezier curve for connectors
+                const d = `M ${startX} ${startY} C ${startX + 60} ${startY}, ${endX - 60} ${endY}, ${endX} ${endY}`;
+                lines.push(<ConnectorLine key={`${depId}-${prompt.id}`} d={d} />);
+            });
+        });
+        return lines;
+    }, [nodePositions, prompts]);
+
+    return (
+        <div ref={containerRef} className="relative p-8 min-h-[60vh]">
+            <svg className="absolute top-0 left-0 w-full h-full pointer-events-none" style={{ zIndex: 0 }}>
+                <defs>
+                    <marker id="arrowhead" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                        <path d="M 0 0 L 10 5 L 0 10 z" fill="#475569" />
+                    </marker>
+                </defs>
+                {connectors}
+            </svg>
+            <div className="flex items-start justify-start gap-24 relative" style={{ zIndex: 1 }}>
+                {graphLayout.levels.map((levelIds, levelIndex) => (
+                    <div key={levelIndex} className="flex flex-col items-center gap-8 min-w-48">
+                        {levelIds.map(id => {
+                            const prompt = prompts.find(p => p.id === id);
+                            if (!prompt) return null;
+                            return (
+                                <div
+                                    key={id}
+                                    // FIX: The ref callback must not return a value. The original code returned a Map or a boolean.
+                                    ref={el => {
+                                        if (el) {
+                                            nodeRefs.current.set(id, el);
+                                        } else {
+                                            nodeRefs.current.delete(id);
+                                        }
+                                    }}
+                                    className="bg-surface border-2 border-primary rounded-lg p-3 w-full max-w-xs text-center shadow-lg transition-transform hover:scale-105"
+                                >
+                                    <span className="block text-xs font-mono text-sky-400 mb-1 tracking-wider">[#{prompt.id.toString().padStart(2, '0')}]</span>
+                                    <h3 className="text-sm font-semibold text-text-primary">{prompt.title}</h3>
+                                </div>
+                            );
+                        })}
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
 };
 
 
 export const RequestSplitterViewer: React.FC<{ output: RequestSplitterOutput }> = ({ output }) => {
-    const [activeTab, setActiveTab] = useState<'prompts' | 'visual' | 'raw'>('prompts');
+    const [activeTab, setActiveTab] = useState<'visual' | 'prompts' | 'raw'>('visual');
     const promptsRef = useRef<HTMLDivElement>(null);
-    const mermaidContainerRef = useRef<HTMLDivElement>(null);
-    const panZoomInstanceRef = useRef<any>(null);
 
     useEffect(() => {
         if (activeTab === 'prompts' && promptsRef.current && typeof marked !== 'undefined') {
-            promptsRef.current.innerHTML = marked.parse(output.orderedPromptsMd);
+            try {
+                promptsRef.current.innerHTML = marked.parse(output.orderedPromptsMd);
+            } catch(e) {
+                console.error("Markdown parsing failed:", e);
+                promptsRef.current.innerText = output.orderedPromptsMd;
+            }
         }
     }, [activeTab, output.orderedPromptsMd]);
 
-    useEffect(() => {
-        if (panZoomInstanceRef.current) {
-            panZoomInstanceRef.current.destroy();
-            panZoomInstanceRef.current = null;
-        }
-
-        if (activeTab === 'visual' && mermaidContainerRef.current && typeof mermaid !== 'undefined') {
-            try {
-                const mermaidCode = convertSplitPlanToMermaid(output.splitPlanJson);
-                const uniqueId = `mermaid-splitter-graph-${Date.now()}`;
-                
-                mermaid.render(uniqueId, mermaidCode, (svgCode) => {
-                    if (mermaidContainerRef.current) {
-                        mermaidContainerRef.current.innerHTML = svgCode;
-                        const svgElement = mermaidContainerRef.current.querySelector('svg');
-                        if (svgElement && typeof svgPanZoom !== 'undefined') {
-                            svgElement.style.width = '100%';
-                            svgElement.style.height = '100%';
-                            panZoomInstanceRef.current = svgPanZoom(svgElement, {
-                                panEnabled: true, controlIconsEnabled: true, zoomEnabled: true,
-                                dblClickZoomEnabled: true, mouseWheelZoomEnabled: true,
-                                preventMouseEventsDefault: true, zoomScaleSensitivity: 0.2,
-                                minZoom: 0.1, maxZoom: 10, fit: true, center: true, contain: true,
-                            });
-                            // Force resize after a short delay to ensure proper rendering
-                            setTimeout(() => {
-                                if (panZoomInstanceRef.current) {
-                                    panZoomInstanceRef.current.resize();
-                                    panZoomInstanceRef.current.center();
-                                }
-                            }, 100);
-                        }
-                    }
-                });
-            } catch (e) {
-                console.error("Mermaid.js rendering failed for Split Plan:", e);
-                if (mermaidContainerRef.current) {
-                  mermaidContainerRef.current.innerHTML = `<p class="text-red-400">Error rendering diagram. See console for details.</p>`;
-                }
-            }
-        } else if (mermaidContainerRef.current) {
-            mermaidContainerRef.current.innerHTML = '';
-        }
-    }, [activeTab, output.splitPlanJson]);
-
-
     const TABS = [
-        { id: 'prompts', label: 'Ordered Prompts (.md)' },
         { id: 'visual', label: 'Visual Plan' },
+        { id: 'prompts', label: 'Ordered Prompts (.md)' },
         { id: 'raw', label: 'Raw Plan (.json)' },
     ];
 
@@ -128,10 +195,14 @@ export const RequestSplitterViewer: React.FC<{ output: RequestSplitterOutput }> 
                         </div>
                     )}
                     {activeTab === 'visual' && (
-                        <div className="p-4 bg-slate-900 rounded-lg min-h-[24rem] h-[60vh] overflow-hidden shadow-inner flex justify-center items-center">
-                            <div ref={mermaidContainerRef} className="w-full h-full cursor-move">
-                                {/* Mermaid SVG rendered here */}
-                            </div>
+                        <div className="bg-slate-900 rounded-lg max-h-[60vh] overflow-auto shadow-inner">
+                           {output.splitPlanJson.prompts && output.splitPlanJson.prompts.length > 0 ? (
+                                <CustomGraphViewer prompts={output.splitPlanJson.prompts} />
+                           ) : (
+                                <div className="flex items-center justify-center h-full min-h-[20rem]">
+                                    <p className="text-text-secondary">No visual plan could be generated.</p>
+                                </div>
+                           )}
                         </div>
                     )}
                     {activeTab === 'raw' && (

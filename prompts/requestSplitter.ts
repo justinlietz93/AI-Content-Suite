@@ -1,13 +1,14 @@
+
 import type { RequestSplitterSettings } from '../types';
 
 export const REQUEST_SPLITTER_PLANNING_PROMPT_TEMPLATE = (spec: string, settings: RequestSplitterSettings) => `
-You are an expert system architect AI. Your first task is to create a high-level plan for decomposing a large request.
-Analyze the user's specification and determine the sequence of implementation prompts needed.
+You are an expert system architect AI. Your first task is to create a high-level plan for decomposing a large request into a dependency graph of actionable tasks.
+Analyze the user's specification and determine the sequence of implementation prompts and their prerequisites.
 
 **PROCESS:**
 1.  **Analyze Spec:** Thoroughly understand the user's entire specification.
 2.  **Identify Invariants:** Extract global rules, constraints, and architectural principles that must apply to every step.
-3.  **Define Sequential Plan:** Create a list of titles for each implementation prompt, starting with a foundational step and building upon it. The plan should have at least 2 steps and not more than 15.
+3.  **Define Dependency Graph:** Decompose the work into a series of tasks. For each task, identify its prerequisite tasks (dependencies). The graph should start with one or more foundational tasks with no dependencies.
 4.  **Output JSON:** Format the entire output as a single, valid JSON object. Do not include any other text.
 
 **CRITICAL JSON FORMATTING RULE:** You must produce a single, valid, parsable JSON object. All string values must be correctly escaped, especially newlines (\\n) and double quotes (\\").
@@ -21,8 +22,10 @@ Analyze the user's specification and determine the sequence of implementation pr
     "invariants": ["..."]
   },
   "plan": [
-    { "id": 1, "title": "Foundation: Core Data Models and Services" },
-    { "id": 2, "title": "Feature: Add User Authentication Endpoint" }
+    { "id": 1, "title": "Foundation: Core Data Models and Services", "dependencies": [] },
+    { "id": 2, "title": "Feature: Add User Authentication Endpoint", "dependencies": [1] },
+    { "id": 3, "title": "Feature: Add Profile Management Endpoint", "dependencies": [1] },
+    { "id": 4, "title": "Feature: Link Profiles to Auth", "dependencies": [2, 3] }
   ]
 }
 \`\`\`
@@ -31,24 +34,25 @@ Analyze the user's specification and determine the sequence of implementation pr
 **USER'S SPECIFICATION DOCUMENT:**
 ${spec}
 ---
-Begin planning. Output only the single, valid JSON object containing the project context and the plan with titles.
+Begin planning. Output only the single, valid JSON object containing the project context and the dependency graph plan.
 `;
 
 
 export const REQUEST_SPLITTER_GENERATION_PROMPT_TEMPLATE = (
     projectContext: { name: string; architecture: string; invariants: string[] },
     currentPromptTitle: string,
-    completedPromptTitles: string[]
+    currentPromptId: number,
+    completedPromptTitles: {id: number, title: string}[] // Titles of prerequisites
 ) => `
 You are an expert system architect AI. Your task is to generate the full content for a single, self-contained implementation prompt.
-This prompt is part of a larger, sequential build plan. It must contain all necessary context for an agent to execute it, assuming the work from previous steps is complete.
+This prompt is part of a larger, sequential build plan. It must contain all necessary context for an agent to execute it, assuming the work from its prerequisite steps is complete.
 
 **CRITICAL INSTRUCTION:** Generate only the text content for the prompt described below. You must fill in the content for the placeholders like <...>. Do not wrap the final output in JSON or Markdown fences.
 
 **TEMPLATE TO USE FOR THE GENERATED PROMPT'S CONTENT:**
 (You must fill this template out completely. Every part is mandatory.)
 ---
-[#${completedPromptTitles.length + 1}] ${currentPromptTitle}
+[#${currentPromptId.toString().padStart(2, '0')}] ${currentPromptTitle}
 
 **PROJECT CONTEXT**
 - **Application:** ${projectContext.name}
@@ -58,7 +62,7 @@ ${projectContext.invariants.map(inv => `  - ${inv}`).join('\n')}
 
 **PREREQUISITES**
 - This step assumes the successful completion of the following previous steps:
-${completedPromptTitles.length > 0 ? completedPromptTitles.map((title, i) => `  - [#${i + 1}] ${title}`).join('\n') : '  - None. This is the first step.'}
+${completedPromptTitles.length > 0 ? completedPromptTitles.map(p => `  - [#${p.id.toString().padStart(2, '0')}] ${p.title}`).join('\n') : '  - None. This is a foundational step.'}
 
 **FEATURE REQUEST**
 - **Modify the existing codebase** to implement exactly one new feature: **${currentPromptTitle}**.

@@ -1,4 +1,4 @@
-import type { ProgressUpdate, ReasoningSettings, ScaffolderSettings, RequestSplitterSettings } from './types';
+import type { ProgressUpdate, ReasoningSettings, ScaffolderSettings, RequestSplitterSettings, PromptEnhancerSettings } from './types';
 
 // Import all summary prompts from the new modular structure
 import * as summaryPrompts from './prompts/summaries';
@@ -13,6 +13,7 @@ import { GENERATE_MERMAID_FROM_DIGEST_PROMPT, GENERATE_SIMPLIFIED_MERMAID_PROMPT
 import { REASONING_STUDIO_PROMPT_TEMPLATE } from './prompts/reasoning';
 import { SCAFFOLDER_PROMPT_TEMPLATE } from './prompts/scaffolder';
 import { REQUEST_SPLITTER_PLANNING_PROMPT_TEMPLATE, REQUEST_SPLITTER_GENERATION_PROMPT_TEMPLATE } from './prompts/requestSplitter';
+import { PROMPT_ENHANCER_PROMPT_TEMPLATE } from './prompts/promptEnhancer';
 
 
 export const GEMINI_FLASH_MODEL = 'gemini-2.5-flash';
@@ -71,6 +72,11 @@ export const INITIAL_REQUEST_SPLITTER_SETTINGS: RequestSplitterSettings = {
     projectName: '',
     persona: 'none',
     customPersonaDirective: '',
+};
+
+export const INITIAL_PROMPT_ENHANCER_SETTINGS: PromptEnhancerSettings = {
+    rawPrompt: '',
+    template: 'featureBuilder',
 };
 
 // --- Prompt Collections (Re-constructed from imports) ---
@@ -147,5 +153,6 @@ export {
     REASONING_STUDIO_PROMPT_TEMPLATE,
     SCAFFOLDER_PROMPT_TEMPLATE,
     REQUEST_SPLITTER_PLANNING_PROMPT_TEMPLATE,
-    REQUEST_SPLITTER_GENERATION_PROMPT_TEMPLATE
+    REQUEST_SPLITTER_GENERATION_PROMPT_TEMPLATE,
+    PROMPT_ENHANCER_PROMPT_TEMPLATE
 };
