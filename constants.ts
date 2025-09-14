@@ -92,7 +92,8 @@ export const CHUNK_SUMMARY_PROMPTS = {
   glossaryTermMap: summaryPrompts.CHUNK_SUMMARY_PROMPT_TEMPLATE_GLOSSARY_TERM_MAP,
   hierarchyOfNeeds: summaryPrompts.CHUNK_SUMMARY_PROMPT_TEMPLATE_HIERARCHY_OF_NEEDS,
   stakeholderMap: summaryPrompts.CHUNK_SUMMARY_PROMPT_TEMPLATE_STAKEHOLDER_MAP,
-  constraintList: summaryPrompts.CHUNK_SUMMARY_PROMPT_TEMPLATE_CONSTRAINT_LIST
+  constraintList: summaryPrompts.CHUNK_SUMMARY_PROMPT_TEMPLATE_CONSTRAINT_LIST,
+  prosConsTable: summaryPrompts.CHUNK_SUMMARY_PROMPT_TEMPLATE_PROS_CONS_TABLE
 };
 
 export const REDUCE_SUMMARIES_PROMPTS = {
@@ -119,7 +120,8 @@ export const REDUCE_SUMMARIES_PROMPTS = {
   glossaryTermMap: summaryPrompts.REDUCE_SUMMARIES_PROMPT_TEMPLATE_GLOSSARY_TERM_MAP,
   hierarchyOfNeeds: summaryPrompts.REDUCE_SUMMARIES_PROMPT_TEMPLATE_HIERARCHY_OF_NEEDS,
   stakeholderMap: summaryPrompts.REDUCE_SUMMARIES_PROMPT_TEMPLATE_STAKEHOLDER_MAP,
-  constraintList: summaryPrompts.REDUCE_SUMMARIES_PROMPT_TEMPLATE_CONSTRAINT_LIST
+  constraintList: summaryPrompts.REDUCE_SUMMARIES_PROMPT_TEMPLATE_CONSTRAINT_LIST,
+  prosConsTable: summaryPrompts.REDUCE_SUMMARIES_PROMPT_TEMPLATE_PROS_CONS_TABLE
 };
 
 // Re-export other prompts so other files don't need to change their imports

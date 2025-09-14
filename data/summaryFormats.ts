@@ -1,3 +1,4 @@
+
 import type { SummaryFormat } from '../types';
 
 export interface SummaryFormatOption {
@@ -151,5 +152,11 @@ export const SUMMARY_FORMAT_OPTIONS: SummaryFormatOption[] = [
     label: 'Constraint / Requirement List',
     description: "Condenses project essentials, priorities, and trade-offs into a structured MoSCoW list (Must/Should/Could/Won't).",
     tags: ['requirements', 'scoping', 'project management', 'moscow', 'technical', 'planning']
+  },
+  {
+    value: 'prosConsTable',
+    label: 'Pros & Cons Table',
+    description: "Distills trade-offs into a simple, scannable grid, making evaluations faster and reasoning more transparent.",
+    tags: ['comparison', 'analysis', 'table', 'business', 'trade-off', 'decision']
   }
 ];

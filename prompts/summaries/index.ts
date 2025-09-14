@@ -1,3 +1,4 @@
+
 export * from './causeEffectChain';
 export * from './checklist';
 export * from './constraintList';
@@ -12,6 +13,7 @@ export * from './metricsDashboard';
 export * from './milestoneTracker';
 export * from './pitchGenerator';
 export * from './processFlow';
+export * from './prosConsTable';
 export * from './qaPairs';
 export * from './raciSnapshot';
 export * from './readme';
