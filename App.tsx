@@ -110,12 +110,12 @@ const App: React.FC = () => {
 
   const handleRequestSplitterSpecChange = useCallback((spec: string) => {
     setRequestSplitterSpec(spec);
-    if (spec.trim() && appState === 'idle') {
-        setAppState('fileSelected'); // Use this state to indicate readiness
-    } else if (!spec.trim() && !currentFiles) {
+    if (spec.trim() || (currentFiles && currentFiles.length > 0)) {
+        setAppState('fileSelected');
+    } else {
         setAppState('idle');
     }
-  }, [appState, currentFiles]);
+  }, [currentFiles]);
 
 
   const handleFileSelect = useCallback((files: File[]) => {
@@ -126,7 +126,11 @@ const App: React.FC = () => {
     setProgress(INITIAL_PROGRESS);
     setNextStepSuggestions(null); 
     setSuggestionsLoading(false);
-  }, []);
+    // Also trigger readiness check for request splitter
+    if (activeMode === 'requestSplitter' && (files.length > 0 || requestSplitterSpec.trim())) {
+        setAppState('fileSelected');
+    }
+  }, [activeMode, requestSplitterSpec]);
 
   const fileToGenerativePart = async (file: File): Promise<any> => {
     if (file.type.startsWith('image/')) {
@@ -154,7 +158,7 @@ const App: React.FC = () => {
     const isReadyForSubmit = 
       (activeMode === 'reasoningStudio' && reasoningPrompt) ||
       (activeMode === 'scaffolder' && scaffolderPrompt) ||
-      (activeMode === 'requestSplitter' && requestSplitterSpec) ||
+      (activeMode === 'requestSplitter' && (requestSplitterSpec || (currentFiles && currentFiles.length > 0))) ||
       (currentFiles && currentFiles.length > 0);
 
     if (!isReadyForSubmit) return;
@@ -169,7 +173,7 @@ const App: React.FC = () => {
     try {
       let result: ProcessedOutput;
       
-      const processedParts: any[] = []; // For rewriter & reasoning modes
+      const processedParts: any[] = []; // For rewriter, reasoning, scaffolder, splitter
       const processedTexts: string[] = []; // For text-based modes
 
       if(currentFiles && currentFiles.length > 0) {
@@ -192,7 +196,7 @@ const App: React.FC = () => {
             });
             const textWithContext = `--- DOCUMENT START: ${file.name} ---\n\n${ocrText}\n\n--- DOCUMENT END: ${file.name} ---`;
             processedTexts.push(textWithContext);
-            if (activeMode === 'rewriter' || activeMode === 'reasoningStudio' || activeMode === 'scaffolder') {
+            if (['rewriter', 'reasoningStudio', 'scaffolder', 'requestSplitter'].includes(activeMode)) {
               processedParts.push({ text: textWithContext });
             }
           } else if (file.type.startsWith('image/') && (activeMode === 'rewriter')) {
@@ -203,7 +207,7 @@ const App: React.FC = () => {
             const text = await readFileAsText(file);
             const textWithContext = `--- DOCUMENT START: ${file.name} ---\n\n${text}\n\n--- DOCUMENT END: ${file.name} ---`;
             processedTexts.push(textWithContext);
-            if (activeMode === 'rewriter' || activeMode === 'reasoningStudio' || activeMode === 'scaffolder') {
+            if (['rewriter', 'reasoningStudio', 'scaffolder', 'requestSplitter'].includes(activeMode)) {
               processedParts.push({ text: textWithContext });
             }
           }
@@ -231,7 +235,7 @@ const App: React.FC = () => {
           setProgress(update);
         });
       } else if (activeMode === 'requestSplitter') {
-        result = await processRequestSplitting(requestSplitterSpec, requestSplitterSettings, (update) => {
+        result = await processRequestSplitting(requestSplitterSpec, requestSplitterSettings, processedParts, (update) => {
             setProgress(update);
         });
       } else {
@@ -340,7 +344,7 @@ const App: React.FC = () => {
     mathFormatter: "Upload one or more LaTeX/Markdown or PDF documents to reformat mathematical notations for proper MathJax rendering.",
     reasoningStudio: "Input a complex goal, configure the reasoning pipeline, and receive a polished answer with a full, interactive reasoning trace.",
     scaffolder: "Describe a project to generate a complete, standards-compliant code scaffold with prompts for an AI coding agent.",
-    requestSplitter: "Input a large specification to decompose it into small, independent, and actionable prompts for parallel execution.",
+    requestSplitter: "Input a large specification to decompose it into a sequence of actionable, buildable implementation prompts.",
   };
 
   const buttonText = {
@@ -622,11 +626,11 @@ const App: React.FC = () => {
             </div>
           )}
 
-          {(appState === 'idle' || appState === 'fileSelected') && !['requestSplitter'].includes(activeMode) ? (
+          {(appState === 'idle' || appState === 'fileSelected') && (
             <FileLoader onFileSelect={handleFileSelect} selectedFiles={currentFiles} mode={activeMode} />
-          ) : null}
+          )}
 
-          {((currentFiles && currentFiles.length > 0) || (activeMode === 'reasoningStudio' && reasoningPrompt) || (activeMode === 'scaffolder' && scaffolderPrompt) || (activeMode === 'requestSplitter' && requestSplitterSpec)) && (appState === 'fileSelected' || appState === 'processing') && (
+          {((currentFiles && currentFiles.length > 0) || (activeMode === 'reasoningStudio' && reasoningPrompt) || (activeMode === 'scaffolder' && scaffolderPrompt) || (activeMode === 'requestSplitter' && (requestSplitterSpec.trim() || (currentFiles && currentFiles.length > 0)))) && (appState === 'fileSelected' || appState === 'processing') && (
             <div className="mt-6 text-center">
               <button
                 onClick={handleSubmit}

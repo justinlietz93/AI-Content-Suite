@@ -1,4 +1,3 @@
-
 import type { ReasoningSettings } from '../types';
 
 export const REASONING_STUDIO_PROMPT_TEMPLATE = (prompt: string, settings: ReasoningSettings) => {
@@ -21,6 +20,10 @@ const personaDirective = getPersonaDirective();
 return `
 You are an advanced reasoning engine that simulates a multi-agent, hierarchical pipeline to solve complex problems.
 Your task is to process a user's goal, follow a structured reasoning process, and produce two artifacts: a polished final response in Markdown, and a detailed reasoning trace in JSON format.
+
+**CRITICAL JSON FORMATTING RULE:** You must produce a single, valid, parsable JSON object. All string values must be correctly escaped. Pay special attention to:
+- Newline characters, which must be represented as "\\n".
+- Double quotes inside a string, which must be represented as "\\"".
 
 **OUTPUT REQUIREMENTS:**
 Your final output MUST be a single, valid JSON object with the following structure. Do not include any text, explanations, or code fences before or after the JSON object.

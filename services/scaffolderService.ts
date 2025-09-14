@@ -46,7 +46,13 @@ export const processScaffoldingRequest = async (
     });
 
     try {
-        const parsedResponse = JSON.parse(rawJsonResult);
+        let jsonStr = rawJsonResult.trim();
+        const fenceRegex = /^```(\w*)?\s*\n?([\s\S]*?)\n?\s*```$/;
+        const match = jsonStr.match(fenceRegex);
+        if (match && match[2]) {
+            jsonStr = match[2].trim();
+        }
+        const parsedResponse = JSON.parse(jsonStr);
 
         if (!parsedResponse.scaffoldScript || !parsedResponse.scaffoldPlanJson) {
             console.error("Invalid response structure from scaffolder engine:", parsedResponse);

@@ -47,8 +47,14 @@ export const processReasoningRequest = async (
     });
 
     try {
+        let jsonStr = rawJsonResult.trim();
+        const fenceRegex = /^```(\w*)?\s*\n?([\s\S]*?)\n?\s*```$/;
+        const match = jsonStr.match(fenceRegex);
+        if (match && match[2]) {
+            jsonStr = match[2].trim();
+        }
         // The model is instructed to return a JSON object containing both artifacts.
-        const parsedResponse = JSON.parse(rawJsonResult);
+        const parsedResponse = JSON.parse(jsonStr);
 
         if (!parsedResponse.finalResponseMd || !parsedResponse.reasoningTreeJson) {
             console.error("Invalid response structure from reasoning engine:", parsedResponse);
