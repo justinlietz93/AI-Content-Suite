@@ -1,4 +1,5 @@
 
+
 import type { ProcessedOutput, Mode, SummaryOutput, StyleModelOutput, RewriterOutput, MathFormatterOutput } from '../types';
 
 declare var marked: any;
@@ -150,6 +151,7 @@ ${techOutput.mermaidDiagram}
     src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js">
   </script>
   <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
     body {
@@ -255,6 +257,8 @@ ${techOutput.mermaidDiagram}
         background-color: #0f172a;
         padding: 20px;
         overflow-x: auto;
+        height: 500px;
+        overflow: hidden;
     }
     .mermaid svg {
         max-width: 100%;
@@ -289,9 +293,23 @@ ${techOutput.mermaidDiagram}
                startOnLoad: false,
                theme: 'dark',
                securityLevel: 'loose',
-               fontFamily: 'Inter, sans-serif'
+               fontFamily: 'Inter, sans-serif',
+               maxTextSize: 150000
              });
              mermaid.run();
+             // A simple delay to allow Mermaid to render before initializing pan-zoom
+             setTimeout(() => {
+                const svgElement = document.querySelector('.mermaid-container .mermaid svg');
+                if (svgElement && typeof svgPanZoom !== 'undefined') {
+                   svgPanZoom(svgElement, { 
+                       controlIconsEnabled: true, 
+                       fit: true, 
+                       center: true,
+                       minZoom: 0.2,
+                       maxZoom: 20
+                   });
+                }
+             }, 500);
            }
         } catch (e) {
             console.error('Failed to render Mermaid diagram in report:', e);
@@ -335,7 +353,7 @@ const generateMarkdownReport = (output: ProcessedOutput, mode: Mode, styleTarget
     if (techOutput.mermaidDiagram) {
         content += `## Entity-Relationship Diagram\n\n`;
         content += '```mermaid\n';
-        content += `${techOutput.mermaidDiagram}\n`;
+        content += `${techOutput.mermaidDiagramSimple || techOutput.mermaidDiagram}\n`;
         content += '```\n\n';
     }
 

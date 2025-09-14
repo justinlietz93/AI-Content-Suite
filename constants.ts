@@ -1,3 +1,4 @@
+
 import type { ProgressUpdate, RewriteLength } from './types';
 
 export const GEMINI_FLASH_MODEL = 'gemini-2.5-flash';
@@ -652,9 +653,9 @@ You are a Mermaid.js expert. Based on the following entity-relationship digest, 
 3.  De-duplicate relationships.
 4.  The final output MUST be ONLY the Mermaid code inside a Markdown code fence (\`\`\`mermaid ... \`\`\`).
 5.  Do not add any explanations, titles, or any other text before or after the code fence.
-6.  **CRITICAL SYNTAX FOR LINKS:** To add a label to a link, you MUST use the format: \`NodeA -- "Link Label" --> NodeB\`.
-    *   **Correct:** \`User -- "writes" --> Document\`
-    *   **Incorrect:** \`User --> "writes" --> Document\` (This will cause a syntax error).
+6.  **CRITICAL SYNTAX FOR LINKS:** To add a label to a link, you MUST use the format: \`NodeA -- Link Label --> NodeB\`. Do NOT use quotes around the link label.
+    *   **Correct:** \`User -- writes --> Document\`
+    *   **Incorrect:** \`User -- "writes" --> Document\`
 
 **Entity-Relationship Digest:**
 ---
@@ -662,6 +663,40 @@ ${digest}
 ---
 
 **Mermaid Diagram:**
+`;
+
+export const GENERATE_SIMPLIFIED_MERMAID_PROMPT = (digest: string, rules: string) => `
+You are a Mermaid.js expert specializing in data visualization for documentation.
+Based on the following detailed entity-relationship digest, create a **simplified**, high-level Mermaid.js graph diagram (\`graph TD\`).
+
+**Your Goal:** Create a diagram that is easy to read and understand at a glance inside a static Markdown document. It must be visually clean and avoid being too cluttered.
+
+**Instructions:**
+1.  **Analyze the full digest:** Understand all entities and their relationships.
+2.  **Simplify:**
+    *   Focus on the **most important entities** and their primary relationships.
+    *   You MAY omit less important entities or group related minor entities into a single representative node.
+    *   You SHOULD omit most or all attributes to reduce clutter.
+    *   The goal is to show the high-level structure, not every single detail.
+3.  **Create a \`graph TD\` diagram:** The final output MUST be ONLY the Mermaid code inside a Markdown code fence (\`\`\`mermaid ... \`\`\`).
+4.  **Do not add any explanations or other text** before or after the code fence.
+5.  **Adhere to Mermaid.js syntax rules:** Use the provided syntax documentation to ensure the diagram is valid. Pay close attention to link labeling.
+
+**CRITICAL SYNTAX FOR LINKS:** To add a label to a link, you MUST use the format: \`NodeA -- Link Label --> NodeB\`. Do NOT use quotes around the link label.
+    *   **Correct:** \`User -- writes --> Document\`
+    *   **Incorrect:** \`User -- "writes" --> Document\`
+
+---
+**DETAILED ENTITY-RELATIONSHIP DIGEST:**
+${digest}
+---
+
+---
+**MERMAID SYNTAX RULES REFERENCE:**
+${rules}
+---
+
+**Simplified Mermaid Diagram:**
 `;
 
 // --- Rules Distiller Prompts ---
@@ -704,6 +739,222 @@ ${text}
 Provide the single, synthesized master list of rules below.
 `;
 
+// --- Metrics Dashboard Snapshot Prompts ---
+
+const CHUNK_SUMMARY_PROMPT_TEMPLATE_METRICS_DASHBOARD = (text: string) => `
+You are an expert data analyst AI. Your task is to analyze the following document segment and extract all Key Performance Indicators (KPIs) and their associated metric values.
+
+Follow these instructions:
+1.  Identify all measurable indicators (e.g., uptime, latency, revenue, error rate, active users).
+2.  For each KPI, extract any of the following values if mentioned:
+    *   **Current:** The most recent measurement.
+    *   **Min / Max:** The observed lower and upper bounds.
+    *   **Average / Median:** An aggregate baseline value.
+    *   **Target / Threshold:** A benchmark or goal value.
+    *   **Status:** An explicit status like "on-track", "at-risk", "off-track", or symbols (✔, ⚠, ✖).
+3.  Also, identify the **Timeframe** for these metrics if mentioned (e.g., "Last 30 days", "Q2 2025").
+4.  Format the extracted information as a clear Markdown list. If no specific timeframe is mentioned in this segment, state it.
+5.  If no KPIs or metrics are found in this segment, state "No metrics were identified in this segment."
+
+**EXAMPLE FORMAT:**
+*   **Timeframe:** Last 30 Days
+*   **KPI: API Uptime (%)**
+    *   Current: 99.7
+    *   Min: 98.9
+    *   Max: 100
+    *   Average: 99.5
+    *   Target: 99.9
+    *   Status: ⚠
+*   **KPI: Response Latency (ms)**
+    *   Current: 210
+    *   Target: <=250
+    *   Status: ✔
+
+---
+DOCUMENT SEGMENT TO ANALYZE:
+${text}
+---
+
+Provide the extracted metrics for the segment above.
+`;
+
+const REDUCE_SUMMARIES_PROMPT_TEMPLATE_METRICS_DASHBOARD = (text: string) => `
+You are an expert data synthesizer and report generator. You have been given a series of notes extracted from a larger document, each detailing various Key Performance Indicators (KPIs) and their metrics.
+Your task is to synthesize all these notes into a single, comprehensive Metrics Dashboard table in Markdown format.
+
+Follow these instructions:
+1.  Identify a single, overarching **Timeframe** for the report. If different timeframes are mentioned, select the most frequently cited one or the most recent one.
+2.  Identify all unique **KPIs** from the notes. Each unique KPI should be a row in your table.
+3.  Construct a Markdown table with the following columns: \`KPI\`, \`Current\`, \`Min\`, \`Max\`, \`Avg\`, \`Target\`, and \`Status\`.
+4.  Fill in the cells of the table with the corresponding values for each KPI.
+5.  If a value for a specific cell is not mentioned in the notes (e.g., 'Min' is missing for a KPI), use "N/A" for that cell.
+6.  For the 'Status' column, use symbols (✔, ⚠, ✖) if they can be inferred from the text or are explicitly stated. Otherwise, use "N/A".
+7.  The final output must be a clean, well-formatted, and easy-to-read Markdown table. It should be preceded by a title indicating the timeframe, like "### Service Monitoring Dashboard (Last 30 Days)". Do not include any other text before or after the title and table.
+
+---
+NOTES TO SYNTHESIZE:
+${text}
+---
+
+Provide the single, synthesized Metrics Dashboard Markdown table below.
+`;
+
+// --- Q&A Pairs Prompts ---
+
+const CHUNK_SUMMARY_PROMPT_TEMPLATE_QA_PAIRS = (text: string) => `
+You are an expert analyst. Your task is to analyze the following document segment and extract all questions and their corresponding answers.
+
+Follow these instructions:
+1.  Identify all distinct questions, whether explicitly asked or implied.
+2.  For each question, find the most direct and concise answer in the text.
+3.  Format each pair as a Markdown bulleted list.
+4.  Start each question with "**Q:**" and each answer on a new line with "**A:**".
+5.  Apply one of the following tags to the answer where appropriate:
+    - **[Decision]** for when an answer reflects an agreed-upon choice.
+    - **[Action]** if the answer implies a next step or task.
+    - **[Concern]** for when a risk or problem is identified.
+    - **[Info]** for general background details or facts.
+6.  If no clear questions and answers are present in this segment, state "No Q&A pairs were identified in this segment."
+
+**EXAMPLE FORMAT:**
+*   **Q:** What is the release target?
+    **A:** End of Q3 2025. [Decision]
+*   **Q:** What is the biggest risk?
+    **A:** API refactor may slip. [Concern]
+
+---
+DOCUMENT SEGMENT TO ANALYZE:
+${text}
+---
+
+Provide the extracted Q&A pairs for the segment above.
+`;
+
+const REDUCE_SUMMARIES_PROMPT_TEMPLATE_QA_PAIRS = (text: string) => `
+You are an expert editor responsible for creating a final, comprehensive Q&A document.
+You have been given a series of Q&A pairs extracted from different segments of a larger document.
+Your task is to synthesize these segments into a single, cohesive, and de-duplicated Q&A list.
+
+Follow these instructions:
+1.  Combine all unique Q&A pairs from the provided segments.
+2.  Eliminate duplicate or redundant pairs. If two pairs ask the same question, merge them into the single best-worded question with the most complete and concise answer.
+3.  Group the final list by theme if logical themes emerge (e.g., "Product," "Process," "Risks"). Use Markdown headers (e.g., "### Product") for grouping. If no clear themes emerge, present a single flat list.
+4.  Ensure the final output is a clean, well-formatted Markdown list using the "**Q:**" and "**A:**" format.
+
+---
+Q&A PAIRS TO SYNTHESIZE:
+${text}
+---
+
+Provide the single, synthesized Q&A list below.
+`;
+
+// --- Process Flow / Stepwise Map Prompts ---
+
+const CHUNK_SUMMARY_PROMPT_TEMPLATE_PROCESS_FLOW = (text: string) => `
+You are an expert process analyst. Your task is to analyze the following document segment and extract any process flows, sequences of actions, or step-by-step instructions.
+
+Follow these instructions:
+1.  Identify all concrete steps, actions, or states in the process described.
+2.  Note any decision points (e.g., if/else conditions) and their outcomes.
+3.  Identify any loops or repetitions.
+4.  Format the output as a clear, ordered list (numbered or bulleted) in Markdown. Use indentation to show sub-steps or conditional branches.
+5.  If no process flow is identified in this segment, state "No process flow was identified in this segment."
+
+**EXAMPLE FORMAT:**
+1.  Detect anomaly
+2.  Verify alert
+    *   If false positive → End
+    *   If valid → Continue
+3.  Classify severity
+
+---
+DOCUMENT SEGMENT TO ANALYZE:
+${text}
+---
+
+Provide the extracted process flow for the segment above.
+`;
+
+const REDUCE_SUMMARIES_PROMPT_TEMPLATE_PROCESS_FLOW = (text: string) => `
+You are a senior process engineer responsible for creating a final, comprehensive process map.
+You have been given a series of process flow segments extracted from a larger document.
+Your task is to synthesize these segments into a single, cohesive, start-to-finish process flow.
+
+Follow these instructions:
+1.  Analyze all the provided steps and understand the overall workflow.
+2.  Merge and consolidate the steps into one logical, ordered sequence.
+3.  Eliminate redundant steps and combine related actions.
+4.  Ensure all decision points and branches are correctly integrated into the main flow.
+5.  Organize the final output as a clean, easy-to-follow numbered list in Markdown, using indentation for sub-steps and branches.
+6.  The final output must be a single, polished process map.
+
+---
+PROCESS FLOW SEGMENTS TO SYNTHESIZE:
+${text}
+---
+
+Provide the single, synthesized process flow map below.
+`;
+
+// --- RACI Snapshot Prompts ---
+
+const CHUNK_SUMMARY_PROMPT_TEMPLATE_RACI_SNAPSHOT = (text: string) => `
+You are an expert AI systems architect. Your task is to analyze the following document segment and extract tasks and their ownership into a RACI matrix format. The roles should be for AI Agents or automated systems, not humans.
+
+A RACI matrix clarifies ownership:
+- **R = Responsible:** The AI agent that performs the work.
+- **A = Accountable:** The AI agent with final ownership and decision-making authority.
+- **C = Consulted:** An AI agent that provides input or expertise.
+- **I = Informed:** An AI agent that is kept updated on progress or decisions.
+
+Follow these instructions:
+1.  Identify all discrete tasks, activities, or deliverables.
+2.  Identify the AI Agent roles involved (e.g., Data Processing Agent, User Interface Agent, Orchestrator Agent). Infer logical agent roles if not explicitly stated.
+3.  For each task, assign the appropriate RACI marker (R, A, C, I) to each relevant AI agent role.
+4.  Format the output as a clear Markdown list.
+5.  If no tasks or roles are identified in this segment, state "No RACI elements were identified in this segment."
+
+**EXAMPLE FORMAT:**
+*   **Task:** Ingest raw user data
+    *   Data Processing Agent: R
+    *   Orchestrator Agent: A
+    *   Security Agent: C
+*   **Task:** Generate user summary
+    *   Natural Language Agent: R
+    *   Orchestrator Agent: A
+    *   Data Processing Agent: I
+
+---
+DOCUMENT SEGMENT TO ANALYZE:
+${text}
+---
+
+Provide the extracted RACI assignments for the segment above.
+`;
+
+const REDUCE_SUMMARIES_PROMPT_TEMPLATE_RACI_SNAPSHOT = (text: string) => `
+You are an expert AI project manager responsible for creating a final, comprehensive RACI (Responsible, Accountable, Consulted, Informed) matrix.
+You have been given a series of notes extracted from a larger document, each detailing various tasks and their ownership by different AI Agents.
+Your task is to synthesize all these notes into a single, comprehensive RACI matrix table in Markdown format.
+
+Follow these instructions:
+1.  Identify all unique **Tasks** from the notes. Each unique task should be a row in your table.
+2.  Identify all unique **AI Agent Roles** from the notes. Each unique role should be a column in your table.
+3.  Construct a Markdown table with the Tasks as rows and Roles as columns.
+4.  Fill in the cells of the table with the corresponding RACI marker (R, A, C, I).
+5.  If a role has multiple assignments for the same task from different notes, consolidate them into the single most appropriate marker. There should only be one marker per cell.
+6.  If a cell has no assignment, leave it blank.
+7.  The final output must be a clean, well-formatted, and easy-to-read Markdown table. Do not include any text before or after the table.
+
+---
+NOTES TO SYNTHESIZE:
+${text}
+---
+
+Provide the single, synthesized RACI Matrix Markdown table below.
+`;
+
 
 // --- Prompt Collections ---
 export const CHUNK_SUMMARY_PROMPTS = {
@@ -720,7 +971,11 @@ export const CHUNK_SUMMARY_PROMPTS = {
   dialogCondensation: CHUNK_SUMMARY_PROMPT_TEMPLATE_DIALOG_CONDENSATION,
   graphTreeOutline: CHUNK_SUMMARY_PROMPT_TEMPLATE_GRAPH_TREE_OUTLINE,
   entityRelationshipDigest: CHUNK_SUMMARY_PROMPT_TEMPLATE_ENTITY_RELATIONSHIP_DIGEST,
-  rulesDistiller: CHUNK_SUMMARY_PROMPT_TEMPLATE_RULES_DISTILLER
+  rulesDistiller: CHUNK_SUMMARY_PROMPT_TEMPLATE_RULES_DISTILLER,
+  metricsDashboard: CHUNK_SUMMARY_PROMPT_TEMPLATE_METRICS_DASHBOARD,
+  qaPairs: CHUNK_SUMMARY_PROMPT_TEMPLATE_QA_PAIRS,
+  processFlow: CHUNK_SUMMARY_PROMPT_TEMPLATE_PROCESS_FLOW,
+  raciSnapshot: CHUNK_SUMMARY_PROMPT_TEMPLATE_RACI_SNAPSHOT
 };
 
 export const REDUCE_SUMMARIES_PROMPTS = {
@@ -737,7 +992,11 @@ export const REDUCE_SUMMARIES_PROMPTS = {
   dialogCondensation: REDUCE_SUMMARIES_PROMPT_TEMPLATE_DIALOG_CONDENSATION,
   graphTreeOutline: REDUCE_SUMMARIES_PROMPT_TEMPLATE_GRAPH_TREE_OUTLINE,
   entityRelationshipDigest: REDUCE_SUMMARIES_PROMPT_TEMPLATE_ENTITY_RELATIONSHIP_DIGEST,
-  rulesDistiller: REDUCE_SUMMARIES_PROMPT_TEMPLATE_RULES_DISTILLER
+  rulesDistiller: REDUCE_SUMMARIES_PROMPT_TEMPLATE_RULES_DISTILLER,
+  metricsDashboard: REDUCE_SUMMARIES_PROMPT_TEMPLATE_METRICS_DASHBOARD,
+  qaPairs: REDUCE_SUMMARIES_PROMPT_TEMPLATE_QA_PAIRS,
+  processFlow: REDUCE_SUMMARIES_PROMPT_TEMPLATE_PROCESS_FLOW,
+  raciSnapshot: REDUCE_SUMMARIES_PROMPT_TEMPLATE_RACI_SNAPSHOT
 };
 
 
@@ -910,4 +1169,40 @@ ${text}
 ---
 
 **Reformatted Text Segment:**
+`;
+
+// A clear, concise, and correct set of rules for the AI to follow for Mermaid syntax.
+// This replaces the previous verbose and confusing documentation.
+export const MERMAID_RULES_DOCS = `
+# Mermaid.js \`graph TD\` Syntax Rules
+
+## 1. Basic Structure
+- Start with \`graph TD;\` or \`graph TD\`.
+- \`TD\` means Top to Down.
+
+## 2. Nodes
+- A node is defined by an ID and optional text.
+- Example: \`nodeId[Node Text]\` defines a node with ID \`nodeId\` and label "Node Text".
+- If no text is provided, the ID is used as the label: \`nodeId\`.
+- Node IDs should not contain spaces or special characters. Use alphanumeric characters and underscores.
+
+## 3. CRITICAL: Links and Link Labels
+- A link connects two nodes.
+- To add a label (text) to a link, you **MUST** use this exact format: \`nodeA -- Link Text --> nodeB\`
+- The text goes between two dashes \`--\` on each side.
+- **DO NOT** use quotes around the link label.
+- **DO NOT** use the pipe character like \`-->|text|\`. Use the double-dash format.
+
+### Correct Syntax Example:
+\`\`\`
+graph TD
+    User[User] -- submits form --> WebServer[Web Server];
+    WebServer -- queries data from --> Database[Database];
+    Database -- returns results to --> WebServer;
+    WebServer -- displays page to --> User;
+\`\`\`
+
+### Incorrect Syntax Examples (DO NOT USE):
+- \`User -- "submits form" --> WebServer\` (Incorrect: uses quotes)
+- \`User -->|submits form| WebServer\` (Incorrect: uses pipes)
 `;

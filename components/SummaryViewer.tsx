@@ -1,10 +1,10 @@
 
-
 import React, { useEffect, useRef } from 'react';
 import type { SummaryOutput, StyleModelOutput, ProcessedOutput, Highlight, Mode, RewriterOutput, MathFormatterOutput } from '../types';
 
 declare var marked: any;
 declare var mermaid: any;
+declare var svgPanZoom: any;
 declare global {
     interface Window {
         MathJax: any;
@@ -30,6 +30,8 @@ export const SummaryViewer: React.FC<SummaryViewerProps> = ({ output, mode }) =>
   const contentRef = useRef<HTMLDivElement>(null);
   const summaryContentRef = useRef<HTMLDivElement>(null);
   const mermaidContainerRef = useRef<HTMLDivElement>(null);
+  const panZoomInstanceRef = useRef<any>(null);
+
 
   const copyToClipboard = (text: string, type: string) => {
     navigator.clipboard.writeText(text).then(() => {
@@ -64,26 +66,68 @@ export const SummaryViewer: React.FC<SummaryViewerProps> = ({ output, mode }) =>
       renderMarkdown(contentRef, (output as MathFormatterOutput).formattedContent, true);
     } else if (mode === 'technical' && 'finalSummary' in output) {
         const techOutput = output as SummaryOutput;
-        const isMarkdownSummary = ['sessionHandoff', 'readme', 'solutionFinder', 'timeline', 'decisionMatrix', 'pitchGenerator', 'causeEffectChain', 'swotAnalysis', 'checklist', 'dialogCondensation', 'graphTreeOutline', 'entityRelationshipDigest', 'rulesDistiller'].includes(techOutput.summaryFormat ?? 'default');
+        const isMarkdownSummary = ['sessionHandoff', 'readme', 'solutionFinder', 'timeline', 'decisionMatrix', 'pitchGenerator', 'causeEffectChain', 'swotAnalysis', 'checklist', 'dialogCondensation', 'graphTreeOutline', 'entityRelationshipDigest', 'rulesDistiller', 'metricsDashboard', 'qaPairs', 'processFlow', 'raciSnapshot'].includes(techOutput.summaryFormat ?? 'default');
         if (isMarkdownSummary) {
             renderMarkdown(summaryContentRef, techOutput.finalSummary, false);
         }
     }
   }, [output, mode]);
   
-  // Effect specifically for Mermaid.js rendering
+  // Effect specifically for Mermaid.js rendering and interactivity
   useEffect(() => {
+    // Cleanup previous pan/zoom instance if it exists
+    if (panZoomInstanceRef.current) {
+        if(panZoomInstanceRef.current.customResizeHandler) {
+            window.removeEventListener('resize', panZoomInstanceRef.current.customResizeHandler);
+        }
+        panZoomInstanceRef.current.destroy();
+        panZoomInstanceRef.current = null;
+    }
+
     if (mode === 'technical' && 'mermaidDiagram' in output && (output as SummaryOutput).mermaidDiagram) {
       const techOutput = output as SummaryOutput;
       if (techOutput.mermaidDiagram && mermaidContainerRef.current) {
         try {
           if (typeof mermaid !== 'undefined') {
               const uniqueId = `mermaid-graph-${Date.now()}`;
-              // Use mermaid.render to get SVG code, then inject it.
-              // This is more reliable with React than letting mermaid mutate a node React owns.
               mermaid.render(uniqueId, techOutput.mermaidDiagram, (svgCode) => {
                 if (mermaidContainerRef.current) {
                     mermaidContainerRef.current.innerHTML = svgCode;
+                    const svgElement = mermaidContainerRef.current.querySelector('svg');
+                    // Initialize pan-zoom on the newly rendered SVG
+                    if (svgElement && typeof svgPanZoom !== 'undefined') {
+                        // Ensure SVG scales within the container
+                        svgElement.style.width = '100%';
+                        svgElement.style.height = '100%';
+                        
+                        panZoomInstanceRef.current = svgPanZoom(svgElement, {
+                            panEnabled: true,
+                            controlIconsEnabled: true,
+                            zoomEnabled: true,
+                            dblClickZoomEnabled: true,
+                            mouseWheelZoomEnabled: true,
+                            preventMouseEventsDefault: true,
+                            zoomScaleSensitivity: 0.2,
+                            minZoom: 0.2,
+                            maxZoom: 20,
+                            fit: true,
+                            center: true,
+                            contain: true,
+                        });
+
+                        // Force a resize and center after initialization to fix initial view
+                        panZoomInstanceRef.current.resize();
+                        panZoomInstanceRef.current.center();
+
+                        const resizeHandler = () => {
+                            panZoomInstanceRef.current?.resize();
+                            panZoomInstanceRef.current?.fit();
+                            panZoomInstanceRef.current?.center();
+                        };
+                        window.addEventListener('resize', resizeHandler);
+                        // Store handler on instance for later removal
+                        panZoomInstanceRef.current.customResizeHandler = resizeHandler;
+                    }
                 }
               });
           }
@@ -95,15 +139,25 @@ export const SummaryViewer: React.FC<SummaryViewerProps> = ({ output, mode }) =>
         }
       }
     } else if (mermaidContainerRef.current) {
-        // Cleanup if output changes and no longer has a diagram
         mermaidContainerRef.current.innerHTML = '';
     }
+    
+    // Return a cleanup function for the effect
+    return () => {
+         if (panZoomInstanceRef.current) {
+            if(panZoomInstanceRef.current.customResizeHandler) {
+                window.removeEventListener('resize', panZoomInstanceRef.current.customResizeHandler);
+            }
+            panZoomInstanceRef.current.destroy();
+            panZoomInstanceRef.current = null;
+        }
+    };
   }, [output, mode]);
 
 
   if (mode === 'technical' && 'finalSummary' in output) {
     const techOutput = output as SummaryOutput;
-    const isMarkdownSummary = ['sessionHandoff', 'readme', 'solutionFinder', 'timeline', 'decisionMatrix', 'pitchGenerator', 'causeEffectChain', 'swotAnalysis', 'checklist', 'dialogCondensation', 'graphTreeOutline', 'entityRelationshipDigest', 'rulesDistiller'].includes(techOutput.summaryFormat ?? 'default');
+    const isMarkdownSummary = ['sessionHandoff', 'readme', 'solutionFinder', 'timeline', 'decisionMatrix', 'pitchGenerator', 'causeEffectChain', 'swotAnalysis', 'checklist', 'dialogCondensation', 'graphTreeOutline', 'entityRelationshipDigest', 'rulesDistiller', 'metricsDashboard', 'qaPairs', 'processFlow', 'raciSnapshot'].includes(techOutput.summaryFormat ?? 'default');
     return (
       <div className="space-y-8">
         {techOutput.processingTimeSeconds !== undefined && (
@@ -153,8 +207,8 @@ export const SummaryViewer: React.FC<SummaryViewerProps> = ({ output, mode }) =>
                 Copy Diagram Code
               </button>
             </div>
-            <div className="p-4 bg-slate-800 rounded-lg max-h-96 overflow-y-auto shadow-inner flex justify-center items-center">
-              <div ref={mermaidContainerRef}>
+            <div className="p-4 bg-slate-800 rounded-lg min-h-[24rem] h-[50vh] overflow-hidden shadow-inner flex justify-center items-center">
+              <div ref={mermaidContainerRef} className="w-full h-full cursor-move">
                 {/* Mermaid SVG is rendered here by the useEffect hook */}
               </div>
             </div>

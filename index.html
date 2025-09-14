@@ -34,9 +34,13 @@
         startOnLoad: false, // We will call it manually via mermaid.run()
         theme: 'dark',
         securityLevel: 'loose',
-        fontFamily: 'Inter, sans-serif'
+        fontFamily: 'Inter, sans-serif',
+        // Increase max text size to allow for larger, more complex diagrams
+        maxTextSize: 150000 
       });
     </script>
+    <!-- svg-pan-zoom for interactive diagrams -->
+    <script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
     <!-- End Mermaid.js -->
     <script>
       tailwind.config = {

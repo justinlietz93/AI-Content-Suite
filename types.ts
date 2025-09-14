@@ -1,11 +1,10 @@
 
-
 export interface Highlight {
   text: string;
   relevance?: number; // Optional, depends on LLM output
 }
 
-export type SummaryFormat = 'default' | 'sessionHandoff' | 'readme' | 'solutionFinder' | 'timeline' | 'decisionMatrix' | 'pitchGenerator' | 'causeEffectChain' | 'swotAnalysis' | 'checklist' | 'dialogCondensation' | 'graphTreeOutline' | 'entityRelationshipDigest' | 'rulesDistiller';
+export type SummaryFormat = 'default' | 'sessionHandoff' | 'readme' | 'solutionFinder' | 'timeline' | 'decisionMatrix' | 'pitchGenerator' | 'causeEffectChain' | 'swotAnalysis' | 'checklist' | 'dialogCondensation' | 'graphTreeOutline' | 'entityRelationshipDigest' | 'rulesDistiller' | 'metricsDashboard' | 'qaPairs' | 'processFlow' | 'raciSnapshot';
 
 export interface SummaryOutput {
   finalSummary: string;
@@ -13,6 +12,7 @@ export interface SummaryOutput {
   processingTimeSeconds?: number;
   summaryFormat?: SummaryFormat;
   mermaidDiagram?: string;
+  mermaidDiagramSimple?: string;
 }
 
 export interface StyleModelOutput {

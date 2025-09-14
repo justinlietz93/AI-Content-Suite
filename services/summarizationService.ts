@@ -9,7 +9,9 @@ import {
   HIERARCHICAL_CHUNK_GROUP_SIZE,
   CHUNK_SUMMARY_PROMPTS,
   REDUCE_SUMMARIES_PROMPTS,
-  GENERATE_MERMAID_FROM_DIGEST_PROMPT
+  GENERATE_MERMAID_FROM_DIGEST_PROMPT,
+  GENERATE_SIMPLIFIED_MERMAID_PROMPT,
+  MERMAID_RULES_DOCS
 } from '../constants';
 
 /**
@@ -98,7 +100,7 @@ export const processTranscript = async (
     onProgress({ stage: 'Chunking Complete', percentage: 20, total: chunks.length, current: 0, message: chunkMessage });
 
     const mapPhaseStartProgress = 20;
-    const mapPhaseProgressRange = summaryFormat === 'entityRelationshipDigest' ? 35 : 50; // Allocate less time if diagram step follows
+    const mapPhaseProgressRange = summaryFormat === 'entityRelationshipDigest' ? 40 : 50; 
     let chunkSummaries: (string | null)[] = [];
     const chunkProcessingTimesMs: number[] = [];
 
@@ -186,7 +188,7 @@ export const processTranscript = async (
     }
     
     const reducePhaseStartProgress = mapPhaseStartProgress + mapPhaseProgressRange;
-    const reducePhaseProgressRange = summaryFormat === 'entityRelationshipDigest' ? 20 : 30;
+    const reducePhaseProgressRange = summaryFormat === 'entityRelationshipDigest' ? 10 : 30;
     let currentSummaries = validChunkSummaries;
 
     while (currentSummaries.length > 1) {
@@ -218,42 +220,58 @@ export const processTranscript = async (
   }
 
   let mermaidDiagram: string | undefined = undefined;
+  let mermaidDiagramSimple: string | undefined = undefined;
 
-  // STEP 2: If the format is entityRelationshipDigest, generate the diagram in a separate step.
+
+  // STEP 2: If the format is entityRelationshipDigest, generate the diagram(s) in separate steps.
   if (summaryFormat === 'entityRelationshipDigest') {
     onProgress({ 
         stage: 'Generating Diagram', 
-        percentage: 75, 
-        message: 'Generating entity-relationship diagram from summary...',
+        percentage: 70, 
+        message: 'Generating detailed entity-relationship diagram...',
         thinkingHint: 'Creating visual representation of entities...'
     });
     try {
         const diagramPrompt = GENERATE_MERMAID_FROM_DIGEST_PROMPT(finalSummaryText);
         const rawDiagramResult = await generateText(diagramPrompt);
         
-        // Clean up the response to get only the raw Mermaid code
         const mermaidBlockRegex = /```mermaid\s*([\s\S]+?)\s*```/;
         const match = rawDiagramResult.match(mermaidBlockRegex);
         if (match && match[1]) {
             mermaidDiagram = match[1].trim();
         } else {
-            // Fallback if the AI didn't use a fenced code block
             mermaidDiagram = rawDiagramResult.trim();
         }
+    } catch (e) {
+        console.warn("Failed to generate detailed Mermaid diagram:", e);
+        mermaidDiagram = "Error: Detailed diagram could not be generated.";
+    }
+
+    onProgress({ 
+        stage: 'Simplifying Diagram', 
+        percentage: 80, 
+        message: 'Generating simplified diagram for documents...',
+        thinkingHint: 'Creating a high-level overview...'
+    });
+    try {
+        const simpleDiagramPrompt = GENERATE_SIMPLIFIED_MERMAID_PROMPT(finalSummaryText, MERMAID_RULES_DOCS);
+        const rawSimpleDiagramResult = await generateText(simpleDiagramPrompt);
         
-        // Programmatically correct common link syntax errors as a safety net.
-        // This finds `--> "label" -->` and corrects it to `-- "label" -->`.
-        if (mermaidDiagram) {
-            mermaidDiagram = mermaidDiagram.replace(/-->\s*"(.*?)"\s*-->/g, '-- "$1" -->');
+        const mermaidBlockRegex = /```mermaid\s*([\s\S]+?)\s*```/;
+        const match = rawSimpleDiagramResult.match(mermaidBlockRegex);
+        if (match && match[1]) {
+            mermaidDiagramSimple = match[1].trim();
+        } else {
+            mermaidDiagramSimple = rawSimpleDiagramResult.trim();
         }
 
-    } catch (e) {
-        console.warn("Failed to generate Mermaid diagram:", e);
-        mermaidDiagram = "Error: Diagram could not be generated.";
+    } catch(e) {
+        console.warn("Failed to generate simplified Mermaid diagram:", e);
+        // Do not assign an error string, just leave it undefined.
     }
   }
 
-  const highlightStartPercentage = summaryFormat === 'entityRelationshipDigest' ? 85 : 80;
+  const highlightStartPercentage = 90;
   onProgress({ 
       stage: 'Extracting Highlights', 
       percentage: highlightStartPercentage, 
@@ -263,5 +281,5 @@ export const processTranscript = async (
   const highlights = await extractHighlightsFromJson(finalSummaryText);
   onProgress({ stage: 'Completed', percentage: 100, message: 'Processing complete.' });
   
-  return { finalSummary: finalSummaryText, highlights, summaryFormat, mermaidDiagram };
+  return { finalSummary: finalSummaryText, highlights, summaryFormat, mermaidDiagram, mermaidDiagramSimple };
 };

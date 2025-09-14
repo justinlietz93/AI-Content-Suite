@@ -1,0 +1,68 @@
+
+## 2. Configuration and API Usage Directives
+
+Mermaid configurations are applied hierarchically: Default < Site < Frontmatter < Directives (Deprecated).
+
+### 2.1 Initialization
+*   `mermaid.initialize(config)`: This function is applied once per page load, overriding default configurations at a site level. It *must* be invoked prior to `mermaid.run()`. Setting `mermaid.initialize({startOnLoad: false})` suppresses automatic `mermaid.run` execution post-page load.
+*   **Deprecated:** `mermaid.startOnLoad` and `mermaid.htmlLabels` properties on the `mermaid` object are deprecated; use `mermaid.initialize()` for configuration.
+
+### 2.2 Rendering Execution
+*   `mermaid.run(options)`: Initiates diagram rendering.
+    *   `querySelector`: `string` (default `".mermaid"`). Specifies target elements.
+    *   `nodes`: `ArrayLike<HTMLElement>`. If provided, `querySelector` is ignored.
+    *   `suppressErrors`: `boolean` (default `false`). If `true`, errors are logged but not thrown.
+*   `bindFunctions()`: The method returned by `mermaid.render()` *must* be called after the SVG is inserted into the DOM to attach event listeners.
+
+### 2.3 Syntax Parsing and Validation
+*   `mermaid.parse(text, parseOptions)`: Validates diagram syntax without rendering.
+    *   Returns `{ diagramType: string }` for valid syntax.
+    *   Returns `false` if `parseOptions.suppressErrors` is `true` and syntax is invalid.
+    *   Throws an error if `parseOptions.suppressErrors` is `false` or unset and syntax is invalid.
+*   `mermaid.parseError`: This function can be overridden to customize parsing error handling. It is invoked when `parse()` throws an error, but not if `parseOptions.suppressErrors` is `true`.
+
+### 2.4 Frontmatter Configuration (v10.5.0+)
+*   Frontmatter is the recommended configuration method.
+*   **Placement:** Must be a YAML block at the diagram definition's top.
+*   **Delimiter:** The `---` (triple dash) on the first line *must* be the sole character on that line.
+*   **Syntax:** Adhere to YAML syntax. Indentation must be consistent. Settings are case-sensitive.
+*   **Error Handling:** Mermaid silently ignores misspelled frontmatter settings. Badly formed parameters will cause diagram breakage.
+
+### 2.5 Directives (Deprecated in v10.5.0)
+*   Directives are deprecated; transition to the `config` key within frontmatter.
+*   **Syntax:** Enclosed in `%%{ }%%`.
+*   **`init` Directive:** The JSON object argument to `init` directives *must* be valid, quoted JSON; otherwise, it will be ignored. Valid key-value pairs are defined in `defaultConfig.ts`. `init` and `initialize` keywords are interchangeable.
+*   **Precedence:** `init` directives are processed before the graph/diagram description when deployed within code. Multiple `%%init%%` directives are grouped, with the last defined value for a setting taking precedence.
+
+### 2.6 `MermaidConfig` Properties (Commonly Configured Options)
+These properties are central to customizing Mermaid's rendering and behavior.
+*   `arrowMarkerAbsolute`: `boolean`.
+*   `darkMode`: `boolean`.
+*   `deterministicIds`: `boolean`. Enables deterministic ID generation (using `deterministicIDSeed` or iterator) if `true`; `false` (default) uses random IDs.
+*   `deterministicIDSeed`: `string`. Provides a static seed when `deterministicIds` is `true`.
+*   `dompurifyConfig`: `Config` (from DOMPurify). Override with caution as it may disrupt Mermaid output.
+*   `elk`: `object`. Configures ELK layout (e.g., `considerModelOrder`, `cycleBreakingStrategy`).
+*   `fontFamily`: `string`. Any valid CSS `font-family` value.
+*   `forceLegacyMathML`: `boolean`. Forces KaTeX's stylesheet for MathML, overriding `legacyMathML`. Recommended for consistent rendering.
+*   `htmlLabels`: `boolean`.
+*   `layout`: `string`. Valid values: `elk`, `tidy-tree`, `cose-bilkent`, `dagre`.
+*   `legacyMathML`: `boolean`. If `true` and MathML is unsupported, Mermaid falls back to KaTeX. If `false` and MathML is unsupported, a warning replaces math equations.
+*   `logLevel`: `0` (trace) to `5` (fatal errors only). Default: `5`.
+*   `look`: `"classic"` | `"handDrawn"`.
+*   `markdownAutoWrap`: `boolean`.
+*   `maxEdges`: `number`. Maximum allowed edges in a graph.
+*   `maxTextSize`: `number`. Maximum allowed size of the user's diagram text.
+*   `startOnLoad`: `boolean`.
+*   `suppressErrorRendering`: `boolean`. If `true`, 'Syntax error' diagrams are not inserted into the DOM.
+*   `theme`: `"default"` | `"base"` | `"dark"` | `"forest"` | `"neutral"` | `"null"`.
+*   `themeCSS`: `string`.
+*   `themeVariables`: `any` object.
+*   `wrap`: `boolean`.
+
+### 2.7 Performance Considerations
+*   Avoid redundant `getConfig()` invocations. Store the result in a variable and pass it to functions.
+
+### 2.8 Icon Packs
+*   Register icon packs via `mermaid.registerIconPacks(iconLoaders)`.
+*   Use the `name` property during registration to override the Iconify pack prefix for shorter icon names.
+*   Custom icons in architecture diagrams require the format `"name:icon-name"`.

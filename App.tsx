@@ -1,5 +1,4 @@
 
-
 import React, { useState, useCallback } from 'react';
 import { FileLoader } from './components/FileLoader';
 import { ProgressBar } from './components/ProgressBar';
@@ -320,6 +319,14 @@ const App: React.FC = () => {
         return "Extracts key entities, their attributes, and their relationships to create a lightweight semantic map of the content. Ideal for data-heavy docs.";
       case 'rulesDistiller':
         return "Extracts all hard technical rules, syntax, and constraints into a dense, imperative-style reference list. Ideal for compliance checks.";
+      case 'metricsDashboard':
+        return "Distills raw data into a numeric baseline table of key indicators (KPIs) and their values like current, min, max, and average.";
+      case 'qaPairs':
+        return "Transforms unstructured text into a clear, searchable list of questions and answers. Ideal for meeting minutes, FAQs, and knowledge capture.";
+      case 'processFlow':
+        return "Converts complex procedures into a clear, sequential map of states and transitions. Excellent for workflows, protocols, and troubleshooting guides.";
+      case 'raciSnapshot':
+        return "Condenses tasks and ownership for AI agents into a single responsibility map (Responsible, Accountable, Consulted, Informed).";
       default:
         return "";
     }
@@ -372,6 +379,10 @@ const App: React.FC = () => {
                     <option value="graphTreeOutline">Graph / Tree Outline</option>
                     <option value="entityRelationshipDigest">Entity-Relationship Digest</option>
                     <option value="rulesDistiller">Rules Distiller</option>
+                    <option value="metricsDashboard">Metrics Dashboard Snapshot</option>
+                    <option value="qaPairs">Q&amp;A Pairs</option>
+                    <option value="processFlow">Process Flow / Stepwise Map</option>
+                    <option value="raciSnapshot">RACI Snapshot</option>
                   </select>
                   <p className="mt-1 text-xs text-text-secondary">
                     {getSummaryFormatDescription(summaryFormat)}
