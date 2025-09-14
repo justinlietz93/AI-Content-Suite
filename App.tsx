@@ -327,6 +327,10 @@ const App: React.FC = () => {
         return "Converts complex procedures into a clear, sequential map of states and transitions. Excellent for workflows, protocols, and troubleshooting guides.";
       case 'raciSnapshot':
         return "Condenses tasks and ownership for AI agents into a single responsibility map (Responsible, Accountable, Consulted, Informed).";
+      case 'riskRegister':
+        return "Distills uncertainties, their severity, and their countermeasures into a single compact risk register table. Ideal for project management.";
+      case 'milestoneTracker':
+        return "Compresses a project timeline into discrete, accountable checkpoints (milestones), making delivery progress transparent and traceable.";
       default:
         return "";
     }
@@ -383,6 +387,8 @@ const App: React.FC = () => {
                     <option value="qaPairs">Q&amp;A Pairs</option>
                     <option value="processFlow">Process Flow / Stepwise Map</option>
                     <option value="raciSnapshot">RACI Snapshot</option>
+                    <option value="riskRegister">Risk Register Digest</option>
+                    <option value="milestoneTracker">Milestone Tracker</option>
                   </select>
                   <p className="mt-1 text-xs text-text-secondary">
                     {getSummaryFormatDescription(summaryFormat)}
