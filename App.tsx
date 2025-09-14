@@ -335,6 +335,8 @@ const App: React.FC = () => {
         return "Distills key concepts and their relationships into a structured reference, ensuring clarity and consistency across complex contexts.";
       case 'hierarchyOfNeeds':
         return "Distills layered dependencies and priorities into a structured stack, highlighting what must be built first to sustain higher-level outcomes.";
+      case 'stakeholderMap':
+        return "Distills who is involved, what they want, and their influence into a clear map of project dynamics and communication priorities.";
       default:
         return "";
     }
@@ -395,6 +397,7 @@ const App: React.FC = () => {
                     <option value="milestoneTracker">Milestone Tracker</option>
                     <option value="glossaryTermMap">Glossary / Term Map</option>
                     <option value="hierarchyOfNeeds">Hierarchy of Needs / Pyramid</option>
+                    <option value="stakeholderMap">Stakeholder Map</option>
                   </select>
                   <p className="mt-1 text-xs text-text-secondary">
                     {getSummaryFormatDescription(summaryFormat)}
