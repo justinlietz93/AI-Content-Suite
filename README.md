@@ -2,8 +2,7 @@
 <img width="1200" height="475" alt="GHBanner" src="https://github.com/justinlietz93/productivity_workspace/blob/main/productivity_tools/AI-Content-Suite/assets/img/ai-content-suite.png" />
 </div>
 
-# AI-Content-Suite 
-***(provider-agnostic)***
+# Provider-Agnostic AI Creator Tools
 
 This app now talks to a lightweight Python backend that unifies multiple AI providers (OpenAI, Anthropic, DeepSeek, Gemini via configured adapters). The frontend no longer uses a direct Gemini SDK.
 
