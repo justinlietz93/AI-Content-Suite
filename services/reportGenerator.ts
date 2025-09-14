@@ -60,6 +60,17 @@ const generateHtmlReport = (output: ProcessedOutput, mode: Mode, styleTarget?: s
           return `<p>${text.replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, '<br>')}</p>`;
       }
   };
+  
+  const mermaidSection = (techOutput && techOutput.mermaidDiagram) ? `
+      <div class="section">
+        <h2>Entity-Relationship Diagram</h2>
+        <div class="content-box mermaid-container">
+          <div class="mermaid">
+${techOutput.mermaidDiagram}
+          </div>
+        </div>
+      </div>
+  ` : '';
 
   const bodyContent = `
     ${isTechnical && techOutput ? `
@@ -69,6 +80,7 @@ const generateHtmlReport = (output: ProcessedOutput, mode: Mode, styleTarget?: s
           ${parseMarkdown(techOutput.finalSummary)}
         </div>
       </div>
+      ${mermaidSection}
       ${techOutput.highlights && techOutput.highlights.length > 0 ? `
       <div class="section">
         <h2>Key Highlights</h2>
@@ -137,6 +149,7 @@ const generateHtmlReport = (output: ProcessedOutput, mode: Mode, styleTarget?: s
   <script type="text/javascript" id="MathJax-script" async
     src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js">
   </script>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
     body {
@@ -235,6 +248,18 @@ const generateHtmlReport = (output: ProcessedOutput, mode: Mode, styleTarget?: s
       border-left: 4px solid #0284c7;
       font-size: 0.95rem;
     }
+    .mermaid-container {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        background-color: #0f172a;
+        padding: 20px;
+        overflow-x: auto;
+    }
+    .mermaid svg {
+        max-width: 100%;
+        height: auto;
+    }
     .footer {
       margin-top: 40px;
       text-align: center;
@@ -256,6 +281,23 @@ const generateHtmlReport = (output: ProcessedOutput, mode: Mode, styleTarget?: s
       <p>Powered by AI Content Suite & Gemini</p>
     </div>
   </div>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        try {
+           if (typeof mermaid !== 'undefined') {
+             mermaid.initialize({
+               startOnLoad: false,
+               theme: 'dark',
+               securityLevel: 'loose',
+               fontFamily: 'Inter, sans-serif'
+             });
+             mermaid.run();
+           }
+        } catch (e) {
+            console.error('Failed to render Mermaid diagram in report:', e);
+        }
+    });
+  </script>
 </body>
 </html>
   `;
@@ -289,6 +331,14 @@ const generateMarkdownReport = (output: ProcessedOutput, mode: Mode, styleTarget
   if (isTechnical && techOutput) {
     content += `## Generated Summary\n\n`;
     content += `${techOutput.finalSummary}\n\n`;
+    
+    if (techOutput.mermaidDiagram) {
+        content += `## Entity-Relationship Diagram\n\n`;
+        content += '```mermaid\n';
+        content += `${techOutput.mermaidDiagram}\n`;
+        content += '```\n\n';
+    }
+
     if (techOutput.highlights && techOutput.highlights.length > 0) {
       content += `## Key Highlights\n\n`;
       content += techOutput.highlights.map(h => `* ${h.text}`).join('\n');

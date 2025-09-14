@@ -1,4 +1,5 @@
 
+
 import React, { useState, useCallback } from 'react';
 import { FileLoader } from './components/FileLoader';
 import { ProgressBar } from './components/ProgressBar';
@@ -10,7 +11,7 @@ import { processRewrite } from './services/rewriterService';
 import { processMathFormatting } from './services/mathFormattingService';
 import { generateSuggestions } from './services/geminiService';
 import { ocrPdf } from './services/ocrService';
-import type { ProcessedOutput, ProgressUpdate, AppState, ProcessingError, Mode, SummaryOutput, StyleModelOutput, RewriteLength, RewriterOutput, MathFormatterOutput } from './types';
+import type { ProcessedOutput, ProgressUpdate, AppState, ProcessingError, Mode, SummaryOutput, StyleModelOutput, RewriteLength, RewriterOutput, MathFormatterOutput, SummaryFormat } from './types';
 import { INITIAL_PROGRESS } from './constants';
 import { CheckCircleIcon } from './components/icons/CheckCircleIcon';
 import { XCircleIcon } from './components/icons/XCircleIcon';
@@ -83,6 +84,7 @@ const App: React.FC = () => {
   const [suggestionsLoading, setSuggestionsLoading] = useState<boolean>(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [useHierarchical, setUseHierarchical] = useState(false);
+  const [summaryFormat, setSummaryFormat] = useState<SummaryFormat>('default');
 
   const handleFileSelect = useCallback((files: File[]) => {
     setCurrentFiles(files);
@@ -184,7 +186,7 @@ const App: React.FC = () => {
         if (activeMode === 'technical') {
           result = await processTranscript(combinedText, (update) => {
             setProgress(update);
-          }, useHierarchical);
+          }, useHierarchical, summaryFormat);
         } else if (activeMode === 'styleExtractor') {
           result = await processStyleExtraction(combinedText, styleTarget, (update) => {
             setProgress(update);
@@ -241,7 +243,7 @@ const App: React.FC = () => {
       setAppState('error');
       setSuggestionsLoading(false);
     }
-  }, [currentFiles, startTime, activeMode, styleTarget, rewriteStyle, rewriteInstructions, rewriteLength, useHierarchical]);
+  }, [currentFiles, startTime, activeMode, styleTarget, rewriteStyle, rewriteInstructions, rewriteLength, useHierarchical, summaryFormat]);
 
   const handleReset = useCallback(() => {
     setCurrentFiles(null);
@@ -257,6 +259,7 @@ const App: React.FC = () => {
     setNextStepSuggestions(null);
     setSuggestionsLoading(false);
     setUseHierarchical(false);
+    setSummaryFormat('default');
   }, []);
 
   const TABS = [
@@ -287,6 +290,41 @@ const App: React.FC = () => {
       mathFormatter: 'Format Another',
   }
 
+  const getSummaryFormatDescription = (format: SummaryFormat) => {
+    switch (format) {
+      case 'default':
+        return "A concise, readable summary of the key points.";
+      case 'sessionHandoff':
+        return "A structured, detailed summary for another AI to process.";
+      case 'readme':
+        return "Formats the summary as a project README.md file.";
+      case 'solutionFinder':
+        return "Identifies solutions in the text and formats them as a step-by-step guide with copyable commands.";
+      case 'timeline':
+        return "Generates a chronological list of key events, dates, and outcomes. Good for projects, history, or step-by-step processes.";
+      case 'decisionMatrix':
+        return "Extracts and organizes comparisons into a structured decision matrix table. Ideal for analyzing trade-offs.";
+      case 'pitchGenerator':
+        return "Generates a multi-audience pitch (Technical, Investor, User) from the content, covering problem, solution, benefits, and more.";
+      case 'causeEffectChain':
+        return "Identifies and links root causes (drivers) to their immediate outcomes and broader consequences. Excellent for root cause analysis.";
+      case 'swotAnalysis':
+        return "Generates a SWOT matrix (Strengths, Weaknesses, Opportunities, Threats) for strategic planning or product evaluation.";
+      case 'checklist':
+        return "Distills discussions and documents into a concrete, trackable list of action items with completion statuses.";
+      case 'dialogCondensation':
+        return "Condenses conversations into a compact, speaker-tagged log of key statements, decisions, and actions. Ideal for meeting minutes.";
+      case 'graphTreeOutline':
+        return "Organizes content into a hierarchical tree structure with a root, branches, and leaves. Excellent for showing dependencies and structure.";
+      case 'entityRelationshipDigest':
+        return "Extracts key entities, their attributes, and their relationships to create a lightweight semantic map of the content. Ideal for data-heavy docs.";
+      case 'rulesDistiller':
+        return "Extracts all hard technical rules, syntax, and constraints into a dense, imperative-style reference list. Ideal for compliance checks.";
+      default:
+        return "";
+    }
+  };
+
   return (
     <>
       <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4 sm:p-8 transition-all duration-300">
@@ -310,6 +348,35 @@ const App: React.FC = () => {
           {activeMode === 'technical' && (appState === 'idle' || appState === 'fileSelected') && (
             <div className="animate-fade-in-scale">
               <HierarchicalToggle enabled={useHierarchical} onChange={setUseHierarchical} />
+               <div className="my-4 px-4 sm:px-0">
+                  <label htmlFor="summaryFormatSelect" className="block text-sm font-medium text-text-secondary mb-1">
+                    Summary Format:
+                  </label>
+                  <select
+                    id="summaryFormatSelect"
+                    value={summaryFormat}
+                    onChange={(e) => setSummaryFormat(e.target.value as SummaryFormat)}
+                    className="w-full px-3 py-2 bg-slate-700 border border-border-color rounded-md shadow-sm focus:ring-primary focus:border-primary text-text-primary placeholder-slate-500 text-sm"
+                  >
+                    <option value="default">Default Summary</option>
+                    <option value="sessionHandoff">Session Handoff for AI Agent</option>
+                    <option value="readme">README.md Format</option>
+                    <option value="solutionFinder">Solution Finder Guide</option>
+                    <option value="timeline">Timeline Format</option>
+                    <option value="decisionMatrix">Decision Matrix</option>
+                    <option value="pitchGenerator">Multi-Audience Pitch Generator</option>
+                    <option value="causeEffectChain">Cause-Effect Chain</option>
+                    <option value="swotAnalysis">SWOT Analysis</option>
+                    <option value="checklist">Checklist Format</option>
+                    <option value="dialogCondensation">Dialog-Style Condensation</option>
+                    <option value="graphTreeOutline">Graph / Tree Outline</option>
+                    <option value="entityRelationshipDigest">Entity-Relationship Digest</option>
+                    <option value="rulesDistiller">Rules Distiller</option>
+                  </select>
+                  <p className="mt-1 text-xs text-text-secondary">
+                    {getSummaryFormatDescription(summaryFormat)}
+                  </p>
+                </div>
             </div>
           )}
 

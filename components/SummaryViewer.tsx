@@ -1,8 +1,10 @@
 
+
 import React, { useEffect, useRef } from 'react';
 import type { SummaryOutput, StyleModelOutput, ProcessedOutput, Highlight, Mode, RewriterOutput, MathFormatterOutput } from '../types';
 
 declare var marked: any;
+declare var mermaid: any;
 declare global {
     interface Window {
         MathJax: any;
@@ -26,6 +28,8 @@ const HighlightItem: React.FC<{ highlight: Highlight }> = ({ highlight }) => (
 
 export const SummaryViewer: React.FC<SummaryViewerProps> = ({ output, mode }) => {
   const contentRef = useRef<HTMLDivElement>(null);
+  const summaryContentRef = useRef<HTMLDivElement>(null);
+  const mermaidContainerRef = useRef<HTMLDivElement>(null);
 
   const copyToClipboard = (text: string, type: string) => {
     navigator.clipboard.writeText(text).then(() => {
@@ -38,39 +42,68 @@ export const SummaryViewer: React.FC<SummaryViewerProps> = ({ output, mode }) =>
   };
 
   useEffect(() => {
-    const renderMarkdownContent = () => {
-        if (!contentRef.current) return;
-
-        let contentToRender = '';
-        if (mode === 'rewriter' && 'rewrittenContent' in output) {
-            contentToRender = (output as RewriterOutput).rewrittenContent;
-        } else if (mode === 'mathFormatter' && 'formattedContent' in output) {
-            contentToRender = (output as MathFormatterOutput).formattedContent;
+    const renderMarkdown = (ref: React.RefObject<HTMLDivElement>, content: string, typesetMath: boolean) => {
+      if (!ref.current) return;
+      if (typeof marked !== 'undefined') {
+        ref.current.innerHTML = marked.parse(content);
+        if (typesetMath && window.MathJax) {
+          window.MathJax.typesetPromise([ref.current]).catch((err: any) => console.error('MathJax typesetting failed:', err));
         }
-
-        if (contentToRender) {
-            if (typeof marked !== 'undefined') {
-                contentRef.current.innerHTML = marked.parse(contentToRender);
-                if (mode === 'mathFormatter' && window.MathJax) {
-                    window.MathJax.typesetPromise([contentRef.current]).catch((err: any) => console.error('MathJax typesetting failed:', err));
-                }
-            } else {
-                // Fallback to plain text if marked is not available
-                const p = document.createElement('p');
-                p.className = 'whitespace-pre-wrap';
-                p.textContent = contentToRender;
-                contentRef.current.innerHTML = '';
-                contentRef.current.appendChild(p);
-            }
-        }
+      } else {
+        const p = document.createElement('p');
+        p.className = 'whitespace-pre-wrap';
+        p.textContent = content;
+        ref.current.innerHTML = '';
+        ref.current.appendChild(p);
+      }
     };
-    if (mode === 'rewriter' || mode === 'mathFormatter') {
-        renderMarkdownContent();
+
+    if (mode === 'rewriter' && 'rewrittenContent' in output) {
+      renderMarkdown(contentRef, (output as RewriterOutput).rewrittenContent, false);
+    } else if (mode === 'mathFormatter' && 'formattedContent' in output) {
+      renderMarkdown(contentRef, (output as MathFormatterOutput).formattedContent, true);
+    } else if (mode === 'technical' && 'finalSummary' in output) {
+        const techOutput = output as SummaryOutput;
+        const isMarkdownSummary = ['sessionHandoff', 'readme', 'solutionFinder', 'timeline', 'decisionMatrix', 'pitchGenerator', 'causeEffectChain', 'swotAnalysis', 'checklist', 'dialogCondensation', 'graphTreeOutline', 'entityRelationshipDigest', 'rulesDistiller'].includes(techOutput.summaryFormat ?? 'default');
+        if (isMarkdownSummary) {
+            renderMarkdown(summaryContentRef, techOutput.finalSummary, false);
+        }
+    }
+  }, [output, mode]);
+  
+  // Effect specifically for Mermaid.js rendering
+  useEffect(() => {
+    if (mode === 'technical' && 'mermaidDiagram' in output && (output as SummaryOutput).mermaidDiagram) {
+      const techOutput = output as SummaryOutput;
+      if (techOutput.mermaidDiagram && mermaidContainerRef.current) {
+        try {
+          if (typeof mermaid !== 'undefined') {
+              const uniqueId = `mermaid-graph-${Date.now()}`;
+              // Use mermaid.render to get SVG code, then inject it.
+              // This is more reliable with React than letting mermaid mutate a node React owns.
+              mermaid.render(uniqueId, techOutput.mermaidDiagram, (svgCode) => {
+                if (mermaidContainerRef.current) {
+                    mermaidContainerRef.current.innerHTML = svgCode;
+                }
+              });
+          }
+        } catch (e) {
+          console.error("Mermaid.js rendering failed:", e);
+          if (mermaidContainerRef.current) {
+            mermaidContainerRef.current.innerHTML = `<p class="text-red-400">Error rendering diagram. See console for details.</p><pre>${techOutput.mermaidDiagram.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</pre>`;
+          }
+        }
+      }
+    } else if (mermaidContainerRef.current) {
+        // Cleanup if output changes and no longer has a diagram
+        mermaidContainerRef.current.innerHTML = '';
     }
   }, [output, mode]);
 
+
   if (mode === 'technical' && 'finalSummary' in output) {
     const techOutput = output as SummaryOutput;
+    const isMarkdownSummary = ['sessionHandoff', 'readme', 'solutionFinder', 'timeline', 'decisionMatrix', 'pitchGenerator', 'causeEffectChain', 'swotAnalysis', 'checklist', 'dialogCondensation', 'graphTreeOutline', 'entityRelationshipDigest', 'rulesDistiller'].includes(techOutput.summaryFormat ?? 'default');
     return (
       <div className="space-y-8">
         {techOutput.processingTimeSeconds !== undefined && (
@@ -83,17 +116,50 @@ export const SummaryViewer: React.FC<SummaryViewerProps> = ({ output, mode }) =>
           <div className="flex justify-between items-center mb-2">
             <h2 className="text-2xl font-semibold text-text-primary">Generated Summary</h2>
             <button 
-              onClick={() => copyToClipboard(techOutput.finalSummary, "Summary")}
+              onClick={() => copyToClipboard(techOutput.finalSummary, isMarkdownSummary ? "Summary Markdown" : "Summary")}
               className="text-xs px-3 py-1 bg-sky-700 text-sky-100 rounded hover:bg-sky-600 transition-colors"
               aria-label="Copy summary to clipboard"
             >
-              Copy Summary
+              {isMarkdownSummary ? "Copy Markdown" : "Copy Summary"}
             </button>
           </div>
-          <div className="p-4 bg-slate-800 rounded-lg max-h-96 overflow-y-auto shadow-inner">
-            <p className="text-text-primary whitespace-pre-wrap text-sm leading-relaxed">{techOutput.finalSummary}</p>
-          </div>
+          {isMarkdownSummary ? (
+             <div 
+                className="p-4 bg-slate-800 rounded-lg max-h-96 overflow-y-auto shadow-inner prose prose-sm prose-invert max-w-none" 
+                ref={summaryContentRef}
+              >
+                {/* Content is rendered here by the useEffect hook */}
+              </div>
+          ) : (
+             <div className="p-4 bg-slate-800 rounded-lg max-h-96 overflow-y-auto shadow-inner">
+                {techOutput.finalSummary && techOutput.finalSummary.trim() !== '' ? (
+                  <p className="text-text-primary whitespace-pre-wrap text-sm leading-relaxed">{techOutput.finalSummary}</p>
+                ) : (
+                  <p className="text-text-secondary italic">No summary could be generated.</p>
+                )}
+             </div>
+          )}
         </div>
+
+        {techOutput.mermaidDiagram && (
+          <div>
+            <div className="flex justify-between items-center mb-2">
+              <h2 className="text-2xl font-semibold text-text-primary">Entity-Relationship Diagram</h2>
+              <button 
+                onClick={() => copyToClipboard(techOutput.mermaidDiagram!, "Mermaid Diagram Code")}
+                className="text-xs px-3 py-1 bg-sky-700 text-sky-100 rounded hover:bg-sky-600 transition-colors"
+                aria-label="Copy Mermaid diagram code to clipboard"
+              >
+                Copy Diagram Code
+              </button>
+            </div>
+            <div className="p-4 bg-slate-800 rounded-lg max-h-96 overflow-y-auto shadow-inner flex justify-center items-center">
+              <div ref={mermaidContainerRef}>
+                {/* Mermaid SVG is rendered here by the useEffect hook */}
+              </div>
+            </div>
+          </div>
+        )}
 
         {techOutput.highlights && techOutput.highlights.length > 0 && (
           <div>
