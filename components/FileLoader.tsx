@@ -1,4 +1,5 @@
 
+
 import React, { useCallback, useState } from 'react';
 import { UploadIcon } from './icons/UploadIcon';
 import type { Mode } from '../types';
@@ -67,7 +68,7 @@ export const FileLoader: React.FC<FileLoaderProps> = ({ onFileSelect, selectedFi
         onDragLeave={handleDragLeave}
         onClick={openFileDialog}
         className={`flex flex-col items-center justify-center w-full min-h-[16rem] sm:min-h-[20rem] p-4 border-2 border-dashed rounded-xl cursor-pointer transition-all duration-200
-                    ${isDragging ? 'border-primary bg-sky-900 scale-105' : 'border-border-color hover:border-sky-500'}
+                    ${isDragging ? 'border-primary bg-primary/20 scale-105' : 'border-border-color hover:border-primary'}
                     ${hasFiles ? 'border-green-500 bg-green-900/50' : ''} `}
       >
         <input

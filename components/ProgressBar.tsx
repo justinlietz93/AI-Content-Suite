@@ -1,4 +1,5 @@
 
+
 import React from 'react';
 import type { ProgressUpdate } from '../types';
 import { Spinner } from './Spinner';
@@ -29,7 +30,7 @@ const formatDuration = (totalSeconds: number, stage: string): string => {
 
 export const ProgressBar: React.FC<ProgressBarProps> = ({ progress }) => {
   return (
-    <div className="w-full p-4 bg-slate-800 rounded-lg shadow">
+    <div className="w-full p-4 bg-secondary rounded-lg shadow">
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center">
           <Spinner className="w-5 h-5 mr-2 text-primary" />
@@ -37,7 +38,7 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({ progress }) => {
         </div>
         <span className="text-sm font-medium text-primary">{progress.percentage.toFixed(0)}%</span>
       </div>
-      <div className="w-full bg-slate-700 rounded-full h-4">
+      <div className="w-full bg-muted rounded-full h-4">
         <div
           className="bg-primary h-4 rounded-full transition-all duration-300 ease-out"
           style={{ width: `${progress.percentage}%` }}

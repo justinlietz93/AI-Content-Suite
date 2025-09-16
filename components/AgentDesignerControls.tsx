@@ -1,4 +1,6 @@
 
+
+
 import React from 'react';
 import type { AgentDesignerSettings, AgentProvider, ExecutionTrigger, AgentSystemType } from '../types';
 
@@ -34,24 +36,24 @@ export const AgentDesignerControls: React.FC<AgentDesignerControlsProps> = ({ se
                     value={settings.goal}
                     onChange={(e) => handleSettingChange('goal', e.target.value)}
                     placeholder="Describe the overall mission for your agent system. e.g., 'Research a topic online and write a summary report'."
-                    className="w-full px-3 py-2 bg-slate-900 border border-border-color rounded-md shadow-sm focus:ring-primary focus:border-primary text-text-primary placeholder-slate-500 text-sm"
+                    className="w-full px-3 py-2 bg-input border border-border-color rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-ring text-text-primary placeholder-text-secondary text-sm"
                 />
             </div>
 
             {/* Fix: Replaced div and Label with fieldset and legend for semantic correctness and accessibility. */}
             <fieldset>
                 <legend className="block text-xs font-medium text-text-secondary mb-2">System Type</legend>
-                <div className="flex items-center space-x-2 bg-slate-700 rounded-lg p-1" role="radiogroup">
+                <div className="flex items-center space-x-2 bg-secondary rounded-lg p-1" role="radiogroup">
                   {(['singleAgent', 'multiAgent'] as AgentSystemType[]).map(type => (
                     <button
                       key={type}
                       onClick={() => handleSettingChange('systemType', type)}
                       role="radio"
                       aria-checked={settings.systemType === type}
-                      className={`flex-1 py-1.5 text-sm rounded-md transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-slate-700 ${
+                      className={`flex-1 py-1.5 text-sm rounded-md transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-secondary ${
                         settings.systemType === type
-                          ? 'bg-primary text-white font-semibold shadow'
-                          : 'text-text-secondary hover:bg-slate-600'
+                          ? 'bg-primary text-primary-foreground font-semibold shadow'
+                          : 'text-text-secondary hover:bg-muted'
                       }`}
                     >
                       {type === 'singleAgent' ? 'Single Agent' : 'Multi-Agent'}
@@ -68,7 +70,7 @@ export const AgentDesignerControls: React.FC<AgentDesignerControlsProps> = ({ se
             <fieldset className="grid grid-cols-2 sm:grid-cols-2 gap-4">
                 <div>
                     <Label htmlFor="agent-provider">Agent Provider</Label>
-                    <select id="agent-provider" value={settings.provider} onChange={e => handleSettingChange('provider', e.target.value as AgentProvider)} className="w-full px-3 py-2 bg-slate-700 border-border-color rounded-md text-sm">
+                    <select id="agent-provider" value={settings.provider} onChange={e => handleSettingChange('provider', e.target.value as AgentProvider)} className="w-full px-3 py-2 bg-input border border-border-color rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring">
                         <option value="gemini">Gemini</option>
                         <option value="openai">OpenAI</option>
                         <option value="ollama">Ollama</option>
@@ -77,7 +79,7 @@ export const AgentDesignerControls: React.FC<AgentDesignerControlsProps> = ({ se
                 </div>
                 <div>
                     <Label htmlFor="execution-trigger">Execution Trigger</Label>
-                    <select id="execution-trigger" value={settings.trigger} onChange={e => handleSettingChange('trigger', e.target.value as ExecutionTrigger)} className="w-full px-3 py-2 bg-slate-700 border-border-color rounded-md text-sm">
+                    <select id="execution-trigger" value={settings.trigger} onChange={e => handleSettingChange('trigger', e.target.value as ExecutionTrigger)} className="w-full px-3 py-2 bg-input border border-border-color rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring">
                         <option value="manual">Manual</option>
                         <option value="eventDriven">Event-Driven</option>
                         <option value="scheduled">Scheduled</option>
@@ -87,7 +89,7 @@ export const AgentDesignerControls: React.FC<AgentDesignerControlsProps> = ({ se
 
             <fieldset>
                 <legend className="block text-xs font-medium text-text-secondary mb-2">Core Capabilities (Tools)</legend>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-2 bg-slate-700/50 p-3 rounded-lg">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-2 bg-secondary p-3 rounded-lg">
                     {Object.keys(settings.capabilities).map((key) => {
                          const capKey = key as keyof typeof settings.capabilities;
                          const label = key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
@@ -98,7 +100,7 @@ export const AgentDesignerControls: React.FC<AgentDesignerControlsProps> = ({ se
                                     id={`cap-${key}`} 
                                     checked={settings.capabilities[capKey]} 
                                     onChange={e => handleCapabilityChange(capKey, e.target.checked)} 
-                                    className="h-4 w-4 rounded bg-slate-600 border-slate-500 text-primary focus:ring-primary" 
+                                    className="h-4 w-4 rounded bg-input border-border-color text-primary focus:ring-2 focus:ring-ring" 
                                 />
                                 <Label htmlFor={`cap-${key}`} className="mb-0 text-sm text-text-primary">{label}</Label>
                             </div>

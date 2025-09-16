@@ -1,5 +1,9 @@
 
-import React, { useState, useCallback, useMemo } from 'react';
+
+
+
+
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { FileLoader } from './components/FileLoader';
 import { ProgressBar } from './components/ProgressBar';
 import { SummaryViewer } from './components/SummaryViewer';
@@ -51,7 +55,7 @@ const readFileAsText = (file: File): Promise<string> => {
 
 const HierarchicalToggle: React.FC<{ enabled: boolean; onChange: (enabled: boolean) => void; }> = ({ enabled, onChange }) => {
     return (
-      <div className="flex items-center justify-between bg-slate-700/50 p-3 rounded-lg my-4">
+      <div className="flex items-center justify-between bg-secondary p-3 rounded-lg my-4">
         <div>
           <label htmlFor="hierarchical-toggle" className="font-semibold text-text-primary cursor-pointer">
             Hierarchical Processing
@@ -68,7 +72,7 @@ const HierarchicalToggle: React.FC<{ enabled: boolean; onChange: (enabled: boole
           aria-describedby='hierarchical-description'
           onClick={() => onChange(!enabled)}
           className={`${
-            enabled ? 'bg-primary' : 'bg-slate-600'
+            enabled ? 'bg-primary' : 'bg-muted'
           } relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-surface`}
         >
           <span
@@ -120,6 +124,119 @@ const App: React.FC = () => {
   
   // State for Agent Designer
   const [agentDesignerSettings, setAgentDesignerSettings] = useState<AgentDesignerSettings>(INITIAL_AGENT_DESIGNER_SETTINGS);
+
+  useEffect(() => {
+    const canvas = document.getElementById('space-background') as HTMLCanvasElement;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    let width = window.innerWidth;
+    let height = window.innerHeight;
+    canvas.width = width;
+    canvas.height = height;
+
+    const STAR_COLORS = ['oklch(0.98 0 0)', 'oklch(0.9 0.03 230)', 'oklch(0.95 0.04 90)']; // White, Light Blue, Pale Yellow
+    const stars: { x: number; y: number; z: number; color: string }[] = [];
+    const numStars = 500;
+    const speed = 2;
+
+    const nebulas = [
+        { x: width * 0.2, y: height * 0.3, radius: width * 0.4, color1: 'rgba(100, 0, 180, 0.15)', color2: 'rgba(100, 0, 180, 0)', vx: 0.05, vy: 0.03 },
+        { x: width * 0.8, y: height * 0.7, radius: width * 0.5, color1: 'rgba(0, 100, 200, 0.1)', color2: 'rgba(0, 100, 200, 0)', vx: -0.04, vy: 0.06 },
+        { x: width * 0.5, y: height * 0.9, radius: width * 0.3, color1: 'rgba(50, 150, 180, 0.12)', color2: 'rgba(50, 150, 180, 0)', vx: 0.02, vy: -0.05 },
+    ];
+
+    const initStars = () => {
+        stars.length = 0;
+        for (let i = 0; i < numStars; i++) {
+            stars.push({
+                x: Math.random() * width - width / 2,
+                y: Math.random() * height - height / 2,
+                z: Math.random() * width,
+                color: STAR_COLORS[Math.floor(Math.random() * STAR_COLORS.length)],
+            });
+        }
+    };
+    initStars();
+
+    let animationFrameId: number;
+
+    const animate = () => {
+        // Draw background
+        ctx.fillStyle = 'oklch(0.10 0 0)';
+        ctx.fillRect(0, 0, width, height);
+
+        // Draw and move nebulas
+        ctx.globalCompositeOperation = 'lighter';
+        nebulas.forEach(nebula => {
+            const gradient = ctx.createRadialGradient(nebula.x, nebula.y, 0, nebula.x, nebula.y, nebula.radius);
+            gradient.addColorStop(0, nebula.color1);
+            gradient.addColorStop(1, nebula.color2);
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, width, height);
+            
+            nebula.x += nebula.vx;
+            nebula.y += nebula.vy;
+            if (nebula.x - nebula.radius > width) nebula.x = -nebula.radius;
+            if (nebula.x + nebula.radius < 0) nebula.x = width + nebula.radius;
+            if (nebula.y - nebula.radius > height) nebula.y = -nebula.radius;
+            if (nebula.y + nebula.radius < 0) nebula.y = height + nebula.radius;
+        });
+        ctx.globalCompositeOperation = 'source-over';
+
+
+        ctx.save();
+        ctx.translate(width / 2, height / 2);
+
+        for (let i = 0; i < numStars; i++) {
+            const star = stars[i];
+            
+            star.z -= speed;
+
+            if (star.z <= 0) {
+                star.x = Math.random() * width - width / 2;
+                star.y = Math.random() * height - height / 2;
+                star.z = width;
+            }
+            
+            const k = 128.0 / star.z;
+            const px = star.x * k;
+            const py = star.y * k;
+
+            const size = (1 - star.z / width) * 4;
+            
+            ctx.fillStyle = star.color;
+            ctx.beginPath();
+            ctx.arc(px, py, size / 2, 0, 2 * Math.PI);
+            ctx.fill();
+        }
+
+        ctx.restore();
+        animationFrameId = requestAnimationFrame(animate);
+    };
+
+    const handleResize = () => {
+        width = window.innerWidth;
+        height = window.innerHeight;
+        canvas.width = width;
+        canvas.height = height;
+        initStars();
+        // Reset nebula positions on resize
+        nebulas[0].x = width * 0.2; nebulas[0].y = height * 0.3; nebulas[0].radius = width * 0.4;
+        nebulas[1].x = width * 0.8; nebulas[1].y = height * 0.7; nebulas[1].radius = width * 0.5;
+        nebulas[2].x = width * 0.5; nebulas[2].y = height * 0.9; nebulas[2].radius = width * 0.3;
+    };
+    
+    window.addEventListener('resize', handleResize);
+    animate();
+
+    return () => {
+        window.removeEventListener('resize', handleResize);
+        cancelAnimationFrame(animationFrameId);
+    };
+  }, []);
 
 
   const handleRequestSplitterSpecChange = useCallback((spec: string) => {
@@ -612,7 +729,7 @@ const App: React.FC = () => {
 
   return (
     <>
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4 sm:p-8 transition-all duration-300">
+      <div className="min-h-screen bg-transparent flex flex-col items-center justify-center p-4 sm:p-8 transition-all duration-300">
         <div className="w-full max-w-3xl bg-surface shadow-2xl rounded-lg p-6 sm:p-10">
           <header className="mb-6 text-center">
             <h1 className="text-3xl sm:text-4xl font-bold text-text-primary">
@@ -641,14 +758,14 @@ const App: React.FC = () => {
                     placeholder="Search formats by name or tag (e.g., table, project)..."
                     value={summarySearchTerm}
                     onChange={(e) => setSummarySearchTerm(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-700 border border-border-color rounded-md shadow-sm focus:ring-primary focus:border-primary text-text-primary placeholder-slate-500 text-sm mb-2"
+                    className="w-full px-3 py-2 bg-input border border-border-color rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-ring text-text-primary placeholder-text-secondary text-sm mb-2"
                     aria-controls="summaryFormatSelect"
                   />
                   <select
                     id="summaryFormatSelect"
                     value={summaryFormat}
                     onChange={(e) => setSummaryFormat(e.target.value as SummaryFormat)}
-                    className="w-full px-3 py-2 bg-slate-700 border border-border-color rounded-md shadow-sm focus:ring-primary focus:border-primary text-text-primary placeholder-slate-500 text-sm"
+                    className="w-full px-3 py-2 bg-input border border-border-color rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-ring text-text-primary placeholder-text-secondary text-sm"
                   >
                     {filteredSummaryFormats.length > 0 ? (
                         filteredSummaryFormats.map(format => (
@@ -672,7 +789,7 @@ const App: React.FC = () => {
                       value={summaryTextInput}
                       onChange={(e) => handleSummaryTextChange(e.target.value)}
                       placeholder="Paste your transcript or document content here..."
-                      className="w-full px-3 py-2 bg-slate-900 border border-border-color rounded-md shadow-sm focus:ring-primary focus:border-primary text-text-primary placeholder-slate-500 text-sm"
+                      className="w-full px-3 py-2 bg-input border border-border-color rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-ring text-text-primary placeholder-text-secondary text-sm"
                   />
               </div>
               <HierarchicalToggle enabled={useHierarchical} onChange={setUseHierarchical} />
@@ -731,7 +848,7 @@ const App: React.FC = () => {
                 value={styleTarget}
                 onChange={(e) => setStyleTarget(e.target.value)}
                 placeholder='e.g., Narrator, "John Doe", or leave blank for overall style'
-                className="w-full px-3 py-2 bg-slate-700 border border-border-color rounded-md shadow-sm focus:ring-primary focus:border-primary text-text-primary placeholder-slate-500 text-sm"
+                className="w-full px-3 py-2 bg-input border border-border-color rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-ring text-text-primary placeholder-text-secondary text-sm"
                 aria-describedby="styleTargetDescription"
               />
               <p id="styleTargetDescription" className="mt-1 text-xs text-text-secondary">
@@ -752,7 +869,7 @@ const App: React.FC = () => {
                   value={rewriteStyle}
                   onChange={(e) => setRewriteStyle(e.target.value)}
                   placeholder="e.g., A witty, informal blog post; a formal, academic paper; a thrilling short story..."
-                  className="w-full px-3 py-2 bg-slate-700 border border-border-color rounded-md shadow-sm focus:ring-primary focus:border-primary text-text-primary placeholder-slate-500 text-sm"
+                  className="w-full px-3 py-2 bg-input border border-border-color rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-ring text-text-primary placeholder-text-secondary text-sm"
                 />
               </div>
               <div>
@@ -765,24 +882,24 @@ const App: React.FC = () => {
                   value={rewriteInstructions}
                   onChange={(e) => setRewriteInstructions(e.target.value)}
                   placeholder="e.g., The target audience is children. Focus on the emotional journey. End with a surprising twist."
-                  className="w-full px-3 py-2 bg-slate-700 border border-border-color rounded-md shadow-sm focus:ring-primary focus:border-primary text-text-primary placeholder-slate-500 text-sm"
+                  className="w-full px-3 py-2 bg-input border border-border-color rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-ring text-text-primary placeholder-text-secondary text-sm"
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-text-secondary mb-2">
                   Desired Length:
                 </label>
-                <div className="flex items-center space-x-2 bg-slate-700 rounded-lg p-1" role="radiogroup">
+                <div className="flex items-center space-x-2 bg-secondary rounded-lg p-1" role="radiogroup">
                   {(['short', 'medium', 'long'] as RewriteLength[]).map(len => (
                     <button
                       key={len}
                       onClick={() => setRewriteLength(len)}
                       role="radio"
                       aria-checked={rewriteLength === len}
-                      className={`flex-1 py-1.5 text-sm rounded-md transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-slate-700 ${
+                      className={`flex-1 py-1.5 text-sm rounded-md transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-secondary ${
                         rewriteLength === len
-                          ? 'bg-primary text-white font-semibold shadow'
-                          : 'text-text-secondary hover:bg-slate-600'
+                          ? 'bg-primary text-primary-foreground font-semibold shadow'
+                          : 'text-text-secondary hover:bg-muted'
                       }`}
                     >
                       {len.charAt(0).toUpperCase() + len.slice(1)}
@@ -802,7 +919,7 @@ const App: React.FC = () => {
               <button
                 onClick={handleSubmit}
                 disabled={appState === 'processing'}
-                className="px-8 py-3 bg-primary text-white font-semibold rounded-lg hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-surface text-lg"
+                className="px-8 py-3 bg-primary text-primary-foreground font-semibold rounded-lg hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-surface text-lg"
                 aria-live="polite"
               >
                 {appState === 'processing' ? 'Processing...' : buttonText[activeMode]}
@@ -852,7 +969,7 @@ const App: React.FC = () => {
                     {nextStepSuggestions.map((suggestion, index) => (
                       <li 
                         key={index} 
-                        className="p-3 bg-slate-800 border border-slate-700 rounded-md text-sm text-text-secondary shadow hover:bg-slate-700/80 transition-all duration-150 ease-in-out"
+                        className="p-3 bg-secondary border border-border rounded-md text-sm text-text-secondary shadow hover:bg-muted transition-all duration-150 ease-in-out"
                         role="listitem"
                       >
                         <span className="text-primary mr-2 select-none" aria-hidden="true">&#8227;</span>{/* Bullet point */}
@@ -871,7 +988,7 @@ const App: React.FC = () => {
               <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <button
                       onClick={handleReset}
-                      className="w-full px-6 py-3 bg-secondary text-text-primary font-semibold rounded-lg hover:bg-slate-600 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-secondary focus:ring-offset-2 focus:ring-offset-surface flex items-center justify-center gap-2"
+                      className="w-full px-6 py-3 bg-secondary text-text-primary font-semibold rounded-lg hover:bg-muted transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-surface flex items-center justify-center gap-2"
                   >
                       {resetButtonText[activeMode]}
                   </button>
@@ -879,14 +996,14 @@ const App: React.FC = () => {
                       <div className="grid grid-cols-2 gap-2">
                           <button
                               onClick={() => downloadReasoningArtifact('md')}
-                              className="w-full px-4 py-3 bg-primary text-white font-semibold rounded-lg hover:bg-primary-hover transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-surface flex items-center justify-center gap-2 text-sm"
+                              className="w-full px-4 py-3 bg-primary text-primary-foreground font-semibold rounded-lg hover:bg-primary-hover transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-surface flex items-center justify-center gap-2 text-sm"
                           >
                               <DownloadIcon className="w-5 h-5" />
                               Final (.md)
                           </button>
                           <button
                               onClick={() => downloadReasoningArtifact('json')}
-                              className="w-full px-4 py-3 bg-sky-700 text-white font-semibold rounded-lg hover:bg-sky-600 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 focus:ring-offset-surface flex items-center justify-center gap-2 text-sm"
+                              className="w-full px-4 py-3 bg-accent text-accent-foreground font-semibold rounded-lg hover:bg-accent/80 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-surface flex items-center justify-center gap-2 text-sm"
                           >
                               <DownloadIcon className="w-5 h-5" />
                               Trace (.json)
@@ -896,14 +1013,14 @@ const App: React.FC = () => {
                      <div className="grid grid-cols-2 gap-2">
                           <button
                               onClick={() => downloadScaffoldArtifact('script')}
-                              className="w-full px-4 py-3 bg-primary text-white font-semibold rounded-lg hover:bg-primary-hover transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-surface flex items-center justify-center gap-2 text-sm"
+                              className="w-full px-4 py-3 bg-primary text-primary-foreground font-semibold rounded-lg hover:bg-primary-hover transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-surface flex items-center justify-center gap-2 text-sm"
                           >
                               <DownloadIcon className="w-5 h-5" />
                               Script
                           </button>
                           <button
                               onClick={() => downloadScaffoldArtifact('plan')}
-                              className="w-full px-4 py-3 bg-sky-700 text-white font-semibold rounded-lg hover:bg-sky-600 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 focus:ring-offset-surface flex items-center justify-center gap-2 text-sm"
+                              className="w-full px-4 py-3 bg-accent text-accent-foreground font-semibold rounded-lg hover:bg-accent/80 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-surface flex items-center justify-center gap-2 text-sm"
                           >
                               <DownloadIcon className="w-5 h-5" />
                               Plan (.json)
@@ -913,14 +1030,14 @@ const App: React.FC = () => {
                      <div className="grid grid-cols-2 gap-2">
                           <button
                               onClick={() => downloadRequestSplitterArtifact('md')}
-                              className="w-full px-4 py-3 bg-primary text-white font-semibold rounded-lg hover:bg-primary-hover transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-surface flex items-center justify-center gap-2 text-sm"
+                              className="w-full px-4 py-3 bg-primary text-primary-foreground font-semibold rounded-lg hover:bg-primary-hover transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-surface flex items-center justify-center gap-2 text-sm"
                           >
                               <DownloadIcon className="w-5 h-5" />
                               Prompts (.md)
                           </button>
                           <button
                               onClick={() => downloadRequestSplitterArtifact('json')}
-                              className="w-full px-4 py-3 bg-sky-700 text-white font-semibold rounded-lg hover:bg-sky-600 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 focus:ring-offset-surface flex items-center justify-center gap-2 text-sm"
+                              className="w-full px-4 py-3 bg-accent text-accent-foreground font-semibold rounded-lg hover:bg-accent/80 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-surface flex items-center justify-center gap-2 text-sm"
                           >
                               <DownloadIcon className="w-5 h-5" />
                               Plan (.json)
@@ -930,14 +1047,14 @@ const App: React.FC = () => {
                      <div className="grid grid-cols-2 gap-2">
                           <button
                               onClick={() => downloadPromptEnhancerArtifact('md')}
-                              className="w-full px-4 py-3 bg-primary text-white font-semibold rounded-lg hover:bg-primary-hover transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-surface flex items-center justify-center gap-2 text-sm"
+                              className="w-full px-4 py-3 bg-primary text-primary-foreground font-semibold rounded-lg hover:bg-primary-hover transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-surface flex items-center justify-center gap-2 text-sm"
                           >
                               <DownloadIcon className="w-5 h-5" />
                               Prompt (.md)
                           </button>
                           <button
                               onClick={() => downloadPromptEnhancerArtifact('json')}
-                              className="w-full px-4 py-3 bg-sky-700 text-white font-semibold rounded-lg hover:bg-sky-600 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 focus:ring-offset-surface flex items-center justify-center gap-2 text-sm"
+                              className="w-full px-4 py-3 bg-accent text-accent-foreground font-semibold rounded-lg hover:bg-accent/80 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-surface flex items-center justify-center gap-2 text-sm"
                           >
                               <DownloadIcon className="w-5 h-5" />
                               Data (.json)
@@ -947,14 +1064,14 @@ const App: React.FC = () => {
                      <div className="grid grid-cols-2 gap-2">
                           <button
                               onClick={() => downloadAgentDesignerArtifact('md')}
-                              className="w-full px-4 py-3 bg-primary text-white font-semibold rounded-lg hover:bg-primary-hover transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-surface flex items-center justify-center gap-2 text-sm"
+                              className="w-full px-4 py-3 bg-primary text-primary-foreground font-semibold rounded-lg hover:bg-primary-hover transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-surface flex items-center justify-center gap-2 text-sm"
                           >
                               <DownloadIcon className="w-5 h-5" />
                               Design (.md)
                           </button>
                           <button
                               onClick={() => downloadAgentDesignerArtifact('json')}
-                              className="w-full px-4 py-3 bg-sky-700 text-white font-semibold rounded-lg hover:bg-sky-600 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 focus:ring-offset-surface flex items-center justify-center gap-2 text-sm"
+                              className="w-full px-4 py-3 bg-accent text-accent-foreground font-semibold rounded-lg hover:bg-accent/80 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-surface flex items-center justify-center gap-2 text-sm"
                           >
                               <DownloadIcon className="w-5 h-5" />
                               Plan (.json)
@@ -963,7 +1080,7 @@ const App: React.FC = () => {
                   ) : (
                       <button
                           onClick={() => setIsReportModalOpen(true)}
-                          className="w-full px-6 py-3 bg-primary text-white font-semibold rounded-lg hover:bg-primary-hover transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-surface flex items-center justify-center gap-2"
+                          className="w-full px-6 py-3 bg-primary text-primary-foreground font-semibold rounded-lg hover:bg-primary-hover transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-surface flex items-center justify-center gap-2"
                       >
                           <DownloadIcon className="w-5 h-5" />
                           Download Report

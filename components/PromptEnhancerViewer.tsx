@@ -1,3 +1,5 @@
+
+
 import React, { useState, useEffect, useRef } from 'react';
 import type { PromptEnhancerOutput } from '../types';
 
@@ -48,12 +50,12 @@ export const PromptEnhancerViewer: React.FC<{ output: PromptEnhancerOutput }> = 
                 
                 <div className="p-1">
                     {activeTab === 'markdown' && (
-                        <div ref={markdownRef} className="p-4 bg-slate-800 rounded-lg max-h-[60vh] overflow-y-auto shadow-inner prose prose-sm prose-invert max-w-none">
+                        <div ref={markdownRef} className="p-4 bg-secondary rounded-lg max-h-[60vh] overflow-y-auto shadow-inner prose prose-sm prose-invert max-w-none">
                             {/* Content rendered by useEffect */}
                         </div>
                     )}
                     {activeTab === 'json' && (
-                         <div className="p-4 bg-slate-900 rounded-lg max-h-[60vh] overflow-y-auto shadow-inner">
+                         <div className="p-4 bg-background rounded-lg max-h-[60vh] overflow-y-auto shadow-inner">
                             <pre className="text-xs whitespace-pre-wrap text-slate-300">
                                 <code>{JSON.stringify(output.enhancedPromptJson, null, 2)}</code>
                             </pre>

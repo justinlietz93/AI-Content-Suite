@@ -5,6 +5,9 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Technical Transcript Summarizer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono&family=Merriweather&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
     <!-- Additions for report generation -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -46,15 +49,52 @@
       tailwind.config = {
         theme: {
           extend: {
+            fontFamily: {
+              sans: ['Inter', 'system-ui', '-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', 'sans-serif'],
+              serif: ['Merriweather', 'Georgia', 'serif'],
+              mono: ['"JetBrains Mono"', 'Consolas', 'Monaco', '"Courier New"', 'monospace'],
+            },
+            borderRadius: {
+              'sm': 'calc(0.5rem - 4px)',
+              'md': 'calc(0.5rem - 2px)',
+              'lg': '0.5rem',
+              'xl': 'calc(0.5rem + 4px)',
+            },
+            boxShadow: {
+              '2xs': '0 1px 2px 0 rgba(0, 0, 0, 0.3)',
+              'xs': '0 1px 3px 0 rgba(0, 0, 0, 0.4)',
+              'sm': '0 2px 4px -1px rgba(0, 0, 0, 0.5)',
+              'DEFAULT': '0 4px 6px -1px rgba(0, 0, 0, 0.5)',
+              'md': '0 6px 8px -2px rgba(0, 0, 0, 0.6)',
+              'lg': '0 10px 15px -3px rgba(0, 0, 0, 0.7)',
+              'xl': '0 20px 25px -5px rgba(0, 0, 0, 0.8)',
+              '2xl': '0 25px 50px -12px rgba(0, 0, 0, 0.9)',
+            },
             colors: {
-              'primary': '#0284c7', // sky-600
-              'primary-hover': '#0369a1', // sky-700
-              'secondary': '#334155', // slate-700
-              'background': '#0f172a', // slate-900
-              'surface': '#1e293b', // slate-800
-              'text-primary': '#f1f5f9', // slate-100
-              'text-secondary': '#94a3b8', // slate-400
-              'border-color': '#334155', // slate-700
+              'primary': 'oklch(0.65 0.15 220)',
+              'primary-hover': 'oklch(0.60 0.15 220)',
+              'primary-foreground': 'oklch(0.10 0 0)',
+              'secondary': 'oklch(0.20 0 0)',
+              'secondary-foreground': 'oklch(0.90 0 0)',
+              'background': 'oklch(0.10 0 0)',
+              'surface': 'oklch(0.15 0 0 / 0.85)',
+              'text-primary': 'oklch(0.95 0 0)',
+              'text-secondary': 'oklch(0.60 0 0)',
+              'border-color': 'oklch(0.25 0 0)',
+              'destructive': 'oklch(0.50 0.20 25)',
+              'ring': 'oklch(0.65 0.15 220)',
+              'card': 'oklch(0.15 0 0)',
+              'foreground': 'oklch(0.95 0 0)',
+              'card-foreground': 'oklch(0.95 0 0)',
+              'popover': 'oklch(0.18 0 0)',
+              'popover-foreground': 'oklch(0.95 0 0)',
+              'muted': 'oklch(0.25 0 0)',
+              'muted-foreground': 'oklch(0.60 0 0)',
+              'accent': 'oklch(0.55 0.12 180)',
+              'accent-foreground': 'oklch(0.95 0 0)',
+              'destructive-foreground': 'oklch(0.95 0 0)',
+              'border': 'oklch(0.25 0 0)',
+              'input': 'oklch(0.23 0 0)',
             },
             keyframes: {
               'fade-in-scale': {
@@ -82,7 +122,8 @@
 }
 </script>
 </head>
-  <body class="bg-background text-text-primary">
+  <body class="text-text-primary font-sans">
+    <canvas id="space-background" class="fixed top-0 left-0 w-full h-full -z-10"></canvas>
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
   </body>

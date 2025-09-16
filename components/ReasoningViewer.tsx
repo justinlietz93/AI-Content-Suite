@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useRef } from 'react';
 import type { ReasoningOutput, ReasoningTree, ReasoningNode, ReasoningNodeType } from '../types';
 
@@ -152,19 +153,19 @@ export const ReasoningViewer: React.FC<{ output: ReasoningOutput }> = ({ output 
                 
                 <div className="p-1">
                     {activeTab === 'response' && (
-                        <div ref={responseRef} className="p-4 bg-slate-800 rounded-lg max-h-[32rem] overflow-y-auto shadow-inner prose prose-sm prose-invert max-w-none">
+                        <div ref={responseRef} className="p-4 bg-secondary rounded-lg max-h-[32rem] overflow-y-auto shadow-inner prose prose-sm prose-invert max-w-none">
                             {/* Content rendered by useEffect */}
                         </div>
                     )}
                     {activeTab === 'graph' && (
-                        <div className="p-4 bg-slate-900 rounded-lg min-h-[24rem] h-[60vh] overflow-hidden shadow-inner flex justify-center items-center">
+                        <div className="p-4 bg-background rounded-lg min-h-[24rem] h-[60vh] overflow-hidden shadow-inner flex justify-center items-center">
                             <div ref={mermaidContainerRef} className="w-full h-full cursor-move">
                                 {/* Mermaid SVG rendered here */}
                             </div>
                         </div>
                     )}
                     {activeTab === 'trace' && (
-                         <div className="p-4 bg-slate-900 rounded-lg max-h-[32rem] overflow-y-auto shadow-inner">
+                         <div className="p-4 bg-background rounded-lg max-h-[32rem] overflow-y-auto shadow-inner">
                             <pre className="text-xs whitespace-pre-wrap text-slate-300">
                                 <code>{JSON.stringify(output.reasoningTreeJson, null, 2)}</code>
                             </pre>

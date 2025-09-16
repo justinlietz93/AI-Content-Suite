@@ -63,7 +63,7 @@ export const Tabs: React.FC<TabsProps> = ({ tabs, activeTabId, onTabChange }) =>
     <div className="relative">
       {canScrollLeft && (
         <div className="absolute left-0 top-0 bottom-0 flex items-center bg-gradient-to-r from-surface to-transparent pr-8 z-10">
-          <button onClick={() => scroll('left')} className="p-1 rounded-full bg-slate-700/80 hover:bg-slate-600 text-white transition-colors" aria-label="Scroll left">
+          <button onClick={() => scroll('left')} className="p-1 rounded-full bg-secondary/80 hover:bg-muted text-white transition-colors" aria-label="Scroll left">
             <ChevronLeftIcon className="w-5 h-5" />
           </button>
         </div>
@@ -88,7 +88,7 @@ export const Tabs: React.FC<TabsProps> = ({ tabs, activeTabId, onTabChange }) =>
               ${
                 activeTabId === tab.id
                   ? 'border-b-2 border-primary text-primary'
-                  : 'text-text-secondary hover:text-text-primary hover:border-b-2 hover:border-slate-500'
+                  : 'text-text-secondary hover:text-text-primary hover:border-b-2 hover:border-muted-foreground'
               }
             `}
           >
@@ -98,7 +98,7 @@ export const Tabs: React.FC<TabsProps> = ({ tabs, activeTabId, onTabChange }) =>
       </div>
        {canScrollRight && (
         <div className="absolute right-0 top-0 bottom-0 flex items-center bg-gradient-to-l from-surface to-transparent pl-8 z-10">
-          <button onClick={() => scroll('right')} className="p-1 rounded-full bg-slate-700/80 hover:bg-slate-600 text-white transition-colors" aria-label="Scroll right">
+          <button onClick={() => scroll('right')} className="p-1 rounded-full bg-secondary/80 hover:bg-muted text-white transition-colors" aria-label="Scroll right">
             <ChevronRightIcon className="w-5 h-5" />
           </button>
         </div>

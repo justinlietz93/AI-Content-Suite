@@ -1,4 +1,5 @@
 
+
 import React, { MouseEvent } from 'react';
 import { generateReport } from '../services/reportGenerator';
 import type { ProcessedOutput, Mode } from '../types';
@@ -69,7 +70,7 @@ export const ReportModal: React.FC<ReportModalProps> = ({ isOpen, onClose, outpu
                 </button>
                 <button
                     onClick={() => handleDownload('md')}
-                    className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-secondary text-text-primary font-semibold rounded-lg hover:bg-slate-600 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-secondary focus:ring-offset-2 focus:ring-offset-surface"
+                    className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-secondary text-text-primary font-semibold rounded-lg hover:bg-muted transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-secondary focus:ring-offset-2 focus:ring-offset-surface"
                 >
                     <DownloadIcon className="w-5 h-5" />
                     <span>Download as Markdown (.md)</span>

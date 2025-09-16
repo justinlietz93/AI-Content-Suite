@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useRef } from 'react';
 import type { AgentDesignerOutput } from '../types';
 
@@ -96,19 +97,19 @@ export const AgentDesignerViewer: React.FC<{ output: AgentDesignerOutput }> = ({
                 
                 <div className="p-1">
                     {activeTab === 'markdown' && (
-                        <div ref={markdownRef} className="p-4 bg-slate-800 rounded-lg max-h-[60vh] overflow-y-auto shadow-inner prose prose-sm prose-invert max-w-none">
+                        <div ref={markdownRef} className="p-4 bg-secondary rounded-lg max-h-[60vh] overflow-y-auto shadow-inner prose prose-sm prose-invert max-w-none">
                             {/* Content rendered by useEffect */}
                         </div>
                     )}
                     {activeTab === 'diagram' && (
-                        <div className="p-4 bg-slate-900 rounded-lg min-h-[60vh] overflow-hidden shadow-inner flex justify-center items-center">
+                        <div className="p-4 bg-background rounded-lg min-h-[60vh] overflow-hidden shadow-inner flex justify-center items-center">
                             <div ref={mermaidContainerRef} className="w-full h-full cursor-move">
                                 {/* Mermaid SVG rendered here */}
                             </div>
                         </div>
                     )}
                     {activeTab === 'plan' && (
-                         <div className="p-4 bg-slate-900 rounded-lg max-h-[60vh] overflow-y-auto shadow-inner">
+                         <div className="p-4 bg-background rounded-lg max-h-[60vh] overflow-y-auto shadow-inner">
                             <pre className="text-xs whitespace-pre-wrap text-slate-300">
                                 <code>{JSON.stringify(output.designPlanJson, null, 2)}</code>
                             </pre>

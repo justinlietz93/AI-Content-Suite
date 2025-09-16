@@ -1,3 +1,5 @@
+
+
 import React, { useState, useEffect, useRef, useLayoutEffect, useMemo } from 'react';
 import type { RequestSplitterOutput, SplitPlanPrompt } from '../types';
 
@@ -128,7 +130,7 @@ const CustomGraphViewer: React.FC<{ prompts: SplitPlanPrompt[] }> = ({ prompts }
                                             nodeRefs.current.delete(id);
                                         }
                                     }}
-                                    className="bg-surface border-2 border-primary rounded-lg p-3 w-full max-w-xs text-center shadow-lg transition-transform hover:scale-105"
+                                    className="bg-secondary border-2 border-primary rounded-lg p-3 w-full max-w-xs text-center shadow-lg transition-transform hover:scale-105"
                                 >
                                     <span className="block text-xs font-mono text-sky-400 mb-1 tracking-wider">[#{prompt.id.toString().padStart(2, '0')}]</span>
                                     <h3 className="text-sm font-semibold text-text-primary">{prompt.title}</h3>
@@ -189,12 +191,12 @@ export const RequestSplitterViewer: React.FC<{ output: RequestSplitterOutput }> 
                 
                 <div className="p-1">
                     {activeTab === 'prompts' && (
-                        <div ref={promptsRef} className="p-4 bg-slate-800 rounded-lg max-h-[60vh] overflow-y-auto shadow-inner prose prose-sm prose-invert max-w-none">
+                        <div ref={promptsRef} className="p-4 bg-secondary rounded-lg max-h-[60vh] overflow-y-auto shadow-inner prose prose-sm prose-invert max-w-none">
                             {/* Content rendered by useEffect */}
                         </div>
                     )}
                     {activeTab === 'visual' && (
-                        <div className="bg-slate-900 rounded-lg max-h-[60vh] overflow-auto shadow-inner">
+                        <div className="bg-background rounded-lg max-h-[60vh] overflow-auto shadow-inner">
                            {output.splitPlanJson.prompts && output.splitPlanJson.prompts.length > 0 ? (
                                 <CustomGraphViewer prompts={output.splitPlanJson.prompts} />
                            ) : (
@@ -205,7 +207,7 @@ export const RequestSplitterViewer: React.FC<{ output: RequestSplitterOutput }> 
                         </div>
                     )}
                     {activeTab === 'raw' && (
-                         <div className="p-4 bg-slate-900 rounded-lg max-h-[60vh] overflow-y-auto shadow-inner">
+                         <div className="p-4 bg-background rounded-lg max-h-[60vh] overflow-y-auto shadow-inner">
                             <pre className="text-xs whitespace-pre-wrap text-slate-300">
                                 <code>{JSON.stringify(output.splitPlanJson, null, 2)}</code>
                             </pre>

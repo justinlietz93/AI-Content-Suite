@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useRef } from 'react';
 import type { ScaffolderOutput, ScaffoldPlan, ScaffoldTreeItem, ScaffoldTask } from '../types';
 import { ChevronRightIcon } from './icons/ChevronRightIcon';
@@ -54,7 +55,7 @@ const FileTreeNode: React.FC<FileTreeNodeProps> = ({ path, children, level }) =>
     return (
         <div>
             <div
-                className={`flex items-center p-1 rounded cursor-pointer hover:bg-slate-700 ${isDirectory ? '' : 'text-sky-300'}`}
+                className={`flex items-center p-1 rounded cursor-pointer hover:bg-muted ${isDirectory ? '' : 'text-sky-300'}`}
                 style={{ paddingLeft: `${level * 1.25}rem` }}
                 onClick={() => isDirectory && setIsOpen(!isOpen)}
             >
@@ -88,7 +89,7 @@ const buildFileTree = (files: ScaffoldTreeItem[], onFileClick: (file: ScaffoldTr
             if (value.__file) { // It's a file
                 return (
                      <div key={currentPath} style={{ paddingLeft: `${level * 1.25}rem` }} 
-                        className="flex items-center p-1 rounded cursor-pointer hover:bg-slate-700 text-sky-300"
+                        className="flex items-center p-1 rounded cursor-pointer hover:bg-muted text-sky-300"
                         onClick={() => onFileClick(value.__file)}
                      >
                         <span className="truncate">{key}</span>
@@ -160,10 +161,10 @@ export const ScaffolderViewer: React.FC<{ output: ScaffolderOutput }> = ({ outpu
                 <div className="p-1">
                     {activeTab === 'tree' && (
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 min-h-[60vh]">
-                            <div className="md:col-span-1 bg-slate-900 rounded-lg p-2 max-h-[60vh] overflow-y-auto">
+                            <div className="md:col-span-1 bg-background rounded-lg p-2 max-h-[60vh] overflow-y-auto">
                                 {buildFileTree(output.scaffoldPlanJson.tree, setSelectedFile)}
                             </div>
-                            <div className="md:col-span-2 bg-slate-800 rounded-lg p-4 max-h-[60vh] overflow-y-auto shadow-inner">
+                            <div className="md:col-span-2 bg-secondary rounded-lg p-4 max-h-[60vh] overflow-y-auto shadow-inner">
                                 {selectedFile ? (
                                     <>
                                         <h3 className="font-mono text-sm text-sky-300 break-all">{selectedFile.path}</h3>
@@ -176,9 +177,9 @@ export const ScaffolderViewer: React.FC<{ output: ScaffolderOutput }> = ({ outpu
                             </div>
                         </div>
                     )}
-                    {activeTab === 'graph' && (<div className="p-4 bg-slate-900 rounded-lg min-h-[60vh] overflow-hidden shadow-inner flex justify-center items-center"><div ref={mermaidContainerRef} className="w-full h-full cursor-move"></div></div>)}
-                    {activeTab === 'plan' && (<div className="p-4 bg-slate-900 rounded-lg max-h-[60vh] overflow-y-auto shadow-inner"><pre className="text-xs whitespace-pre-wrap text-slate-300"><code>{JSON.stringify(output.scaffoldPlanJson, null, 2)}</code></pre></div>)}
-                    {activeTab === 'script' && (<div className="p-4 bg-slate-900 rounded-lg max-h-[60vh] overflow-y-auto shadow-inner"><pre className="text-xs whitespace-pre-wrap text-slate-300"><code>{output.scaffoldScript}</code></pre></div>)}
+                    {activeTab === 'graph' && (<div className="p-4 bg-background rounded-lg min-h-[60vh] overflow-hidden shadow-inner flex justify-center items-center"><div ref={mermaidContainerRef} className="w-full h-full cursor-move"></div></div>)}
+                    {activeTab === 'plan' && (<div className="p-4 bg-background rounded-lg max-h-[60vh] overflow-y-auto shadow-inner"><pre className="text-xs whitespace-pre-wrap text-slate-300"><code>{JSON.stringify(output.scaffoldPlanJson, null, 2)}</code></pre></div>)}
+                    {activeTab === 'script' && (<div className="p-4 bg-background rounded-lg max-h-[60vh] overflow-y-auto shadow-inner"><pre className="text-xs whitespace-pre-wrap text-slate-300"><code>{output.scaffoldScript}</code></pre></div>)}
                 </div>
 
             </div>

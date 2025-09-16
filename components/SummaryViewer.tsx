@@ -1,4 +1,5 @@
 
+
 import React, { useEffect, useRef } from 'react';
 import type { SummaryOutput, StyleModelOutput, ProcessedOutput, Highlight, Mode, RewriterOutput, MathFormatterOutput } from '../types';
 
@@ -18,7 +19,7 @@ interface SummaryViewerProps {
 }
 
 const HighlightItem: React.FC<{ highlight: Highlight }> = ({ highlight }) => (
-  <li className="p-3 bg-slate-700 rounded-md shadow hover:shadow-lg transition-shadow duration-150">
+  <li className="p-3 bg-secondary rounded-md shadow hover:shadow-lg transition-shadow duration-150">
     <p className="text-text-primary text-sm">{highlight.text}</p>
     {highlight.relevance && (
       <p className="text-xs text-sky-400 mt-1">Relevance: {(highlight.relevance * 100).toFixed(0)}%</p>
@@ -179,13 +180,13 @@ export const SummaryViewer: React.FC<SummaryViewerProps> = ({ output, mode }) =>
           </div>
           {isMarkdownSummary ? (
              <div 
-                className="p-4 bg-slate-800 rounded-lg max-h-96 overflow-y-auto shadow-inner prose prose-sm prose-invert max-w-none" 
+                className="p-4 bg-secondary rounded-lg max-h-96 overflow-y-auto shadow-inner prose prose-sm prose-invert max-w-none" 
                 ref={summaryContentRef}
               >
                 {/* Content is rendered here by the useEffect hook */}
               </div>
           ) : (
-             <div className="p-4 bg-slate-800 rounded-lg max-h-96 overflow-y-auto shadow-inner">
+             <div className="p-4 bg-secondary rounded-lg max-h-96 overflow-y-auto shadow-inner">
                 {techOutput.finalSummary && techOutput.finalSummary.trim() !== '' ? (
                   <p className="text-text-primary whitespace-pre-wrap text-sm leading-relaxed">{techOutput.finalSummary}</p>
                 ) : (
@@ -207,7 +208,7 @@ export const SummaryViewer: React.FC<SummaryViewerProps> = ({ output, mode }) =>
                 Copy Diagram Code
               </button>
             </div>
-            <div className="p-4 bg-slate-800 rounded-lg min-h-[24rem] h-[50vh] overflow-hidden shadow-inner flex justify-center items-center">
+            <div className="p-4 bg-secondary rounded-lg min-h-[24rem] h-[50vh] overflow-hidden shadow-inner flex justify-center items-center">
               <div ref={mermaidContainerRef} className="w-full h-full cursor-move">
                 {/* Mermaid SVG is rendered here by the useEffect hook */}
               </div>
@@ -257,7 +258,7 @@ export const SummaryViewer: React.FC<SummaryViewerProps> = ({ output, mode }) =>
               Copy Style Model
             </button>
           </div>
-          <div className="p-4 bg-slate-800 rounded-lg max-h-[32rem] overflow-y-auto shadow-inner">
+          <div className="p-4 bg-secondary rounded-lg max-h-[32rem] overflow-y-auto shadow-inner">
             <p className="text-text-primary whitespace-pre-wrap text-sm leading-relaxed">{styleOutput.styleDescription}</p>
           </div>
         </div>
@@ -289,7 +290,7 @@ export const SummaryViewer: React.FC<SummaryViewerProps> = ({ output, mode }) =>
             </button>
           </div>
           <div 
-            className="p-4 bg-slate-800 rounded-lg max-h-[32rem] overflow-y-auto shadow-inner prose prose-sm prose-invert max-w-none" 
+            className="p-4 bg-secondary rounded-lg max-h-[32rem] overflow-y-auto shadow-inner prose prose-sm prose-invert max-w-none" 
             ref={contentRef}
           >
             {/* Content is rendered here by the useEffect hook */}

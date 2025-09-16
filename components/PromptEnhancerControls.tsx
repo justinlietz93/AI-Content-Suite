@@ -1,3 +1,6 @@
+
+
+
 import React from 'react';
 import type { PromptEnhancerSettings, PromptEnhancerTemplate } from '../types';
 import { PROMPT_ENHANCER_TEMPLATE_OPTIONS } from '../data/promptEnhancerTemplates';
@@ -28,7 +31,7 @@ export const PromptEnhancerControls: React.FC<PromptEnhancerControlsProps> = ({ 
                     value={settings.rawPrompt}
                     onChange={(e) => handleSettingChange('rawPrompt', e.target.value)}
                     placeholder="Paste your raw request, notes, or shorthand here... (e.g., 'fix the login timeout bug')"
-                    className="w-full px-3 py-2 bg-slate-900 border border-border-color rounded-md shadow-sm focus:ring-primary focus:border-primary text-text-primary placeholder-slate-500 text-sm"
+                    className="w-full px-3 py-2 bg-input border border-border-color rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-ring text-text-primary placeholder-text-secondary text-sm"
                 />
             </div>
 
@@ -38,7 +41,7 @@ export const PromptEnhancerControls: React.FC<PromptEnhancerControlsProps> = ({ 
                     id="template-selector" 
                     value={settings.template} 
                     onChange={e => handleSettingChange('template', e.target.value as PromptEnhancerTemplate)} 
-                    className="w-full px-3 py-2 bg-slate-700 border-border-color rounded-md text-sm"
+                    className="w-full px-3 py-2 bg-input border border-border-color rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                     aria-describedby="template-description"
                 >
                     {PROMPT_ENHANCER_TEMPLATE_OPTIONS.map(opt => (
