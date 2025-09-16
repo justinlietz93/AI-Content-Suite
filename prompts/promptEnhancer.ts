@@ -1,3 +1,4 @@
+
 import type { PromptEnhancerTemplate } from '../types';
 
 export const PROMPT_ENHANCER_PROMPT_TEMPLATE = (rawPrompt: string, template: PromptEnhancerTemplate) => `
@@ -23,8 +24,9 @@ Your final output MUST be a single, valid, parsable JSON object with the followi
 1.  **Analyze Request:** Read the user's raw prompt and any provided context.
 2.  **Select Template:** Use the structure of the specified template ('${template}').
 3.  **Populate & Enhance:** Map the user's request to the template's fields. Where information is missing, infer reasonable, professional defaults for things like project context, invariants, and acceptance criteria to make the prompt self-contained. Expand on the user's shorthand.
-4.  **Generate Markdown:** Create a clean, readable Markdown version of the enhanced prompt.
-5.  **Generate JSON:** Create a structured JSON object representing the same enhanced prompt. The JSON schema should be logical and derived from the template structure.
+4.  **Generate a concise \`title\` for the enhanced prompt.** The title should be suitable for use in a filename.
+5.  **Generate Markdown:** Create a clean, readable Markdown version of the enhanced prompt.
+6.  **Generate JSON:** Create a structured JSON object representing the same enhanced prompt.
 
 ---
 **USER'S RAW PROMPT / CONTEXT:**
@@ -38,16 +40,16 @@ Here are some example structures for the templates. Adapt them to the user's req
 
 *   **Feature Builder:**
     *   MD: Project Context, Invariants, Task, Details, Acceptance Criteria, Agent Instructions.
-    *   JSON: \`{ "template": "featureBuilder", "project_context": {...}, "task": "...", "details": {...}, "acceptance": [...] }\`
+    *   JSON: \`{ "template": "featureBuilder", "title": "...", "project_context": {...}, "task": "...", "details": {...}, "acceptance": [...] }\`
 *   **Bug Fix:**
     *   MD: Project Context, Defect Description, Expected Behavior, Steps to Reproduce, Acceptance Criteria.
-    *   JSON: \`{ "template": "bugFix", "project_context": {...}, "defect": {...}, "expected_behavior": "...", "acceptance": [...] }\`
+    *   JSON: \`{ "template": "bugFix", "title": "...", "project_context": {...}, "defect": {...}, "expected_behavior": "...", "acceptance": [...] }\`
 *   **Code Review:**
     *   MD: Context, Goals of Review, Checklist (e.g., for readability, performance), Output Expectations.
-    *   JSON: \`{ "template": "codeReview", "context": "...", "goals": [...], "checklist": [...], "output_format": "..." }\`
+    *   JSON: \`{ "template": "codeReview", "title": "...", "context": "...", "goals": [...], "checklist": [...], "output_format": "..." }\`
 *   **Architectural Design:**
     *   MD: Problem Statement, Constraints, Key Trade-offs, Required Deliverables.
-    *   JSON: \`{ "template": "architecturalDesign", "problem": "...", "constraints": [...], "deliverables": [...] }\`
+    *   JSON: \`{ "template": "architecturalDesign", "title": "...", "problem": "...", "constraints": [...], "deliverables": [...] }\`
 
 Begin generation. Output only the single, valid JSON object containing the enhanced Markdown and JSON prompts.
 `;

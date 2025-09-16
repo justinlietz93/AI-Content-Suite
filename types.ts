@@ -90,6 +90,9 @@ export interface ReasoningNode {
 
 export interface ReasoningTree {
   version: string;
+  project: {
+    name: string;
+  };
   goal: string;
   constraints: string[];
   success_criteria: string[];
@@ -226,6 +229,7 @@ export interface PromptEnhancerSettings {
 
 export interface EnhancedPromptJson {
     template: PromptEnhancerTemplate;
+    title: string;
     [key: string]: any; // The rest of the JSON is dynamic
 }
 

@@ -451,6 +451,14 @@ const App: React.FC = () => {
       return SUMMARY_FORMAT_OPTIONS.find(f => f.value === summaryFormat)?.description || '';
   }, [summaryFormat]);
 
+  const sanitizeForFilename = (name: string | undefined, fallback: string = 'download'): string => {
+    if (!name || name.trim() === '') {
+        return fallback;
+    }
+    // Replace invalid characters with underscore, collapse multiple underscores, and limit length
+    return name.trim().replace(/[\s/\\?%*:|"<>]/g, '_').replace(/__+/g, '_').substring(0, 60);
+  };
+
   const downloadReasoningArtifact = (type: 'md' | 'json') => {
     if (!processedData || activeMode !== 'reasoningStudio') return;
     const reasoningOutput = processedData as ReasoningOutput;
@@ -473,7 +481,8 @@ const App: React.FC = () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `reasoning_${type === 'md' ? 'response' : 'trace'}.${fileExtension}`;
+    const baseName = sanitizeForFilename(reasoningOutput.reasoningTreeJson.project?.name, 'reasoning_output');
+    a.download = `${baseName}_${type === 'md' ? 'response' : 'trace'}.${fileExtension}`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -502,7 +511,8 @@ const App: React.FC = () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `scaffold_${type}.${fileExtension}`;
+    const baseName = sanitizeForFilename(scaffolderOutput.scaffoldPlanJson.project?.name, 'scaffold');
+    a.download = `${baseName}_${type}.${fileExtension}`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -531,7 +541,8 @@ const App: React.FC = () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `request_splitter_${type === 'md' ? 'prompts' : 'plan'}.${fileExtension}`;
+    const baseName = sanitizeForFilename(splitterOutput.splitPlanJson.project?.name, 'request_split');
+    a.download = `${baseName}_${type === 'md' ? 'prompts' : 'plan'}.${fileExtension}`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -560,7 +571,8 @@ const App: React.FC = () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `enhanced_prompt_${enhancerOutput.enhancedPromptJson.template}.${fileExtension}`;
+    const baseName = sanitizeForFilename(enhancerOutput.enhancedPromptJson.title, 'enhanced_prompt');
+    a.download = `${baseName}_${type === 'md' ? 'prompt' : 'data'}.${fileExtension}`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -589,7 +601,8 @@ const App: React.FC = () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `agent_design_${designerOutput.designPlanJson.systemName.replace(/\s+/g, '_')}.${fileExtension}`;
+    const baseName = sanitizeForFilename(designerOutput.designPlanJson.systemName, 'agent_system');
+    a.download = `${baseName}_${type === 'md' ? 'design' : 'plan'}.${fileExtension}`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);

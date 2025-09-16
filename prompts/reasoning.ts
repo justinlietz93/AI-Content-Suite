@@ -1,3 +1,4 @@
+
 import type { ReasoningSettings } from '../types';
 
 export const REASONING_STUDIO_PROMPT_TEMPLATE = (prompt: string, settings: ReasoningSettings) => {
@@ -41,9 +42,9 @@ Your final output MUST be a single, valid JSON object with the following structu
 
 You must simulate the following pipeline. Each step in the pipeline corresponds to a node in the \`reasoningTreeJson\`.
 
-**1. Parse User Goal:**
+**1. Parse User Goal & Define Project:**
    - The root of the tree is a "goal" node.
-   - Analyze the user's prompt to define the main \`goal\`, \`constraints\`, and \`success_criteria\`.
+   - Analyze the user's prompt to define the main \`goal\`, \`constraints\`, \`success_criteria\`, and a concise, filesystem-friendly \`project.name\`.
 
 **2. Persona Conditioning:**
    - You will strictly adhere to the following persona directive throughout the entire process. This directive must influence planning, step generation, validation, and synthesis.
@@ -80,6 +81,7 @@ You must generate a valid JSON object matching this schema.
 \`\`\`json
 {
   "version": "2.2",
+  "project": { "name": "A concise, filesystem-friendly name for this project/goal" },
   "goal": "string",
   "constraints": ["string"],
   "success_criteria": ["string"],
