@@ -3,7 +3,12 @@ import type { PromptEnhancerTemplate } from '../types';
 export const PROMPT_ENHANCER_PROMPT_TEMPLATE = (rawPrompt: string, template: PromptEnhancerTemplate) => `
 You are an expert AI prompt engineer. Your task is to take a user's raw request and enhance it into a structured, self-contained, agent-ready prompt based on a selected template.
 
-**CRITICAL JSON FORMATTING RULE:** You must produce a single, valid, parsable JSON object. All string values must be correctly escaped, especially newlines (\\\\n) and double quotes (\\\\").
+**CRITICAL JSON FORMATTING RULE:** Your entire output must be a single, valid, parsable JSON object. The string values within the JSON, especially for the \`enhancedPromptMd\` key which contains complex markdown, must be meticulously escaped.
+- Every double quote character (") within a string value MUST be escaped as \\".
+- Every backslash character (\\) within a string value MUST be escaped as \\\\.
+- Every newline character must be represented as \\n.
+- Other characters like tabs (\\t), backspaces (\\b), and form feeds (\\f) must also be escaped.
+Failure to produce a perfectly valid JSON will render the entire output useless. Double-check your escaping. There should be NO unescaped control characters or quotes within strings.
 
 **OUTPUT REQUIREMENTS:**
 Your final output MUST be a single, valid, parsable JSON object with the following structure. Do not include any text, explanations, or code fences before or after the JSON object.

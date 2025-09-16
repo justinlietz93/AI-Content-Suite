@@ -66,7 +66,7 @@ export const SummaryViewer: React.FC<SummaryViewerProps> = ({ output, mode }) =>
       renderMarkdown(contentRef, (output as MathFormatterOutput).formattedContent, true);
     } else if (mode === 'technical' && 'finalSummary' in output) {
         const techOutput = output as SummaryOutput;
-        const isMarkdownSummary = ['sessionHandoff', 'readme', 'solutionFinder', 'timeline', 'decisionMatrix', 'pitchGenerator', 'causeEffectChain', 'swotAnalysis', 'checklist', 'dialogCondensation', 'graphTreeOutline', 'entityRelationshipDigest', 'rulesDistiller', 'metricsDashboard', 'qaPairs', 'processFlow', 'raciSnapshot', 'riskRegister', 'milestoneTracker', 'glossaryTermMap', 'hierarchyOfNeeds', 'stakeholderMap', 'constraintList', 'prosConsTable', 'priorityRanking'].includes(techOutput.summaryFormat ?? 'default');
+        const isMarkdownSummary = ['sessionHandoff', 'readme', 'solutionFinder', 'timeline', 'decisionMatrix', 'pitchGenerator', 'causeEffectChain', 'swotAnalysis', 'checklist', 'dialogCondensation', 'graphTreeOutline', 'entityRelationshipDigest', 'rulesDistiller', 'metricsDashboard', 'qaPairs', 'processFlow', 'raciSnapshot', 'riskRegister', 'milestoneTracker', 'glossaryTermMap', 'hierarchyOfNeeds', 'stakeholderMap', 'constraintList', 'prosConsTable', 'priorityRanking', 'agentSystemInstructions'].includes(techOutput.summaryFormat ?? 'default');
         if (isMarkdownSummary) {
             renderMarkdown(summaryContentRef, techOutput.finalSummary, false);
         }
@@ -157,7 +157,7 @@ export const SummaryViewer: React.FC<SummaryViewerProps> = ({ output, mode }) =>
 
   if (mode === 'technical' && 'finalSummary' in output) {
     const techOutput = output as SummaryOutput;
-    const isMarkdownSummary = ['sessionHandoff', 'readme', 'solutionFinder', 'timeline', 'decisionMatrix', 'pitchGenerator', 'causeEffectChain', 'swotAnalysis', 'checklist', 'dialogCondensation', 'graphTreeOutline', 'entityRelationshipDigest', 'rulesDistiller', 'metricsDashboard', 'qaPairs', 'processFlow', 'raciSnapshot', 'riskRegister', 'milestoneTracker', 'glossaryTermMap', 'hierarchyOfNeeds', 'stakeholderMap', 'constraintList', 'prosConsTable', 'priorityRanking'].includes(techOutput.summaryFormat ?? 'default');
+    const isMarkdownSummary = ['sessionHandoff', 'readme', 'solutionFinder', 'timeline', 'decisionMatrix', 'pitchGenerator', 'causeEffectChain', 'swotAnalysis', 'checklist', 'dialogCondensation', 'graphTreeOutline', 'entityRelationshipDigest', 'rulesDistiller', 'metricsDashboard', 'qaPairs', 'processFlow', 'raciSnapshot', 'riskRegister', 'milestoneTracker', 'glossaryTermMap', 'hierarchyOfNeeds', 'stakeholderMap', 'constraintList', 'prosConsTable', 'priorityRanking', 'agentSystemInstructions'].includes(techOutput.summaryFormat ?? 'default');
     return (
       <div className="space-y-8">
         {techOutput.processingTimeSeconds !== undefined && (

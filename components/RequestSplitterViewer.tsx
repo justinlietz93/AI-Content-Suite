@@ -121,7 +121,6 @@ const CustomGraphViewer: React.FC<{ prompts: SplitPlanPrompt[] }> = ({ prompts }
                             return (
                                 <div
                                     key={id}
-                                    // FIX: The ref callback must not return a value. The original code returned a Map or a boolean.
                                     ref={el => {
                                         if (el) {
                                             nodeRefs.current.set(id, el);

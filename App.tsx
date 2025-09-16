@@ -7,6 +7,7 @@ import { ReasoningViewer } from './components/ReasoningViewer';
 import { ScaffolderViewer } from './components/ScaffolderViewer';
 import { RequestSplitterViewer } from './components/RequestSplitterViewer';
 import { PromptEnhancerViewer } from './components/PromptEnhancerViewer';
+import { AgentDesignerViewer } from './components/AgentDesignerViewer';
 import { Tabs } from './components/Tabs';
 import { processTranscript } from './services/summarizationService';
 import { processStyleExtraction } from './services/styleExtractionService';
@@ -16,10 +17,11 @@ import { processReasoningRequest } from './services/reasoningService';
 import { processScaffoldingRequest } from './services/scaffolderService';
 import { processRequestSplitting } from './services/requestSplitterService';
 import { processPromptEnhancement } from './services/promptEnhancerService';
+import { processAgentDesign } from './services/agentDesignerService';
 import { generateSuggestions } from './services/geminiService';
 import { ocrPdf } from './services/ocrService';
-import type { ProcessedOutput, ProgressUpdate, AppState, ProcessingError, Mode, SummaryOutput, StyleModelOutput, RewriteLength, RewriterOutput, MathFormatterOutput, SummaryFormat, ReasoningOutput, ReasoningSettings, ScaffolderOutput, ScaffolderSettings, RequestSplitterOutput, RequestSplitterSettings, PromptEnhancerOutput, PromptEnhancerSettings } from './types';
-import { INITIAL_PROGRESS, INITIAL_REASONING_SETTINGS, INITIAL_SCAFFOLDER_SETTINGS, INITIAL_REQUEST_SPLITTER_SETTINGS, INITIAL_PROMPT_ENHANCER_SETTINGS } from './constants';
+import type { ProcessedOutput, ProgressUpdate, AppState, ProcessingError, Mode, SummaryOutput, StyleModelOutput, RewriteLength, RewriterOutput, MathFormatterOutput, SummaryFormat, ReasoningOutput, ReasoningSettings, ScaffolderOutput, ScaffolderSettings, RequestSplitterOutput, RequestSplitterSettings, PromptEnhancerOutput, PromptEnhancerSettings, AgentDesignerOutput, AgentDesignerSettings } from './types';
+import { INITIAL_PROGRESS, INITIAL_REASONING_SETTINGS, INITIAL_SCAFFOLDER_SETTINGS, INITIAL_REQUEST_SPLITTER_SETTINGS, INITIAL_PROMPT_ENHANCER_SETTINGS, INITIAL_AGENT_DESIGNER_SETTINGS } from './constants';
 import { SUMMARY_FORMAT_OPTIONS } from './data/summaryFormats';
 import { CheckCircleIcon } from './components/icons/CheckCircleIcon';
 import { XCircleIcon } from './components/icons/XCircleIcon';
@@ -30,6 +32,7 @@ import { ReasoningControls } from './components/ReasoningControls';
 import { ScaffolderControls } from './components/ScaffolderControls';
 import { RequestSplitterControls } from './components/RequestSplitterControls';
 import { PromptEnhancerControls } from './components/PromptEnhancerControls';
+import { AgentDesignerControls } from './components/AgentDesignerControls';
 
 
 /**
@@ -98,6 +101,7 @@ const App: React.FC = () => {
   const [useHierarchical, setUseHierarchical] = useState(false);
   const [summaryFormat, setSummaryFormat] = useState<SummaryFormat>('default');
   const [summarySearchTerm, setSummarySearchTerm] = useState('');
+  const [summaryTextInput, setSummaryTextInput] = useState('');
   
   // State for Reasoning Studio
   const [reasoningPrompt, setReasoningPrompt] = useState('');
@@ -113,6 +117,10 @@ const App: React.FC = () => {
 
   // State for Prompt Enhancer
   const [promptEnhancerSettings, setPromptEnhancerSettings] = useState<PromptEnhancerSettings>(INITIAL_PROMPT_ENHANCER_SETTINGS);
+  
+  // State for Agent Designer
+  const [agentDesignerSettings, setAgentDesignerSettings] = useState<AgentDesignerSettings>(INITIAL_AGENT_DESIGNER_SETTINGS);
+
 
   const handleRequestSplitterSpecChange = useCallback((spec: string) => {
     setRequestSplitterSpec(spec);
@@ -134,6 +142,9 @@ const App: React.FC = () => {
 
 
   const handleFileSelect = useCallback((files: File[]) => {
+    if (files.length > 0) {
+        setSummaryTextInput(''); // Clear text input when files are selected
+    }
     setCurrentFiles(files);
     setProcessedData(null);
     setError(null);
@@ -150,6 +161,17 @@ const App: React.FC = () => {
         setAppState('fileSelected');
     }
   }, [activeMode, requestSplitterSpec, promptEnhancerSettings.rawPrompt]);
+
+  const handleSummaryTextChange = useCallback((text: string) => {
+    setSummaryTextInput(text);
+    if (text.trim()) {
+      setCurrentFiles(null); // Clear files when text is entered
+      setAppState('fileSelected');
+    } else if (!currentFiles || currentFiles.length === 0) {
+      setAppState('idle');
+    }
+  }, [currentFiles]);
+
 
   const fileToGenerativePart = async (file: File): Promise<any> => {
     if (file.type.startsWith('image/')) {
@@ -175,10 +197,12 @@ const App: React.FC = () => {
 
   const handleSubmit = useCallback(async () => {
     const isReadyForSubmit = 
+      (activeMode === 'technical' && (summaryTextInput.trim() || (currentFiles && currentFiles.length > 0))) ||
       (activeMode === 'reasoningStudio' && reasoningPrompt) ||
       (activeMode === 'scaffolder' && scaffolderPrompt) ||
       (activeMode === 'requestSplitter' && (requestSplitterSpec || (currentFiles && currentFiles.length > 0))) ||
       (activeMode === 'promptEnhancer' && (promptEnhancerSettings.rawPrompt.trim() || (currentFiles && currentFiles.length > 0))) ||
+      (activeMode === 'agentDesigner' && agentDesignerSettings.goal.trim()) ||
       (currentFiles && currentFiles.length > 0);
 
     if (!isReadyForSubmit) return;
@@ -216,7 +240,7 @@ const App: React.FC = () => {
             });
             const textWithContext = `--- DOCUMENT START: ${file.name} ---\n\n${ocrText}\n\n--- DOCUMENT END: ${file.name} ---`;
             processedTexts.push(textWithContext);
-            if (['rewriter', 'reasoningStudio', 'scaffolder', 'requestSplitter', 'promptEnhancer'].includes(activeMode)) {
+            if (['rewriter', 'reasoningStudio', 'scaffolder', 'requestSplitter', 'promptEnhancer', 'agentDesigner'].includes(activeMode)) {
               processedParts.push({ text: textWithContext });
             }
           } else if (file.type.startsWith('image/') && (activeMode === 'rewriter')) {
@@ -227,14 +251,16 @@ const App: React.FC = () => {
             const text = await readFileAsText(file);
             const textWithContext = `--- DOCUMENT START: ${file.name} ---\n\n${text}\n\n--- DOCUMENT END: ${file.name} ---`;
             processedTexts.push(textWithContext);
-            if (['rewriter', 'reasoningStudio', 'scaffolder', 'requestSplitter', 'promptEnhancer'].includes(activeMode)) {
+            if (['rewriter', 'reasoningStudio', 'scaffolder', 'requestSplitter', 'promptEnhancer', 'agentDesigner'].includes(activeMode)) {
               processedParts.push({ text: textWithContext });
             }
           }
         }
       }
 
-      if (currentFiles && currentFiles.length > 0) {
+      if (activeMode === 'technical' && summaryTextInput.trim()) {
+          setProgress({ stage: 'Content Loaded', percentage: 10, message: `Text content loaded.` });
+      } else if (currentFiles && currentFiles.length > 0) {
         const totalSize = currentFiles.reduce((acc, file) => acc + file.size, 0);
         const totalSizeMB = (totalSize / (1024 * 1024)).toFixed(2);
         setProgress({ stage: 'Content Loaded', percentage: 10, message: `All content loaded (${totalSizeMB} MB).` });
@@ -262,11 +288,19 @@ const App: React.FC = () => {
         result = await processPromptEnhancement(promptEnhancerSettings, processedParts, (update) => {
             setProgress(update);
         });
+      } else if (activeMode === 'agentDesigner') {
+        result = await processAgentDesign(agentDesignerSettings, processedParts, (update) => {
+            setProgress(update);
+        });
       } else {
         const combinedText = processedTexts.join('\n\n--- DOCUMENT BREAK ---\n\n');
 
         if (activeMode === 'technical') {
-          result = await processTranscript(combinedText, (update) => {
+          const textToProcess = summaryTextInput.trim() || combinedText;
+          if (!textToProcess) {
+            throw new Error("No content provided to summarize.");
+          }
+          result = await processTranscript(textToProcess, (update) => {
             setProgress(update);
           }, useHierarchical, summaryFormat);
         } else if (activeMode === 'styleExtractor') {
@@ -286,7 +320,7 @@ const App: React.FC = () => {
       setProcessedData(fullResult);
       setAppState('completed');
       
-      if (['rewriter', 'mathFormatter', 'reasoningStudio', 'scaffolder', 'requestSplitter', 'promptEnhancer'].includes(activeMode)) {
+      if (['rewriter', 'mathFormatter', 'reasoningStudio', 'scaffolder', 'requestSplitter', 'promptEnhancer', 'agentDesigner'].includes(activeMode)) {
         setSuggestionsLoading(false);
         setNextStepSuggestions(null);
         return; // No suggestions for these modes
@@ -325,7 +359,7 @@ const App: React.FC = () => {
       setAppState('error');
       setSuggestionsLoading(false);
     }
-  }, [currentFiles, startTime, activeMode, styleTarget, rewriteStyle, rewriteInstructions, rewriteLength, useHierarchical, summaryFormat, reasoningPrompt, reasoningSettings, scaffolderPrompt, scaffolderSettings, requestSplitterSpec, requestSplitterSettings, promptEnhancerSettings]);
+  }, [currentFiles, startTime, activeMode, styleTarget, rewriteStyle, rewriteInstructions, rewriteLength, useHierarchical, summaryFormat, summaryTextInput, reasoningPrompt, reasoningSettings, scaffolderPrompt, scaffolderSettings, requestSplitterSpec, requestSplitterSettings, promptEnhancerSettings, agentDesignerSettings]);
 
   const handleReset = useCallback(() => {
     setCurrentFiles(null);
@@ -343,6 +377,7 @@ const App: React.FC = () => {
     setUseHierarchical(false);
     setSummaryFormat('default');
     setSummarySearchTerm('');
+    setSummaryTextInput('');
     setReasoningPrompt('');
     setReasoningSettings(INITIAL_REASONING_SETTINGS);
     setScaffolderPrompt('');
@@ -350,6 +385,7 @@ const App: React.FC = () => {
     setRequestSplitterSpec('');
     setRequestSplitterSettings(INITIAL_REQUEST_SPLITTER_SETTINGS);
     setPromptEnhancerSettings(INITIAL_PROMPT_ENHANCER_SETTINGS);
+    setAgentDesignerSettings(INITIAL_AGENT_DESIGNER_SETTINGS);
   }, []);
 
   const TABS = [
@@ -361,10 +397,11 @@ const App: React.FC = () => {
     { id: 'scaffolder', label: 'Project Scaffolder' },
     { id: 'requestSplitter', label: 'Request Splitter' },
     { id: 'promptEnhancer', label: 'Prompt Enhancer' },
+    { id: 'agentDesigner', label: 'Agent Designer' },
   ];
 
   const descriptionText = {
-    technical: "Upload one or more large transcript or PDF files to get a concise summary and key highlights.",
+    technical: "Upload files, or paste text below, to get a concise summary and key highlights.",
     styleExtractor: "Upload one or more text or PDF files to analyze and extract a unique writing style model.",
     rewriter: "Upload documents, PDFs, and images, provide a style and instructions, and rewrite them into a new narrative.",
     mathFormatter: "Upload one or more LaTeX/Markdown or PDF documents to reformat mathematical notations for proper MathJax rendering.",
@@ -372,10 +409,11 @@ const App: React.FC = () => {
     scaffolder: "Describe a project to generate a complete, standards-compliant code scaffold with prompts for an AI coding agent.",
     requestSplitter: "Input a large specification to decompose it into a sequence of actionable, buildable implementation prompts.",
     promptEnhancer: "Take a raw request and transform it into a structured, agent-ready prompt using reusable templates.",
+    agentDesigner: "Design a multi-agent system by defining a high-level goal and configuring its operational parameters.",
   };
 
   const buttonText = {
-    technical: currentFiles && currentFiles.length > 0 ? `Summarize ${currentFiles.length} file(s)` : 'Summarize',
+    technical: summaryTextInput.trim() ? 'Summarize Text' : (currentFiles && currentFiles.length > 0 ? `Summarize ${currentFiles.length} file(s)` : 'Summarize'),
     styleExtractor: currentFiles && currentFiles.length > 0 ? `Extract Style from ${currentFiles.length} file(s)` : 'Extract Style',
     rewriter: currentFiles && currentFiles.length > 0 ? `Rewrite ${currentFiles.length} item(s)` : 'Rewrite',
     mathFormatter: currentFiles && currentFiles.length > 0 ? `Format ${currentFiles.length} file(s)` : 'Format Math',
@@ -383,6 +421,7 @@ const App: React.FC = () => {
     scaffolder: 'Generate Project Scaffold',
     requestSplitter: 'Split Request',
     promptEnhancer: 'Enhance Prompt',
+    agentDesigner: 'Design Agent System',
   };
 
   const resetButtonText = {
@@ -394,6 +433,7 @@ const App: React.FC = () => {
       scaffolder: 'New Project Scaffold',
       requestSplitter: 'New Split Request',
       promptEnhancer: 'Enhance Another Prompt',
+      agentDesigner: 'Design Another Agent',
   }
 
   const filteredSummaryFormats = useMemo(() => {
@@ -526,6 +566,35 @@ const App: React.FC = () => {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
+  
+  const downloadAgentDesignerArtifact = (type: 'md' | 'json') => {
+    if (!processedData || activeMode !== 'agentDesigner') return;
+    const designerOutput = processedData as AgentDesignerOutput;
+    
+    let content = '';
+    let mimeType = '';
+    let fileExtension = '';
+
+    if (type === 'md') {
+        content = designerOutput.designMarkdown;
+        mimeType = 'text/markdown';
+        fileExtension = 'md';
+    } else {
+        content = JSON.stringify(designerOutput.designPlanJson, null, 2);
+        mimeType = 'application/json';
+        fileExtension = 'json';
+    }
+
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `agent_design_${designerOutput.designPlanJson.systemName.replace(/\s+/g, '_')}.${fileExtension}`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
 
   return (
@@ -550,7 +619,6 @@ const App: React.FC = () => {
 
           {activeMode === 'technical' && (appState === 'idle' || appState === 'fileSelected') && (
             <div className="animate-fade-in-scale">
-              <HierarchicalToggle enabled={useHierarchical} onChange={setUseHierarchical} />
                <div className="my-4 px-4 sm:px-0">
                   <label htmlFor="summaryFormatSelect" className="block text-sm font-medium text-text-secondary mb-1">
                     Summary Format:
@@ -581,6 +649,20 @@ const App: React.FC = () => {
                     {selectedFormatDescription}
                   </p>
                 </div>
+                <div className="my-4 px-4 sm:px-0">
+                  <label htmlFor="summaryTextInput" className="block text-sm font-medium text-text-secondary mb-1">
+                      Or Paste Text to Summarize:
+                  </label>
+                  <textarea
+                      id="summaryTextInput"
+                      rows={8}
+                      value={summaryTextInput}
+                      onChange={(e) => handleSummaryTextChange(e.target.value)}
+                      placeholder="Paste your transcript or document content here..."
+                      className="w-full px-3 py-2 bg-slate-900 border border-border-color rounded-md shadow-sm focus:ring-primary focus:border-primary text-text-primary placeholder-slate-500 text-sm"
+                  />
+              </div>
+              <HierarchicalToggle enabled={useHierarchical} onChange={setUseHierarchical} />
             </div>
           )}
           
@@ -615,6 +697,13 @@ const App: React.FC = () => {
               <PromptEnhancerControls
                   settings={promptEnhancerSettings}
                   onSettingsChange={handlePromptEnhancerSettingsChange}
+              />
+          )}
+
+          {activeMode === 'agentDesigner' && (appState === 'idle' || appState === 'fileSelected') && (
+              <AgentDesignerControls
+                  settings={agentDesignerSettings}
+                  onSettingsChange={setAgentDesignerSettings}
               />
           )}
 
@@ -695,7 +784,7 @@ const App: React.FC = () => {
             <FileLoader onFileSelect={handleFileSelect} selectedFiles={currentFiles} mode={activeMode} />
           )}
 
-          {((currentFiles && currentFiles.length > 0) || (activeMode === 'reasoningStudio' && reasoningPrompt) || (activeMode === 'scaffolder' && scaffolderPrompt) || (activeMode === 'requestSplitter' && (requestSplitterSpec.trim() || (currentFiles && currentFiles.length > 0))) || (activeMode === 'promptEnhancer' && (promptEnhancerSettings.rawPrompt.trim() || (currentFiles && currentFiles.length > 0)))) && (appState === 'fileSelected' || appState === 'processing') && (
+          {((currentFiles && currentFiles.length > 0) || (summaryTextInput.trim() && activeMode === 'technical') || (activeMode === 'reasoningStudio' && reasoningPrompt) || (activeMode === 'scaffolder' && scaffolderPrompt) || (activeMode === 'requestSplitter' && (requestSplitterSpec.trim() || (currentFiles && currentFiles.length > 0))) || (activeMode === 'promptEnhancer' && (promptEnhancerSettings.rawPrompt.trim() || (currentFiles && currentFiles.length > 0))) || (activeMode === 'agentDesigner' && agentDesignerSettings.goal.trim())) && (appState === 'fileSelected' || appState === 'processing') && (
             <div className="mt-6 text-center">
               <button
                 onClick={handleSubmit}
@@ -729,6 +818,8 @@ const App: React.FC = () => {
                   <RequestSplitterViewer output={processedData as RequestSplitterOutput} />
               ) : activeMode === 'promptEnhancer' ? (
                   <PromptEnhancerViewer output={processedData as PromptEnhancerOutput} />
+              ) : activeMode === 'agentDesigner' ? (
+                  <AgentDesignerViewer output={processedData as AgentDesignerOutput} />
               ) : (
                   <SummaryViewer output={processedData} mode={activeMode} />
               )}
@@ -837,6 +928,23 @@ const App: React.FC = () => {
                           >
                               <DownloadIcon className="w-5 h-5" />
                               Data (.json)
+                          </button>
+                      </div>
+                  ) : activeMode === 'agentDesigner' ? (
+                     <div className="grid grid-cols-2 gap-2">
+                          <button
+                              onClick={() => downloadAgentDesignerArtifact('md')}
+                              className="w-full px-4 py-3 bg-primary text-white font-semibold rounded-lg hover:bg-primary-hover transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-surface flex items-center justify-center gap-2 text-sm"
+                          >
+                              <DownloadIcon className="w-5 h-5" />
+                              Design (.md)
+                          </button>
+                          <button
+                              onClick={() => downloadAgentDesignerArtifact('json')}
+                              className="w-full px-4 py-3 bg-sky-700 text-white font-semibold rounded-lg hover:bg-sky-600 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 focus:ring-offset-surface flex items-center justify-center gap-2 text-sm"
+                          >
+                              <DownloadIcon className="w-5 h-5" />
+                              Plan (.json)
                           </button>
                       </div>
                   ) : (

@@ -94,6 +94,12 @@ export const SUMMARY_FORMAT_OPTIONS: SummaryFormatOption[] = [
     tags: ['compliance', 'technical', 'constraints', 'documentation', 'syntax', 'rules']
   },
   {
+    value: 'agentSystemInstructions',
+    label: 'Agent System Instructions',
+    description: "Distills the content into a set of clear, concise system instructions for configuring an AI agent's behavior.",
+    tags: ['ai', 'agent', 'system prompt', 'instructions', 'configuration', 'rules']
+  },
+  {
     value: 'metricsDashboard',
     label: 'Metrics Dashboard Snapshot',
     description: "Distills raw data into a numeric baseline table of key indicators (KPIs) and their values like current, min, max, and average.",

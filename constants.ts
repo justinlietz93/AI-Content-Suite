@@ -1,4 +1,5 @@
-import type { ProgressUpdate, ReasoningSettings, ScaffolderSettings, RequestSplitterSettings, PromptEnhancerSettings } from './types';
+
+import type { ProgressUpdate, ReasoningSettings, ScaffolderSettings, RequestSplitterSettings, PromptEnhancerSettings, AgentDesignerSettings } from './types';
 
 // Import all summary prompts from the new modular structure
 import * as summaryPrompts from './prompts/summaries';
@@ -14,6 +15,7 @@ import { REASONING_STUDIO_PROMPT_TEMPLATE } from './prompts/reasoning';
 import { SCAFFOLDER_PROMPT_TEMPLATE } from './prompts/scaffolder';
 import { REQUEST_SPLITTER_PLANNING_PROMPT_TEMPLATE, REQUEST_SPLITTER_GENERATION_PROMPT_TEMPLATE } from './prompts/requestSplitter';
 import { PROMPT_ENHANCER_PROMPT_TEMPLATE } from './prompts/promptEnhancer';
+import { AGENT_DESIGNER_PROMPT_TEMPLATE } from './prompts/agentDesigner';
 
 
 export const GEMINI_FLASH_MODEL = 'gemini-2.5-flash';
@@ -79,6 +81,18 @@ export const INITIAL_PROMPT_ENHANCER_SETTINGS: PromptEnhancerSettings = {
     template: 'featureBuilder',
 };
 
+export const INITIAL_AGENT_DESIGNER_SETTINGS: AgentDesignerSettings = {
+    goal: '',
+    provider: 'gemini',
+    trigger: 'manual',
+    capabilities: {
+        webSearch: true,
+        emailAccess: false,
+        fileIO: false,
+        codeExecution: false,
+    }
+};
+
 // --- Prompt Collections (Re-constructed from imports) ---
 export const CHUNK_SUMMARY_PROMPTS = {
   default: summaryPrompts.CHUNK_SUMMARY_PROMPT_TEMPLATE_DEFAULT,
@@ -106,7 +120,8 @@ export const CHUNK_SUMMARY_PROMPTS = {
   stakeholderMap: summaryPrompts.CHUNK_SUMMARY_PROMPT_TEMPLATE_STAKEHOLDER_MAP,
   constraintList: summaryPrompts.CHUNK_SUMMARY_PROMPT_TEMPLATE_CONSTRAINT_LIST,
   prosConsTable: summaryPrompts.CHUNK_SUMMARY_PROMPT_TEMPLATE_PROS_CONS_TABLE,
-  priorityRanking: summaryPrompts.CHUNK_SUMMARY_PROMPT_TEMPLATE_PRIORITY_RANKING
+  priorityRanking: summaryPrompts.CHUNK_SUMMARY_PROMPT_TEMPLATE_PRIORITY_RANKING,
+  agentSystemInstructions: summaryPrompts.CHUNK_SUMMARY_PROMPT_TEMPLATE_AGENT_SYSTEM_INSTRUCTIONS
 };
 
 export const REDUCE_SUMMARIES_PROMPTS = {
@@ -135,7 +150,8 @@ export const REDUCE_SUMMARIES_PROMPTS = {
   stakeholderMap: summaryPrompts.REDUCE_SUMMARIES_PROMPT_TEMPLATE_STAKEHOLDER_MAP,
   constraintList: summaryPrompts.REDUCE_SUMMARIES_PROMPT_TEMPLATE_CONSTRAINT_LIST,
   prosConsTable: summaryPrompts.REDUCE_SUMMARIES_PROMPT_TEMPLATE_PROS_CONS_TABLE,
-  priorityRanking: summaryPrompts.REDUCE_SUMMARIES_PROMPT_TEMPLATE_PRIORITY_RANKING
+  priorityRanking: summaryPrompts.REDUCE_SUMMARIES_PROMPT_TEMPLATE_PRIORITY_RANKING,
+  agentSystemInstructions: summaryPrompts.REDUCE_SUMMARIES_PROMPT_TEMPLATE_AGENT_SYSTEM_INSTRUCTIONS
 };
 
 // Re-export other prompts so other files don't need to change their imports
@@ -154,5 +170,6 @@ export {
     SCAFFOLDER_PROMPT_TEMPLATE,
     REQUEST_SPLITTER_PLANNING_PROMPT_TEMPLATE,
     REQUEST_SPLITTER_GENERATION_PROMPT_TEMPLATE,
-    PROMPT_ENHANCER_PROMPT_TEMPLATE
+    PROMPT_ENHANCER_PROMPT_TEMPLATE,
+    AGENT_DESIGNER_PROMPT_TEMPLATE
 };

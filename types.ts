@@ -4,7 +4,7 @@ export interface Highlight {
   relevance?: number; // Optional, depends on LLM output
 }
 
-export type SummaryFormat = 'default' | 'sessionHandoff' | 'readme' | 'solutionFinder' | 'timeline' | 'decisionMatrix' | 'pitchGenerator' | 'causeEffectChain' | 'swotAnalysis' | 'checklist' | 'dialogCondensation' | 'graphTreeOutline' | 'entityRelationshipDigest' | 'rulesDistiller' | 'metricsDashboard' | 'qaPairs' | 'processFlow' | 'raciSnapshot' | 'riskRegister' | 'milestoneTracker' | 'glossaryTermMap' | 'hierarchyOfNeeds' | 'stakeholderMap' | 'constraintList' | 'prosConsTable' | 'priorityRanking';
+export type SummaryFormat = 'default' | 'sessionHandoff' | 'readme' | 'solutionFinder' | 'timeline' | 'decisionMatrix' | 'pitchGenerator' | 'causeEffectChain' | 'swotAnalysis' | 'checklist' | 'dialogCondensation' | 'graphTreeOutline' | 'entityRelationshipDigest' | 'rulesDistiller' | 'metricsDashboard' | 'qaPairs' | 'processFlow' | 'raciSnapshot' | 'riskRegister' | 'milestoneTracker' | 'glossaryTermMap' | 'hierarchyOfNeeds' | 'stakeholderMap' | 'constraintList' | 'prosConsTable' | 'priorityRanking' | 'agentSystemInstructions';
 
 export interface SummaryOutput {
   finalSummary: string;
@@ -236,8 +236,59 @@ export interface PromptEnhancerOutput {
 }
 // --- End Prompt Enhancer types ---
 
+// --- New types for Agent Designer ---
+export type AgentProvider = 'gemini' | 'openai' | 'ollama' | 'anthropic';
+export type ExecutionTrigger = 'eventDriven' | 'scheduled' | 'manual';
 
-export type ProcessedOutput = SummaryOutput | StyleModelOutput | RewriterOutput | MathFormatterOutput | ReasoningOutput | ScaffolderOutput | RequestSplitterOutput | PromptEnhancerOutput;
+export interface AgentDesignerSettings {
+  goal: string;
+  provider: AgentProvider;
+  trigger: ExecutionTrigger;
+  capabilities: {
+    webSearch: boolean;
+    emailAccess: boolean;
+    fileIO: boolean;
+    codeExecution: boolean;
+  };
+}
+
+export interface AgentDefinition {
+    name: string;
+    role: string;
+    promptTemplate: string;
+    tools: string[];
+}
+
+export interface ToolDefinition {
+    name: string;
+    description: string;
+    inputSchema: object;
+    outputSchema: object;
+}
+
+export interface AgentSystemPlan {
+    systemName: string;
+    goal: string;
+    trigger: {
+        type: ExecutionTrigger;
+        details: string;
+    };
+    architecture: string;
+    agents: AgentDefinition[];
+    tools: ToolDefinition[];
+    dataFlow: string;
+}
+
+export interface AgentDesignerOutput {
+    designMarkdown: string;
+    designPlanJson: AgentSystemPlan;
+    designFlowDiagram: string;
+    processingTimeSeconds?: number;
+}
+// --- End Agent Designer types ---
+
+
+export type ProcessedOutput = SummaryOutput | StyleModelOutput | RewriterOutput | MathFormatterOutput | ReasoningOutput | ScaffolderOutput | RequestSplitterOutput | PromptEnhancerOutput | AgentDesignerOutput;
 
 export interface ProgressUpdate {
   stage: string;
@@ -250,7 +301,7 @@ export interface ProgressUpdate {
 }
 
 export type AppState = 'idle' | 'fileSelected' | 'processing' | 'completed' | 'error';
-export type Mode = 'technical' | 'styleExtractor' | 'rewriter' | 'mathFormatter' | 'reasoningStudio' | 'scaffolder' | 'requestSplitter' | 'promptEnhancer';
+export type Mode = 'technical' | 'styleExtractor' | 'rewriter' | 'mathFormatter' | 'reasoningStudio' | 'scaffolder' | 'requestSplitter' | 'promptEnhancer' | 'agentDesigner';
 export type RewriteLength = 'short' | 'medium' | 'long';
 
 
