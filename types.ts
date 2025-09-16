@@ -239,6 +239,7 @@ export interface PromptEnhancerOutput {
 // --- New types for Agent Designer ---
 export type AgentProvider = 'gemini' | 'openai' | 'ollama' | 'anthropic';
 export type ExecutionTrigger = 'eventDriven' | 'scheduled' | 'manual';
+export type AgentSystemType = 'singleAgent' | 'multiAgent';
 
 export interface AgentDesignerSettings {
   goal: string;
@@ -250,6 +251,7 @@ export interface AgentDesignerSettings {
     fileIO: boolean;
     codeExecution: boolean;
   };
+  systemType: AgentSystemType;
 }
 
 export interface AgentDefinition {
@@ -266,6 +268,19 @@ export interface ToolDefinition {
     outputSchema: object;
 }
 
+export interface FineTuningPlan {
+    strategy: string;
+    baseModel: string;
+    datasetSize: string;
+    evaluationMetrics: string[];
+}
+
+export interface DataCurationPlan {
+    sources: string[];
+    cleaningSteps: string[];
+    formatting: string;
+}
+
 export interface AgentSystemPlan {
     systemName: string;
     goal: string;
@@ -277,6 +292,8 @@ export interface AgentSystemPlan {
     agents: AgentDefinition[];
     tools: ToolDefinition[];
     dataFlow: string;
+    fineTuningPlan?: FineTuningPlan;
+    dataCurationPlan?: DataCurationPlan;
 }
 
 export interface AgentDesignerOutput {

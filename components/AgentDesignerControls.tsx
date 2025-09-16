@@ -1,6 +1,6 @@
 
 import React from 'react';
-import type { AgentDesignerSettings, AgentProvider, ExecutionTrigger } from '../types';
+import type { AgentDesignerSettings, AgentProvider, ExecutionTrigger, AgentSystemType } from '../types';
 
 interface AgentDesignerControlsProps {
   settings: AgentDesignerSettings;
@@ -37,6 +37,33 @@ export const AgentDesignerControls: React.FC<AgentDesignerControlsProps> = ({ se
                     className="w-full px-3 py-2 bg-slate-900 border border-border-color rounded-md shadow-sm focus:ring-primary focus:border-primary text-text-primary placeholder-slate-500 text-sm"
                 />
             </div>
+
+            {/* Fix: Replaced div and Label with fieldset and legend for semantic correctness and accessibility. */}
+            <fieldset>
+                <legend className="block text-xs font-medium text-text-secondary mb-2">System Type</legend>
+                <div className="flex items-center space-x-2 bg-slate-700 rounded-lg p-1" role="radiogroup">
+                  {(['singleAgent', 'multiAgent'] as AgentSystemType[]).map(type => (
+                    <button
+                      key={type}
+                      onClick={() => handleSettingChange('systemType', type)}
+                      role="radio"
+                      aria-checked={settings.systemType === type}
+                      className={`flex-1 py-1.5 text-sm rounded-md transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-slate-700 ${
+                        settings.systemType === type
+                          ? 'bg-primary text-white font-semibold shadow'
+                          : 'text-text-secondary hover:bg-slate-600'
+                      }`}
+                    >
+                      {type === 'singleAgent' ? 'Single Agent' : 'Multi-Agent'}
+                    </button>
+                  ))}
+                </div>
+                 <p className="mt-1 text-xs text-text-secondary">
+                    {settings.systemType === 'singleAgent'
+                        ? "Design one specialized agent with a fine-tuning plan."
+                        : "Design a collaborative system of multiple agents."}
+                </p>
+            </fieldset>
 
             <fieldset className="grid grid-cols-2 sm:grid-cols-2 gap-4">
                 <div>

@@ -90,7 +90,8 @@ export const INITIAL_AGENT_DESIGNER_SETTINGS: AgentDesignerSettings = {
         emailAccess: false,
         fileIO: false,
         codeExecution: false,
-    }
+    },
+    systemType: 'multiAgent',
 };
 
 // --- Prompt Collections (Re-constructed from imports) ---
