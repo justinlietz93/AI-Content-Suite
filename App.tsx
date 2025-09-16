@@ -3,6 +3,7 @@
 
 
 
+
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { FileLoader } from './components/FileLoader';
 import { ProgressBar } from './components/ProgressBar';
@@ -73,7 +74,7 @@ const HierarchicalToggle: React.FC<{ enabled: boolean; onChange: (enabled: boole
           onClick={() => onChange(!enabled)}
           className={`${
             enabled ? 'bg-primary' : 'bg-muted'
-          } relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-surface`}
+          } relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-surface`}
         >
           <span
             aria-hidden="true"
@@ -730,7 +731,7 @@ const App: React.FC = () => {
   return (
     <>
       <div className="min-h-screen bg-transparent flex flex-col items-center justify-center p-4 sm:p-8 transition-all duration-300">
-        <div className="w-full max-w-3xl bg-surface shadow-2xl rounded-lg p-6 sm:p-10">
+        <div className="w-full max-w-3xl bg-surface shadow-2xl rounded-lg p-6 sm:p-10 border border-border-color animate-breathing-glow">
           <header className="mb-6 text-center">
             <h1 className="text-3xl sm:text-4xl font-bold text-text-primary">
               AI Content Suite
@@ -896,7 +897,7 @@ const App: React.FC = () => {
                       onClick={() => setRewriteLength(len)}
                       role="radio"
                       aria-checked={rewriteLength === len}
-                      className={`flex-1 py-1.5 text-sm rounded-md transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-secondary ${
+                      className={`flex-1 py-1.5 text-sm rounded-md transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-secondary ${
                         rewriteLength === len
                           ? 'bg-primary text-primary-foreground font-semibold shadow'
                           : 'text-text-secondary hover:bg-muted'
@@ -919,7 +920,7 @@ const App: React.FC = () => {
               <button
                 onClick={handleSubmit}
                 disabled={appState === 'processing'}
-                className="px-8 py-3 bg-primary text-primary-foreground font-semibold rounded-lg hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-surface text-lg"
+                className="px-8 py-3 bg-primary text-primary-foreground font-semibold rounded-lg hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-surface text-lg"
                 aria-live="polite"
               >
                 {appState === 'processing' ? 'Processing...' : buttonText[activeMode]}

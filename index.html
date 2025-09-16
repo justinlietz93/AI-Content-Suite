@@ -100,10 +100,21 @@
               'fade-in-scale': {
                 '0%': { opacity: '0', transform: 'scale(0.95)' },
                 '100%': { opacity: '1', transform: 'scale(1)' },
+              },
+              'breathing-glow': {
+                '0%, 100%': {
+                  borderColor: 'oklch(0.25 0 0)',
+                  boxShadow: '0 0 10px 0px oklch(0.25 0 0 / 0)',
+                },
+                '50%': {
+                  borderColor: 'oklch(0.65 0.15 220 / 0.7)',
+                  boxShadow: '0 0 25px 5px oklch(0.65 0.15 220 / 0.3)',
+                },
               }
             },
             animation: {
               'fade-in-scale': 'fade-in-scale 0.2s ease-out forwards',
+              'breathing-glow': 'breathing-glow 4s ease-in-out infinite',
             }
           }
         }
