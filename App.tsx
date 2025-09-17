@@ -1,4 +1,5 @@
-import React, { useState, useCallback, useMemo } from 'react';
+
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { FileLoader } from './components/FileLoader';
 import { ProgressBar } from './components/ProgressBar';
 import { SummaryViewer } from './components/SummaryViewer';
@@ -81,6 +82,40 @@ const App: React.FC = () => {
   const selectedFormatDescription = useMemo(() => {
     return SUMMARY_FORMAT_OPTIONS.find(f => f.value === summaryFormat)?.description || '';
   }, [summaryFormat]);
+  
+  const canSubmit = useMemo(() => {
+    const hasFiles = currentFiles && currentFiles.length > 0;
+    
+    switch (activeMode) {
+      case 'technical':
+        return hasFiles || !!summaryTextInput.trim();
+      case 'styleExtractor':
+      case 'rewriter':
+      case 'mathFormatter':
+        return hasFiles;
+      case 'reasoningStudio':
+        return hasFiles || !!reasoningPrompt.trim();
+      case 'scaffolder':
+        return hasFiles || !!scaffolderPrompt.trim();
+      case 'requestSplitter':
+        return hasFiles || !!requestSplitterSpec.trim();
+      case 'promptEnhancer':
+        return hasFiles || !!promptEnhancerSettings.rawPrompt.trim();
+      case 'agentDesigner':
+        return hasFiles || !!agentDesignerSettings.goal.trim();
+      default:
+        return false;
+    }
+  }, [
+    activeMode,
+    currentFiles,
+    summaryTextInput,
+    reasoningPrompt,
+    scaffolderPrompt,
+    requestSplitterSpec,
+    promptEnhancerSettings.rawPrompt,
+    agentDesignerSettings.goal,
+  ]);
 
   const buttonText = useMemo(() => {
     return getButtonText(
@@ -94,6 +129,9 @@ const App: React.FC = () => {
       agentDesignerSettings.goal
     );
   }, [activeMode, currentFiles, summaryTextInput, reasoningPrompt, scaffolderPrompt, requestSplitterSpec, promptEnhancerSettings.rawPrompt, agentDesignerSettings.goal]);
+  
+  const downloadButtonClass = "w-full px-4 py-2 bg-secondary text-text-primary font-semibold rounded-lg hover:bg-muted transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-surface flex items-center justify-center gap-2 text-sm";
+  const primaryActionButtonClass = "w-full px-6 py-3 bg-secondary text-text-primary font-semibold rounded-lg hover:bg-muted transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-surface flex items-center justify-center gap-2";
 
   // --- EVENT HANDLERS ---
   const handleReset = useCallback(() => {
@@ -157,42 +195,35 @@ const App: React.FC = () => {
     setProgress(INITIAL_PROGRESS);
     setNextStepSuggestions(null);
     setSuggestionsLoading(false);
-    // Readiness checks for modes that can be ready with just text
-    if (activeMode === 'requestSplitter' && (files.length > 0 || requestSplitterSpec.trim())) {
-      setAppState('fileSelected');
-    }
-    if (activeMode === 'promptEnhancer' && (files.length > 0 || promptEnhancerSettings.rawPrompt.trim())) {
-      setAppState('fileSelected');
-    }
-  }, [activeMode, requestSplitterSpec, promptEnhancerSettings.rawPrompt]);
+  }, []);
 
   const handleSummaryTextChange = useCallback((text: string) => {
     setSummaryTextInput(text);
     if (text.trim()) {
       setCurrentFiles(null); // Clear files when text is entered
-      setAppState('fileSelected');
-    } else if (!currentFiles || currentFiles.length === 0) {
-      setAppState('idle');
     }
-  }, [currentFiles]);
+  }, []);
   
   const handleRequestSplitterSpecChange = useCallback((spec: string) => {
     setRequestSplitterSpec(spec);
-    if (spec.trim() || (currentFiles && currentFiles.length > 0)) {
-        setAppState('fileSelected');
-    } else {
-        setAppState('idle');
-    }
-  }, [currentFiles]);
+  }, []);
 
   const handlePromptEnhancerSettingsChange = useCallback((settings: PromptEnhancerSettings) => {
     setPromptEnhancerSettings(settings);
-    if (settings.rawPrompt.trim() || (currentFiles && currentFiles.length > 0)) {
-        setAppState('fileSelected');
-    } else {
-        setAppState('idle');
-    }
-  }, [currentFiles]);
+  }, []);
+
+  const handleReasoningPromptChange = useCallback((prompt: string) => {
+    setReasoningPrompt(prompt);
+  }, []);
+
+  const handleScaffolderPromptChange = useCallback((prompt: string) => {
+    setScaffolderPrompt(prompt);
+  }, []);
+
+  const handleAgentDesignerSettingsChange = useCallback((settings: AgentDesignerSettings) => {
+    setAgentDesignerSettings(settings);
+  }, []);
+
 
   return (
     <>
@@ -265,11 +296,11 @@ const App: React.FC = () => {
                   <HierarchicalToggle enabled={useHierarchical} onChange={setUseHierarchical} />
                 </>
               )}
-              {activeMode === 'reasoningStudio' && <ReasoningControls prompt={reasoningPrompt} onPromptChange={setReasoningPrompt} settings={reasoningSettings} onSettingsChange={setReasoningSettings} />}
-              {activeMode === 'scaffolder' && <ScaffolderControls prompt={scaffolderPrompt} onPromptChange={setScaffolderPrompt} settings={scaffolderSettings} onSettingsChange={setScaffolderSettings} />}
+              {activeMode === 'reasoningStudio' && <ReasoningControls prompt={reasoningPrompt} onPromptChange={handleReasoningPromptChange} settings={reasoningSettings} onSettingsChange={setReasoningSettings} />}
+              {activeMode === 'scaffolder' && <ScaffolderControls prompt={scaffolderPrompt} onPromptChange={handleScaffolderPromptChange} settings={scaffolderSettings} onSettingsChange={setScaffolderSettings} />}
               {activeMode === 'requestSplitter' && <RequestSplitterControls spec={requestSplitterSpec} onSpecChange={handleRequestSplitterSpecChange} settings={requestSplitterSettings} onSettingsChange={setRequestSplitterSettings} />}
               {activeMode === 'promptEnhancer' && <PromptEnhancerControls settings={promptEnhancerSettings} onSettingsChange={handlePromptEnhancerSettingsChange} />}
-              {activeMode === 'agentDesigner' && <AgentDesignerControls settings={agentDesignerSettings} onSettingsChange={setAgentDesignerSettings} />}
+              {activeMode === 'agentDesigner' && <AgentDesignerControls settings={agentDesignerSettings} onSettingsChange={handleAgentDesignerSettingsChange} />}
               {activeMode === 'styleExtractor' && (
                 <div className="my-4 px-4 sm:px-0">
                   <label htmlFor="styleTargetInput" className="block text-sm font-medium text-text-secondary mb-1">
@@ -320,7 +351,7 @@ const App: React.FC = () => {
           )}
 
           {/* SUBMIT BUTTON */}
-          {((currentFiles && currentFiles.length > 0) || (summaryTextInput.trim() && activeMode === 'technical') || (activeMode === 'reasoningStudio' && reasoningPrompt) || (activeMode === 'scaffolder' && scaffolderPrompt) || (activeMode === 'requestSplitter' && (requestSplitterSpec.trim() || (currentFiles && currentFiles.length > 0))) || (activeMode === 'promptEnhancer' && (promptEnhancerSettings.rawPrompt.trim() || (currentFiles && currentFiles.length > 0))) || (activeMode === 'agentDesigner' && agentDesignerSettings.goal.trim())) && (appState === 'fileSelected' || appState === 'processing') && (
+          {canSubmit && appState !== 'completed' && appState !== 'error' && (
             <div className="mt-6 text-center">
               <button
                 onClick={handleSubmit}
@@ -349,36 +380,36 @@ const App: React.FC = () => {
 
             {/* Reset/Download Buttons */}
             <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <button onClick={handleReset} className="w-full px-6 py-3 bg-secondary text-text-primary font-semibold rounded-lg hover:bg-muted transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-surface flex items-center justify-center gap-2">
+              <button onClick={handleReset} className={primaryActionButtonClass}>
                 {RESET_BUTTON_TEXT[activeMode]}
               </button>
               {activeMode === 'reasoningStudio' ? (
                 <div className="grid grid-cols-2 gap-2">
-                  <button onClick={() => downloadReasoningArtifact(processedData, 'md')} className="..."><DownloadIcon className="w-5 h-5" />Final (.md)</button>
-                  <button onClick={() => downloadReasoningArtifact(processedData, 'json')} className="..."><DownloadIcon className="w-5 h-5" />Trace (.json)</button>
+                  <button onClick={() => downloadReasoningArtifact(processedData, 'md')} className={downloadButtonClass}><DownloadIcon className="w-5 h-5" />Final (.md)</button>
+                  <button onClick={() => downloadReasoningArtifact(processedData, 'json')} className={downloadButtonClass}><DownloadIcon className="w-5 h-5" />Trace (.json)</button>
                 </div>
               ) : activeMode === 'scaffolder' ? (
                 <div className="grid grid-cols-2 gap-2">
-                  <button onClick={() => downloadScaffoldArtifact(processedData, scaffolderSettings, 'script')} className="..."><DownloadIcon className="w-5 h-5" />Script</button>
-                  <button onClick={() => downloadScaffoldArtifact(processedData, scaffolderSettings, 'plan')} className="..."><DownloadIcon className="w-5 h-5" />Plan (.json)</button>
+                  <button onClick={() => downloadScaffoldArtifact(processedData, scaffolderSettings, 'script')} className={downloadButtonClass}><DownloadIcon className="w-5 h-5" />Script</button>
+                  <button onClick={() => downloadScaffoldArtifact(processedData, scaffolderSettings, 'plan')} className={downloadButtonClass}><DownloadIcon className="w-5 h-5" />Plan (.json)</button>
                 </div>
               ) : activeMode === 'requestSplitter' ? (
                  <div className="grid grid-cols-2 gap-2">
-                    <button onClick={() => downloadRequestSplitterArtifact(processedData, 'md')} className="..."><DownloadIcon className="w-5 h-5" />Prompts (.md)</button>
-                    <button onClick={() => downloadRequestSplitterArtifact(processedData, 'json')} className="..."><DownloadIcon className="w-5 h-5" />Plan (.json)</button>
+                    <button onClick={() => downloadRequestSplitterArtifact(processedData, 'md')} className={downloadButtonClass}><DownloadIcon className="w-5 h-5" />Prompts (.md)</button>
+                    <button onClick={() => downloadRequestSplitterArtifact(processedData, 'json')} className={downloadButtonClass}><DownloadIcon className="w-5 h-5" />Plan (.json)</button>
                  </div>
               ) : activeMode === 'promptEnhancer' ? (
                  <div className="grid grid-cols-2 gap-2">
-                    <button onClick={() => downloadPromptEnhancerArtifact(processedData, 'md')} className="..."><DownloadIcon className="w-5 h-5" />Prompt (.md)</button>
-                    <button onClick={() => downloadPromptEnhancerArtifact(processedData, 'json')} className="..."><DownloadIcon className="w-5 h-5" />Data (.json)</button>
+                    <button onClick={() => downloadPromptEnhancerArtifact(processedData, 'md')} className={downloadButtonClass}><DownloadIcon className="w-5 h-5" />Prompt (.md)</button>
+                    <button onClick={() => downloadPromptEnhancerArtifact(processedData, 'json')} className={downloadButtonClass}><DownloadIcon className="w-5 h-5" />Data (.json)</button>
                  </div>
               ) : activeMode === 'agentDesigner' ? (
                  <div className="grid grid-cols-2 gap-2">
-                    <button onClick={() => downloadAgentDesignerArtifact(processedData, 'md')} className="..."><DownloadIcon className="w-5 h-5" />Design (.md)</button>
-                    <button onClick={() => downloadAgentDesignerArtifact(processedData, 'json')} className="..."><DownloadIcon className="w-5 h-5" />Plan (.json)</button>
+                    <button onClick={() => downloadAgentDesignerArtifact(processedData, 'md')} className={downloadButtonClass}><DownloadIcon className="w-5 h-5" />Design (.md)</button>
+                    <button onClick={() => downloadAgentDesignerArtifact(processedData, 'json')} className={downloadButtonClass}><DownloadIcon className="w-5 h-5" />Plan (.json)</button>
                  </div>
               ) : (
-                <button onClick={() => setIsReportModalOpen(true)} className="..."><DownloadIcon className="w-5 h-5" />Download Report</button>
+                <button onClick={() => setIsReportModalOpen(true)} className={primaryActionButtonClass}><DownloadIcon className="w-5 h-5" />Download Report</button>
               )}
             </div>
           </div>}
@@ -388,7 +419,7 @@ const App: React.FC = () => {
             <div className="flex items-center mb-2"><XCircleIcon className="w-6 h-6 mr-2" aria-hidden="true" /><h3 className="text-lg font-semibold">Error</h3></div>
             <p className="text-sm">{error.message}</p>
             {error.details && <details className="mt-2 text-xs"><summary>Show Details</summary><pre className="whitespace-pre-wrap break-all bg-red-800 p-2 rounded mt-1">{error.details}</pre></details>}
-            <button onClick={handleReset} className="mt-4 w-full px-6 py-2 bg-red-700 text-white font-semibold rounded-lg hover:bg-red-600 ...">Try Again</button>
+            <button onClick={handleReset} className="mt-4 w-full px-6 py-2 bg-red-700 text-white font-semibold rounded-lg hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-surface">Try Again</button>
           </div>}
         </div>
         <footer className="text-center mt-8 text-text-secondary text-xs">

@@ -96,6 +96,7 @@ export interface ReasoningTree {
   goal: string;
   constraints: string[];
   success_criteria: string[];
+  // Fix: Used Omit to correctly redefine the 'persona' property within settings, avoiding an impossible type intersection.
   settings: Omit<ReasoningSettings, 'persona'> & { persona: { name: string, directive: string } };
   nodes: ReasoningNode[];
   artifacts: {

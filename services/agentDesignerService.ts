@@ -1,6 +1,6 @@
 
 import type { ProgressUpdate, AgentDesignerOutput, AgentDesignerSettings } from '../types';
-import { generateMultiModalContent } from './geminiService';
+import { generateText } from './geminiService';
 import { AGENT_DESIGNER_PROMPT_TEMPLATE } from '../constants';
 
 export const processAgentDesign = async (
@@ -9,17 +9,21 @@ export const processAgentDesign = async (
     onProgress: (update: ProgressUpdate) => void
 ): Promise<AgentDesignerOutput> => {
     
-    if (!settings.goal.trim()) {
+    const fileContent = fileParts.map(p => p.text || '').join('\n\n');
+    const finalGoal = [settings.goal, fileContent].join('\n\n').trim();
+
+    if (!finalGoal) {
         throw new Error("Agent design goal is empty.");
     }
 
     onProgress({
         stage: 'Initializing System Architect',
         percentage: 10,
-        message: `Designing for goal: "${settings.goal.substring(0, 50)}..."`,
+        message: `Designing for goal: "${finalGoal.substring(0, 50)}..."`,
     });
 
-    const masterPrompt = AGENT_DESIGNER_PROMPT_TEMPLATE(settings);
+    const finalSettings = { ...settings, goal: finalGoal };
+    const masterPrompt = AGENT_DESIGNER_PROMPT_TEMPLATE(finalSettings);
 
     onProgress({
         stage: 'Designing Agent System',
@@ -28,13 +32,7 @@ export const processAgentDesign = async (
         thinkingHint: 'This is a complex design task and may take some time.'
     });
     
-    // Combine prompt with any context from uploaded files
-    const allParts = [
-      { text: masterPrompt }, 
-      ...fileParts.map(p => ({ text: `\n\n--- PROVIDED CONTEXT DOCUMENT ---\n${p.text}` }))
-    ];
-
-    const rawJsonResult = await generateMultiModalContent(allParts);
+    const rawJsonResult = await generateText(masterPrompt);
     
     onProgress({
         stage: 'Parsing Design',

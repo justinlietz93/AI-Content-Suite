@@ -48,14 +48,36 @@ export const handleSubmission = async ({
     setSuggestionsLoading,
 }: SubmissionArgs) => {
 
-    const isReadyForSubmit = 
-      (activeMode === 'technical' && (settings.summaryTextInput.trim() || (currentFiles && currentFiles.length > 0))) ||
-      (activeMode === 'reasoningStudio' && settings.reasoningPrompt) ||
-      (activeMode === 'scaffolder' && settings.scaffolderPrompt) ||
-      (activeMode === 'requestSplitter' && (settings.requestSplitterSpec || (currentFiles && currentFiles.length > 0))) ||
-      (activeMode === 'promptEnhancer' && (settings.promptEnhancerSettings.rawPrompt.trim() || (currentFiles && currentFiles.length > 0))) ||
-      (activeMode === 'agentDesigner' && settings.agentDesignerSettings.goal.trim()) ||
-      (currentFiles && currentFiles.length > 0);
+    const hasFiles = currentFiles && currentFiles.length > 0;
+    let isReadyForSubmit = false;
+
+    switch(activeMode) {
+      case 'technical':
+        isReadyForSubmit = !!settings.summaryTextInput.trim() || hasFiles;
+        break;
+      case 'styleExtractor':
+      case 'rewriter':
+      case 'mathFormatter':
+        isReadyForSubmit = hasFiles;
+        break;
+      case 'reasoningStudio':
+        isReadyForSubmit = hasFiles || !!settings.reasoningPrompt.trim();
+        break;
+      case 'scaffolder':
+        isReadyForSubmit = hasFiles || !!settings.scaffolderPrompt.trim();
+        break;
+      case 'requestSplitter':
+        isReadyForSubmit = !!settings.requestSplitterSpec.trim() || hasFiles;
+        break;
+      case 'promptEnhancer':
+        isReadyForSubmit = !!settings.promptEnhancerSettings.rawPrompt.trim() || hasFiles;
+        break;
+      case 'agentDesigner':
+        isReadyForSubmit = hasFiles || !!settings.agentDesignerSettings.goal.trim();
+        break;
+      default:
+        isReadyForSubmit = false;
+    }
 
     if (!isReadyForSubmit) return;
 

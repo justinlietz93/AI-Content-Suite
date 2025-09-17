@@ -1,6 +1,6 @@
 
 import type { ProgressUpdate, ScaffolderOutput, ScaffolderSettings } from '../types';
-import { generateText, generateMultiModalContent } from './geminiService';
+import { generateText } from './geminiService';
 import { SCAFFOLDER_PROMPT_TEMPLATE } from '../constants';
 
 export const processScaffoldingRequest = async (
@@ -9,7 +9,10 @@ export const processScaffoldingRequest = async (
     fileParts: any[], // For potential future context from files
     onProgress: (update: ProgressUpdate) => void
 ): Promise<ScaffolderOutput> => {
-    if (!prompt) {
+    const fileContent = fileParts.map(p => p.text || '').join('\n\n');
+    const finalPrompt = [prompt, fileContent].join('\n\n').trim();
+
+    if (!finalPrompt) {
         throw new Error("Scaffolder prompt is empty.");
     }
 
@@ -19,7 +22,7 @@ export const processScaffoldingRequest = async (
         message: `Configuring Hybrid-Clean architecture...`,
     });
 
-    const masterPrompt = SCAFFOLDER_PROMPT_TEMPLATE(prompt, settings);
+    const masterPrompt = SCAFFOLDER_PROMPT_TEMPLATE(finalPrompt, settings);
 
     onProgress({
         stage: 'Generating Project Plan',
@@ -28,16 +31,7 @@ export const processScaffoldingRequest = async (
         thinkingHint: 'This is a complex architectural task and may take some time.'
     });
 
-    let rawJsonResult: string;
-
-    // Use multimodal generation if context files are attached
-    if (fileParts && fileParts.length > 0) {
-        const promptPart = { text: masterPrompt };
-        const allParts = [promptPart, ...fileParts.map(p => ({ text: `\n\n--- PROVIDED CONTEXT DOCUMENT ---\n${p.text}` }))];
-        rawJsonResult = await generateMultiModalContent(allParts);
-    } else {
-        rawJsonResult = await generateText(masterPrompt);
-    }
+    const rawJsonResult = await generateText(masterPrompt);
     
     onProgress({
         stage: 'Parsing Response',

@@ -1,83 +1,153 @@
 
-import type { ProgressUpdate, ReasoningOutput, ReasoningSettings } from '../types';
-import { generateText, generateMultiModalContent } from './geminiService';
-import { REASONING_STUDIO_PROMPT_TEMPLATE } from '../constants';
+import type { ProgressUpdate, ReasoningOutput, ReasoningSettings, ReasoningNode, ReasoningNodeType, ReasoningTree } from '../types';
+import { generateText } from './geminiService';
+import * as Prompts from '../prompts/reasoning';
 
+/**
+ * Implements an iterative, multi-step reasoning process to solve a complex goal.
+ * This function orchestrates calls to the AI based on user-defined settings for
+ * depth, breadth, and criticism, building a detailed reasoning trace.
+ */
 export const processReasoningRequest = async (
     prompt: string,
     settings: ReasoningSettings,
-    fileParts: any[], // Pre-formatted parts for multimodal input
+    fileParts: any[],
     onProgress: (update: ProgressUpdate) => void
 ): Promise<ReasoningOutput> => {
-    if (!prompt) {
+    
+    // 1. Initialization
+    const fileContent = fileParts.map(p => p.text || '').join('\n\n');
+    const initialGoal = [prompt, fileContent].join('\n\n').trim();
+    if (!initialGoal) {
         throw new Error("Reasoning prompt is empty.");
     }
 
-    onProgress({
-        stage: 'Initializing Reasoning Engine',
-        percentage: 10,
-        message: `Configuring pipeline with persona: ${settings.persona}...`,
-    });
+    onProgress({ stage: 'Initializing', percentage: 5, message: 'Starting reasoning engine...' });
 
-    const masterPrompt = REASONING_STUDIO_PROMPT_TEMPLATE(prompt, settings);
+    let nodeCounter = 0;
+    const nodes: ReasoningNode[] = [];
 
-    onProgress({
-        stage: 'Generating Reasoning',
-        percentage: 30,
-        message: 'The AI is performing the hierarchical reasoning process...',
-        thinkingHint: 'This is a complex, multi-step task and may take some time.'
-    });
-
-    let rawJsonResult: string;
-
-    // Use multimodal generation if files are attached
-    if (fileParts && fileParts.length > 0) {
-        const promptPart = { text: masterPrompt };
-        // The instruction prompt should come first
-        const allParts = [promptPart, ...fileParts.map(p => ({ text: `\n\n--- PROVIDED DOCUMENT ---\n${p.text}` }))];
-        rawJsonResult = await generateMultiModalContent(allParts);
-    } else {
-        rawJsonResult = await generateText(masterPrompt);
-    }
-    
-    onProgress({
-        stage: 'Parsing Response',
-        percentage: 90,
-        message: 'Parsing the structured response from the AI...',
-    });
-
-    try {
-        let jsonStr = rawJsonResult.trim();
-        const fenceRegex = /^```(\w*)?\s*\n?([\s\S]*?)\n?\s*```$/;
-        const match = jsonStr.match(fenceRegex);
-        if (match && match[2]) {
-            jsonStr = match[2].trim();
-        }
-        // The model is instructed to return a JSON object containing both artifacts.
-        const parsedResponse = JSON.parse(jsonStr);
-
-        if (!parsedResponse.finalResponseMd || !parsedResponse.reasoningTreeJson) {
-            console.error("Invalid response structure from reasoning engine:", parsedResponse);
-            throw new Error("The AI returned an invalid or incomplete data structure. Expected 'finalResponseMd' and 'reasoningTreeJson' keys.");
-        }
+    // Helper to create and add nodes to our tree
+    const createNode = (type: ReasoningNodeType, title: string, content: string, parentId?: string): ReasoningNode => {
+        const id = `${type.charAt(0)}${++nodeCounter}`;
+        const node: ReasoningNode = { id, type, title, content, children: [] };
+        nodes.push(node);
         
-        // Populate the exported_at field and ensure final_md is in the artifact
-        parsedResponse.reasoningTreeJson.artifacts = {
-            ...parsedResponse.reasoningTreeJson.artifacts,
-            final_md: parsedResponse.finalResponseMd,
+        if (parentId) {
+            const parent = nodes.find(n => n.id === parentId);
+            parent?.children?.push(id);
+        }
+        return node;
+    };
+
+    const rootNode = createNode('goal', 'Initial Goal', initialGoal);
+    const mainPhaseNode = createNode('phase', 'Phase 1: Iterative Reasoning', 'Expanding, critiquing, and synthesizing steps to reach the goal.', rootNode.id);
+    let previousStepNode = rootNode; // The last *synthesized* step becomes the input for the next depth level
+
+    // 2. Main Loop (Depth)
+    for (let d = 0; d < settings.depth; d++) {
+        const progress = 10 + (d / settings.depth) * 70;
+        onProgress({ stage: 'Reasoning', percentage: progress, message: `Processing Depth ${d + 1}/${settings.depth}`, current: d + 1, total: settings.depth });
+        
+        const taskNode = createNode('task', `Task ${d + 1}: Explore Alternatives`, `Generating and refining ${settings.breadth} approaches for this step.`, mainPhaseNode.id);
+
+        const refinedContents: string[] = [];
+        // 3. Breadth Loop (now sequential to avoid rate limiting)
+        for (let b = 0; b < settings.breadth; b++) {
+            const breadthProgress = progress + ((b / settings.breadth) * (50 / settings.depth));
+            onProgress({
+                stage: 'Reasoning',
+                percentage: breadthProgress,
+                message: `Depth ${d + 1}/${settings.depth}, Alternative ${b + 1}/${settings.breadth}`,
+                thinkingHint: 'Generating alternative approach...'
+            });
+
+            const expandPrompt = Prompts.generateExpandStepPrompt(initialGoal, previousStepNode.content, settings);
+            let currentContent = await generateText(expandPrompt);
+            
+            const altNode = createNode('step', `Alternative ${b + 1}`, currentContent, taskNode.id);
+            let parentForCritique = altNode.id;
+
+            // 4. Critic & Refine Loop (sequential within the breadth loop)
+            for (let c = 0; c < settings.criticRounds; c++) {
+                onProgress({
+                    stage: 'Reasoning',
+                    percentage: breadthProgress,
+                    message: `Depth ${d + 1}, Alt ${b + 1}: Critique Round ${c + 1}/${settings.criticRounds}`,
+                    thinkingHint: 'Critiquing proposed step...'
+                });
+
+                const critiquePrompt = Prompts.generateCritiquePrompt(initialGoal, currentContent, settings);
+                const critiqueContent = await generateText(critiquePrompt);
+                const critiqueNode = createNode('validate', `Critique ${c + 1}`, critiqueContent, parentForCritique);
+                critiqueNode.result = { status: 'fail', confidence: 0.5 }; // Mark as a critique for visualization
+
+                onProgress({
+                    stage: 'Reasoning',
+                    percentage: breadthProgress,
+                    message: `Depth ${d + 1}, Alt ${b + 1}: Refinement Round ${c + 1}/${settings.criticRounds}`,
+                    thinkingHint: 'Refining step based on critique...'
+                });
+
+                const refinePrompt = Prompts.generateRefinePrompt(initialGoal, currentContent, critiqueContent, settings);
+                const refinedContent = await generateText(refinePrompt);
+                const correctionNode = createNode('correction', `Refinement ${c + 1}`, refinedContent, critiqueNode.id);
+                
+                currentContent = refinedContent;
+                parentForCritique = correctionNode.id;
+            }
+            refinedContents.push(currentContent);
+        }
+
+        // 5. Synthesis
+        onProgress({ stage: 'Reasoning', percentage: progress + (50 / settings.depth), message: `Depth ${d + 1}: Synthesizing ${refinedContents.length} alternatives...` });
+        
+        const synthesizeNode = createNode('task', `Task ${d + 1}: Synthesize`, `Combining ${refinedContents.length} refined alternatives into a single path forward.`, mainPhaseNode.id);
+
+        const synthesizePrompt = Prompts.generateSynthesizePrompt(initialGoal, refinedContents, settings);
+        const synthesizedContent = await generateText(synthesizePrompt);
+
+        const synthesizedStepNode = createNode('step', `Synthesized Step ${d + 1}`, synthesizedContent, synthesizeNode.id);
+        previousStepNode = synthesizedStepNode; // Update for the next depth iteration
+    }
+
+    // 6. Final Report Generation
+    onProgress({ stage: 'Generating Report', percentage: 90, message: 'Generating final markdown report...' });
+    const fullTraceForReport = nodes.map(n => `[Node: ${n.id} | Type: ${n.type} | Title: ${n.title}]\n${n.content}`).join('\n\n---\n\n');
+    const finalReportPrompt = Prompts.generateFinalReportPrompt(initialGoal, fullTraceForReport, settings);
+    const finalResponseMd = await generateText(finalReportPrompt);
+
+    // 7. Assemble Final Tree
+    const reasoningTreeJson: ReasoningTree = {
+        version: "2.3-iterative",
+        project: { name: initialGoal.substring(0, 50).replace(/\s+/g, '_') },
+        goal: initialGoal,
+        constraints: [],
+        success_criteria: [],
+        settings: {
+            ...settings,
+            persona: {
+                name: settings.persona,
+                directive: Prompts.getPersonaDirective(settings)
+            }
+        },
+        nodes,
+        artifacts: {
+            final_md: finalResponseMd,
             exported_at: new Date().toISOString(),
-        };
+        },
+        audit: {
+            model: 'gemini-2.5-flash',
+            tokens_in: 0,
+            tokens_out: 0,
+            cost_usd: 0.0,
+        },
+    };
 
-        onProgress({ stage: 'Completed', percentage: 100, message: 'Reasoning process complete.' });
-        
-        return {
-            finalResponseMd: parsedResponse.finalResponseMd,
-            reasoningTreeJson: parsedResponse.reasoningTreeJson,
-        };
-
-    } catch (e) {
-        console.error("Failed to parse JSON response from reasoning engine:", e);
-        console.log("Raw response from AI:", rawJsonResult);
-        throw new Error(`Failed to parse the response from the AI. The data might be malformed. See console for raw output.`);
-    }
+    onProgress({ stage: 'Completed', percentage: 100, message: 'Reasoning process complete.' });
+    
+    return {
+        finalResponseMd,
+        reasoningTreeJson,
+    };
 };

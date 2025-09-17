@@ -1,9 +1,13 @@
 
 import type { ReasoningSettings } from '../types';
 
-export const REASONING_STUDIO_PROMPT_TEMPLATE = (prompt: string, settings: ReasoningSettings) => {
-
-const getPersonaDirective = (): string => {
+/**
+ * Retrieves the detailed directive for a given persona setting.
+ * This is exported to be used by both the prompt generation and the service layer.
+ * @param settings The current reasoning settings.
+ * @returns A string containing the detailed persona directive.
+ */
+export const getPersonaDirective = (settings: ReasoningSettings): string => {
     switch (settings.persona) {
         case 'physicist': return "Adopt the persona of a first-principles physicist. Decompose problems into their fundamental components. Emphasize causality, logical consistency, and empirical evidence. Justify steps with established physical laws or logical axioms.";
         case 'software_engineer': return "Adopt the persona of a senior software engineer. Decompose problems into modular components with clear interfaces. Emphasize robustness, scalability, and efficiency. Define clear inputs, outputs, and potential edge cases for each step. Consider dependencies and integration points.";
@@ -16,106 +20,189 @@ const getPersonaDirective = (): string => {
     }
 };
 
-const personaDirective = getPersonaDirective();
+/**
+ * Generates a prompt for the AI to expand on the previous step of reasoning.
+ * This is the core "next step" generator in the depth loop.
+ * @param mainGoal The overall user goal.
+ * @param previousStepAnalysis The output from the last synthesized step.
+ * @param settings The current reasoning settings.
+ * @returns A string prompt.
+ */
+export const generateExpandStepPrompt = (
+    mainGoal: string,
+    previousStepAnalysis: string,
+    settings: ReasoningSettings
+): string => {
+    const persona = getPersonaDirective(settings);
+    return `
+You are an expert reasoning agent. Your current persona is: "${persona}"
 
-return `
-You are an advanced reasoning engine that simulates a multi-agent, hierarchical pipeline to solve complex problems.
-Your task is to process a user's goal, follow a structured reasoning process, and produce two artifacts: a polished final response in Markdown, and a detailed reasoning trace in JSON format.
-
-**CRITICAL JSON FORMATTING RULE:** You must produce a single, valid, parsable JSON object. The ENTIRE output must be this JSON object.
-The string values within the JSON, especially for the \`finalResponseMd\` key which contains complex markdown, must be meticulously escaped.
-- Every double quote character (") within a string value MUST be escaped as \\".
-- Every backslash character (\\) within a string value MUST be escaped as \\\\.
-- Every newline character must be represented as \\n.
-Failure to produce a perfectly valid JSON will render the entire output useless. Double-check your escaping.
-
-**OUTPUT REQUIREMENTS:**
-Your final output MUST be a single, valid JSON object with the following structure. Do not include any text, explanations, or code fences before or after the JSON object.
-\`\`\`json
-{
-  "finalResponseMd": "...",
-  "reasoningTreeJson": { ... }
-}
-\`\`\`
-
-**PIPELINE & JSON SCHEMA:**
-
-You must simulate the following pipeline. Each step in the pipeline corresponds to a node in the \`reasoningTreeJson\`.
-
-**1. Parse User Goal & Define Project:**
-   - The root of the tree is a "goal" node.
-   - Analyze the user's prompt to define the main \`goal\`, \`constraints\`, \`success_criteria\`, and a concise, filesystem-friendly \`project.name\`.
-
-**2. Persona Conditioning:**
-   - You will strictly adhere to the following persona directive throughout the entire process. This directive must influence planning, step generation, validation, and synthesis.
-   - **Persona Directive:** ${personaDirective}
-
-**3. Plan (L0 Decomposition):**
-   - Decompose the main "goal" into logical "phase" nodes.
-   - Decompose each "phase" into one or more "task" nodes. A task is a significant unit of work.
-
-**4. Expand, Execute & Validate Tasks (The Core Loop):**
-   - For each "task" node, you must perform the following sub-pipeline:
-     a. **Expand:** Generate an ordered sequence of "step" nodes. A step is an atomic operation. For each task, define its \`assumptions\` and \`risks\`.
-     b. **Execute (Conceptual):** For each "step", describe its conceptual execution and list its \`outputs\` and any \`citations\`.
-     c. **VALIDATE (MANDATORY GATE):**
-        - After all steps for a task are defined, create a "validate" node.
-        - This node **must** contain a \`checks\` object with four lists of checks: \`evidence\`, \`constraints\`, \`success_criteria\`, and \`persona_checks\`. These checks must be specific and map directly to the task's steps.
-        - The "validate" node **must** have a \`result\` object with a \`status\` of "pass" or "fail".
-        - If the status is "fail", the \`failures\` array must be populated, detailing which check failed and which steps are impacted.
-     d. **CORRECT (If Validation Fails):**
-        - If a "validate" node fails, you **must immediately** create a "correction" node as its child.
-        - This "correction" node details the actions needed to fix the failure.
-        - It is followed by revised "step" nodes and a **new "validate" node** to confirm the fix.
-        - The pipeline **cannot proceed** to the next task until the current task's validation status is "pass".
-
-**5. Synthesize & Verify:**
-   - Once all tasks have passed validation, aggregate the outputs of all validated steps.
-   - Synthesize these outputs into a single, polished final response in Markdown format.
-   - The persona and style directives must be applied to this final response. Avoid conversational fluff.
-   - This response becomes the value for the \`finalResponseMd\` key in the root JSON object.
-   - Populate the \`artifacts.final_md\` key inside the reasoning tree with the same markdown content.
-
-**JSON SCHEMA for \`reasoning_tree.json\`:**
-You must generate a valid JSON object matching this schema.
-\`\`\`json
-{
-  "version": "2.2",
-  "project": { "name": "A concise, filesystem-friendly name for this project/goal" },
-  "goal": "string",
-  "constraints": ["string"],
-  "success_criteria": ["string"],
-  "settings": {
-    "depth": ${settings.depth},
-    "breadth": ${settings.breadth},
-    "critic_rounds": ${settings.criticRounds},
-    "evidence_mode": "${settings.evidenceMode}",
-    "style": "${settings.style}",
-    "persona": { "name": "${settings.persona}", "directive": "${getPersonaDirective().replace(/"/g, '\\"')}" },
-    "temperature": ${settings.temperature},
-    "seed": ${settings.seed},
-    "budget_usd": ${settings.budget}
-  },
-  "nodes": [
-    { "id": "g1", "type": "goal", "title": "...", "content": "...", "children": ["p1"] },
-    { "id": "p1", "type": "phase", "title": "...", "content": "...", "children": ["t1"] },
-    { "id": "t1", "type": "task", "title": "...", "content": "...", "assumptions": ["..."], "risks": ["..."], "children": ["s1", "v_t1"] },
-    { "id": "s1", "type": "step", "title": "...", "content": "...", "outputs": ["..."] },
-    { "id": "v_t1", "type": "validate", "title": "Validate Task: ...", "content": "...",
-      "checks": { "evidence": ["..."], "constraints": ["..."], "success_criteria": ["..."], "persona_checks": ["..."] },
-      "result": { "status": "pass|fail", "confidence": 0.95, "failures": [{ "check": "...", "reason": "...", "impacted_steps": ["s1"] }] },
-      "children": ["c_t1"]
-    },
-    { "id": "c_t1", "type": "correction", "title": "Correction for T1", "content": "...", "target_steps": ["s1"], "actions": ["..."], "children": ["s1b", "v_t1b"] }
-  ],
-  "artifacts": { "final_md": "...", "exported_at": "ISO-8601 string" },
-  "audit": { "model": "gemini-2.5-flash", "tokens_in": 0, "tokens_out": 0, "cost_usd": 0.0 }
-}
-\`\`\`
+**Main Goal:**
 ---
-**USER GOAL/PROMPT:**
-${prompt}
+${mainGoal}
 ---
-Begin generation now. Output only the single, valid JSON object as specified.
+
+**Analysis of Previous Step / Current Context:**
+---
+${previousStepAnalysis}
+---
+
+Based on the previous step's analysis, define the **next logical step** to advance towards the main goal.
+Your output should be a detailed analysis for this new step. It must contain:
+1.  A clear title for this step (e.g., "Step 2: Data Collection and Preprocessing").
+2.  The specific actions, algorithms, or methods to be employed.
+3.  Assumptions being made for this step to be successful.
+4.  Potential risks or edge cases to consider for this specific step.
+
+Do not solve the entire problem. Focus ONLY on the immediate next step. Your output should be a self-contained analysis that will be used as input for the subsequent stage in the reasoning chain.
+`;
+};
+
+/**
+ * Generates a prompt for the AI to critique a proposed step.
+ * @param mainGoal The overall user goal.
+ * @param stepToCritique The proposed step's analysis.
+ * @param settings The current reasoning settings.
+ * @returns A string prompt.
+ */
+export const generateCritiquePrompt = (
+    mainGoal: string,
+    stepToCritique: string,
+    settings: ReasoningSettings
+): string => {
+    const persona = getPersonaDirective(settings);
+    return `
+You are an expert critic agent. Your current persona is: "${persona}"
+
+**Main Goal:**
+---
+${mainGoal}
+---
+
+**Proposed Step Analysis to Critique:**
+---
+${stepToCritique}
+---
+
+Your task is to critically evaluate the proposed step. Be harsh but fair.
+- Does it logically follow from the main goal and previous context?
+- Does it overlook any obvious flaws, risks, or unstated assumptions?
+- Is it too broad or too narrow in scope?
+- How could the approach be improved or made more robust?
+- Does it align with your persona's priorities and methods?
+
+Provide your critique as a bulleted list of actionable feedback. Your feedback will be used to improve the step.
+`;
+};
+
+/**
+ * Generates a prompt for the AI to refine a step based on a critique.
+ * @param mainGoal The overall user goal.
+ * @param originalStep The original analysis of the step.
+ * @param critique The feedback from the critique phase.
+ * @param settings The current reasoning settings.
+ * @returns A string prompt.
+ */
+export const generateRefinePrompt = (
+    mainGoal: string,
+    originalStep: string,
+    critique: string,
+    settings: ReasoningSettings
+): string => {
+    const persona = getPersonaDirective(settings);
+    return `
+You are an expert reasoning agent. Your current persona is: "${persona}"
+
+**Main Goal:**
+---
+${mainGoal}
+---
+
+You previously proposed a step, and it has received the following critique.
+
+**Original Proposed Step:**
+---
+${originalStep}
+---
+
+**Critique to Address:**
+---
+${critique}
+---
+
+Your task is to rewrite and improve the original proposed step, directly addressing all points raised in the critique.
+The output must be a new, complete, and self-contained analysis for the refined step. It must have the same structure as the original (title, actions, assumptions, risks).
+`;
+};
+
+/**
+ * Generates a prompt for the AI to synthesize multiple alternative steps into a single, superior one.
+ * @param mainGoal The overall user goal.
+ * @param alternatives An array of alternative step analyses.
+ * @param settings The current reasoning settings.
+ * @returns A string prompt.
+ */
+export const generateSynthesizePrompt = (
+    mainGoal: string,
+    alternatives: string[],
+    settings: ReasoningSettings
+): string => {
+    const persona = getPersonaDirective(settings);
+    const alternativesText = alternatives.map((alt, i) => `
+--- ALTERNATIVE ${i + 1} ---
+${alt}
+`).join('\n\n');
+
+    return `
+You are an expert synthesis agent. Your current persona is: "${persona}"
+
+**Main Goal:**
+---
+${mainGoal}
+---
+
+You have been provided with several alternative analyses for the current reasoning step. Your task is to synthesize them into a single, superior analysis.
+- Identify the best ideas and strongest components from each alternative.
+- Discard weak, redundant, or contradictory points.
+- Combine the strengths to form a single, coherent, and robust plan for this step.
+
+**Alternatives to Synthesize:**
+${alternativesText}
+---
+
+Provide the single, synthesized analysis below. The output must be a complete, self-contained analysis for the step, with the standard structure (title, actions, assumptions, risks). This synthesized output will be the definitive plan for this stage of the reasoning process.
+`;
+};
+
+/**
+ * Generates a prompt for the AI to write the final report based on the complete reasoning trace.
+ * @param mainGoal The original user goal.
+ * @param fullReasoningTrace A string containing the content of all nodes in the reasoning tree.
+ * @param settings The current reasoning settings.
+ * @returns A string prompt.
+ */
+export const generateFinalReportPrompt = (
+    mainGoal: string,
+    fullReasoningTrace: string,
+    settings: ReasoningSettings
+): string => {
+    const persona = getPersonaDirective(settings);
+    return `
+You are an expert technical writer. Your current persona is: "${persona}"
+
+**Original User Goal:**
+---
+${mainGoal}
+---
+
+**Full Reasoning Trace (Internal Steps):**
+---
+${fullReasoningTrace}
+---
+
+Your task is to write a final, polished, comprehensive report in Markdown format.
+This report should directly address the user's original goal.
+Use the information from the reasoning trace to structure your answer, provide justifications for your conclusions, and explain the final plan or solution.
+The report should be well-organized, easy to read, and suitable for the target audience implied by your persona. Do not simply regurgitate the trace; synthesize it into a final answer.
 `;
 };
