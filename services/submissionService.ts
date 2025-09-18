@@ -10,7 +10,7 @@ import { processPromptEnhancement } from './promptEnhancerService';
 import { processAgentDesign } from './agentDesignerService';
 import { generateSuggestions } from './geminiService';
 import { ocrPdf } from './ocrService';
-import type { ProcessedOutput, ProgressUpdate, AppState, ProcessingError, Mode, SummaryOutput, StyleModelOutput, RewriteLength, SummaryFormat, ReasoningSettings, ScaffolderSettings, RequestSplitterSettings, PromptEnhancerSettings, AgentDesignerSettings } from '../types';
+import type { ProcessedOutput, ProgressUpdate, AppState, ProcessingError, Mode, SummaryOutput, StyleModelOutput, RewriteLength, SummaryFormat, ReasoningSettings, ScaffolderSettings, RequestSplitterSettings, PromptEnhancerSettings, AgentDesignerSettings, ChatSettings } from '../types';
 import { fileToGenerativePart, readFileAsText } from '../utils/fileUtils';
 
 type AllSettings = {
@@ -22,6 +22,7 @@ type AllSettings = {
     requestSplitterSpec: string; requestSplitterSettings: RequestSplitterSettings;
     promptEnhancerSettings: PromptEnhancerSettings;
     agentDesignerSettings: AgentDesignerSettings;
+    chatSettings: ChatSettings;
 };
 
 interface SubmissionArgs {
@@ -75,6 +76,9 @@ export const handleSubmission = async ({
       case 'agentDesigner':
         isReadyForSubmit = hasFiles || !!settings.agentDesignerSettings.goal.trim();
         break;
+      case 'chat':
+        // Chat has its own submit handler, this should not be called.
+        return;
       default:
         isReadyForSubmit = false;
     }

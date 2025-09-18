@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef, useLayoutEffect, useMemo } from 'react';
 import type { RequestSplitterOutput, SplitPlanPrompt } from '../types';
+import { enhanceCodeBlocks } from '../utils/uiUtils';
 
 declare var marked: any;
 
@@ -153,6 +154,7 @@ export const RequestSplitterViewer: React.FC<{ output: RequestSplitterOutput }> 
         if (activeTab === 'prompts' && promptsRef.current && typeof marked !== 'undefined') {
             try {
                 promptsRef.current.innerHTML = marked.parse(output.orderedPromptsMd);
+                enhanceCodeBlocks(promptsRef.current);
             } catch(e) {
                 console.error("Markdown parsing failed:", e);
                 promptsRef.current.innerText = output.orderedPromptsMd;

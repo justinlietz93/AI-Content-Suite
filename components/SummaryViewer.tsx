@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef } from 'react';
 import type { SummaryOutput, StyleModelOutput, ProcessedOutput, Highlight, Mode, RewriterOutput, MathFormatterOutput } from '../types';
+import { enhanceCodeBlocks } from '../utils/uiUtils';
 
 declare var marked: any;
 declare var mermaid: any;
@@ -49,6 +50,7 @@ export const SummaryViewer: React.FC<SummaryViewerProps> = ({ output, mode }) =>
       if (!ref.current) return;
       if (typeof marked !== 'undefined') {
         ref.current.innerHTML = marked.parse(content);
+        enhanceCodeBlocks(ref.current);
         if (typesetMath && window.MathJax) {
           window.MathJax.typesetPromise([ref.current]).catch((err: any) => console.error('MathJax typesetting failed:', err));
         }

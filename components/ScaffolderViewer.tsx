@@ -3,7 +3,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { ScaffolderOutput, ScaffoldPlan, ScaffoldTreeItem, ScaffoldTask } from '../types';
 import { ChevronRightIcon } from './icons/ChevronRightIcon';
+import { enhanceCodeBlocks } from '../utils/uiUtils';
 
+declare var marked: any;
 declare var mermaid: any;
 declare var svgPanZoom: any;
 
@@ -113,13 +115,31 @@ export const ScaffolderViewer: React.FC<{ output: ScaffolderOutput }> = ({ outpu
     const [selectedFile, setSelectedFile] = useState<ScaffoldTreeItem | null>(null);
     const mermaidContainerRef = useRef<HTMLDivElement>(null);
     const panZoomInstanceRef = useRef<any>(null);
+    const promptDisplayRef = useRef<HTMLDivElement>(null);
+    const scriptDisplayRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        // Select the first file by default when the component loads
-        if (output?.scaffoldPlanJson?.tree?.length > 0) {
+        if (output?.scaffoldPlanJson?.tree?.length > 0 && !selectedFile) {
             setSelectedFile(output.scaffoldPlanJson.tree[0]);
         }
-    }, [output]);
+    }, [output, selectedFile]);
+
+    useEffect(() => {
+        if (selectedFile && promptDisplayRef.current && typeof marked !== 'undefined') {
+            const markdownContent = `\`\`\`javascript\n${selectedFile.prompt}\n\`\`\``;
+            promptDisplayRef.current.innerHTML = marked.parse(markdownContent);
+            enhanceCodeBlocks(promptDisplayRef.current);
+        }
+    }, [selectedFile]);
+
+    useEffect(() => {
+        if (activeTab === 'script' && scriptDisplayRef.current && typeof marked !== 'undefined') {
+            const lang = output.scaffoldPlanJson.project.language === 'python' ? 'python' : 'bash';
+            const markdownContent = `\`\`\`${lang}\n${output.scaffoldScript}\n\`\`\``;
+            scriptDisplayRef.current.innerHTML = marked.parse(markdownContent);
+            enhanceCodeBlocks(scriptDisplayRef.current);
+        }
+    }, [activeTab, output.scaffoldScript, output.scaffoldPlanJson.project.language]);
 
     useEffect(() => {
         if (panZoomInstanceRef.current) {
@@ -169,7 +189,7 @@ export const ScaffolderViewer: React.FC<{ output: ScaffolderOutput }> = ({ outpu
                                     <>
                                         <h3 className="font-mono text-sm text-sky-300 break-all">{selectedFile.path}</h3>
                                         <p className="text-xs text-slate-400 mt-1 mb-3">Layer: {selectedFile.layer}</p>
-                                        <pre className="text-xs whitespace-pre-wrap text-slate-300"><code>{selectedFile.prompt}</code></pre>
+                                        <div ref={promptDisplayRef} className="prose prose-sm prose-invert max-w-none"></div>
                                     </>
                                 ) : (
                                     <p className="text-slate-400">Select a file from the tree to view its prompt.</p>
@@ -179,7 +199,7 @@ export const ScaffolderViewer: React.FC<{ output: ScaffolderOutput }> = ({ outpu
                     )}
                     {activeTab === 'graph' && (<div className="p-4 bg-background rounded-lg min-h-[60vh] overflow-hidden shadow-inner flex justify-center items-center"><div ref={mermaidContainerRef} className="w-full h-full cursor-move"></div></div>)}
                     {activeTab === 'plan' && (<div className="p-4 bg-background rounded-lg max-h-[60vh] overflow-y-auto shadow-inner"><pre className="text-xs whitespace-pre-wrap text-slate-300"><code>{JSON.stringify(output.scaffoldPlanJson, null, 2)}</code></pre></div>)}
-                    {activeTab === 'script' && (<div className="p-4 bg-background rounded-lg max-h-[60vh] overflow-y-auto shadow-inner"><pre className="text-xs whitespace-pre-wrap text-slate-300"><code>{output.scaffoldScript}</code></pre></div>)}
+                    {activeTab === 'script' && (<div ref={scriptDisplayRef} className="p-4 bg-background rounded-lg max-h-[60vh] overflow-y-auto shadow-inner prose prose-sm prose-invert max-w-none"></div>)}
                 </div>
 
             </div>

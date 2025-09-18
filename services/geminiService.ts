@@ -65,12 +65,14 @@ const getApiKey = (): string => {
   return apiKey;
 };
 
-let ai: GoogleGenAI | null = null;
+let aiInstance: GoogleGenAI | null = null;
 try {
-    ai = new GoogleGenAI({ apiKey: getApiKey() });
+    aiInstance = new GoogleGenAI({ apiKey: getApiKey() });
 } catch (e) {
     console.error("Failed to initialize GoogleGenAI:", e);
 }
+
+export const ai = aiInstance;
 
 export const generateText = async (prompt: string): Promise<string> => {
   if (!ai) throw new Error("Gemini AI SDK not initialized. API Key might be missing.");

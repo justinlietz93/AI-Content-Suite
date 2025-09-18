@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import type { AgentDesignerOutput } from '../types';
+import { enhanceCodeBlocks } from '../utils/uiUtils';
 
 declare var marked: any;
 declare var mermaid: any;
@@ -17,6 +18,7 @@ export const AgentDesignerViewer: React.FC<{ output: AgentDesignerOutput }> = ({
         if (activeTab === 'markdown' && markdownRef.current && typeof marked !== 'undefined') {
             try {
                 markdownRef.current.innerHTML = marked.parse(output.designMarkdown);
+                enhanceCodeBlocks(markdownRef.current);
             } catch(e) {
                 console.error("Markdown parsing failed:", e);
                 markdownRef.current.innerText = output.designMarkdown;

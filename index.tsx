@@ -3,6 +3,24 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 
+declare var marked: any;
+declare var hljs: any;
+
+// Configure marked to use highlight.js for syntax highlighting
+if (typeof marked !== 'undefined' && typeof hljs !== 'undefined') {
+  marked.setOptions({
+    highlight: function(code: string, lang: string) {
+      if (lang && hljs.getLanguage(lang)) {
+        return hljs.highlight(code, { language: lang }).value;
+      }
+      return hljs.highlightAuto(code).value;
+    },
+    langPrefix: 'hljs language-',
+    breaks: true,
+    gfm: true,
+  });
+}
+
 // This is a placeholder for process.env. In a real build system (Vite, Webpack),
 // you would configure this. For demonstration, we'll set it if not present.
 if (typeof process === 'undefined') {

@@ -308,8 +308,25 @@ export interface AgentDesignerOutput {
 }
 // --- End Agent Designer types ---
 
+// --- New types for LLM Chat ---
+export interface ChatSettings {
+  systemInstruction: string;
+}
 
-export type ProcessedOutput = SummaryOutput | StyleModelOutput | RewriterOutput | MathFormatterOutput | ReasoningOutput | ScaffolderOutput | RequestSplitterOutput | PromptEnhancerOutput | AgentDesignerOutput;
+export type ChatMessagePart = { text: string } | { inlineData: { mimeType: string; data: string } };
+
+export interface ChatMessage {
+    role: 'user' | 'model';
+    parts: ChatMessagePart[];
+}
+
+export interface ChatOutput {
+    history: ChatMessage[];
+    processingTimeSeconds?: number;
+}
+// --- End LLM Chat types ---
+
+export type ProcessedOutput = SummaryOutput | StyleModelOutput | RewriterOutput | MathFormatterOutput | ReasoningOutput | ScaffolderOutput | RequestSplitterOutput | PromptEnhancerOutput | AgentDesignerOutput | ChatOutput;
 
 export interface ProgressUpdate {
   stage: string;
@@ -322,7 +339,7 @@ export interface ProgressUpdate {
 }
 
 export type AppState = 'idle' | 'fileSelected' | 'processing' | 'completed' | 'error';
-export type Mode = 'technical' | 'styleExtractor' | 'rewriter' | 'mathFormatter' | 'reasoningStudio' | 'scaffolder' | 'requestSplitter' | 'promptEnhancer' | 'agentDesigner';
+export type Mode = 'technical' | 'styleExtractor' | 'rewriter' | 'mathFormatter' | 'reasoningStudio' | 'scaffolder' | 'requestSplitter' | 'promptEnhancer' | 'agentDesigner' | 'chat';
 export type RewriteLength = 'short' | 'medium' | 'long';
 
 

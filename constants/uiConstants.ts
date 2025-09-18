@@ -1,3 +1,4 @@
+
 import type { Mode } from '../types';
 
 export const TABS = [
@@ -10,6 +11,7 @@ export const TABS = [
     { id: 'requestSplitter', label: 'Request Splitter' },
     { id: 'promptEnhancer', label: 'Prompt Enhancer' },
     { id: 'agentDesigner', label: 'Agent Designer' },
+    { id: 'chat', label: 'LLM Chat' },
 ];
 
 export const DESCRIPTION_TEXT: Record<Mode, string> = {
@@ -22,6 +24,7 @@ export const DESCRIPTION_TEXT: Record<Mode, string> = {
     requestSplitter: "Input a large specification to decompose it into a sequence of actionable, buildable implementation prompts.",
     promptEnhancer: "Take a raw request and transform it into a structured, agent-ready prompt using reusable templates.",
     agentDesigner: "Design a multi-agent system by defining a high-level goal and configuring its operational parameters.",
+    chat: "Engage in an interactive, streaming conversation with the AI. Add context files via drag-and-drop.",
 };
 
 export const getButtonText = (mode: Mode, fileCount: number, summaryTextInput: string, reasoningPrompt: string, scaffolderPrompt: string, requestSplitterSpec: string, promptEnhancerRawPrompt: string, agentDesignerGoal: string): string => {
@@ -44,6 +47,8 @@ export const getButtonText = (mode: Mode, fileCount: number, summaryTextInput: s
             return 'Enhance Prompt';
         case 'agentDesigner':
             return 'Design Agent System';
+        case 'chat':
+             return 'Send'; // Note: Chat mode uses a separate button, but this is a fallback.
         default:
             return 'Submit';
     }
@@ -59,4 +64,5 @@ export const RESET_BUTTON_TEXT: Record<Mode, string> = {
     requestSplitter: 'New Split Request',
     promptEnhancer: 'Enhance Another Prompt',
     agentDesigner: 'Design Another Agent',
+    chat: 'New Chat',
 }

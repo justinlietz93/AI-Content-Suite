@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import type { PromptEnhancerOutput } from '../types';
+import { enhanceCodeBlocks } from '../utils/uiUtils';
 
 declare var marked: any;
 
@@ -13,6 +14,7 @@ export const PromptEnhancerViewer: React.FC<{ output: PromptEnhancerOutput }> = 
         if (activeTab === 'markdown' && markdownRef.current && typeof marked !== 'undefined') {
             try {
                 markdownRef.current.innerHTML = marked.parse(output.enhancedPromptMd);
+                enhanceCodeBlocks(markdownRef.current);
             } catch(e) {
                 console.error("Markdown parsing failed:", e);
                 markdownRef.current.innerText = output.enhancedPromptMd;

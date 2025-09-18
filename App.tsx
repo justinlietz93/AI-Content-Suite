@@ -1,5 +1,6 @@
 
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, FormEvent, useRef } from 'react';
+import { GoogleGenAI, Chat } from "@google/genai";
 import { FileLoader } from './components/FileLoader';
 import { ProgressBar } from './components/ProgressBar';
 import { SummaryViewer } from './components/SummaryViewer';
@@ -8,8 +9,10 @@ import { ScaffolderViewer } from './components/ScaffolderViewer';
 import { RequestSplitterViewer } from './components/RequestSplitterViewer';
 import { PromptEnhancerViewer } from './components/PromptEnhancerViewer';
 import { AgentDesignerViewer } from './components/AgentDesignerViewer';
+import { ChatViewer } from './components/ChatViewer';
 import { Tabs } from './components/Tabs';
 import { ReportModal } from './components/ReportModal';
+import { ChatSettingsModal } from './components/ChatSettingsModal';
 import { ReasoningControls } from './components/ReasoningControls';
 import { ScaffolderControls } from './components/ScaffolderControls';
 import { RequestSplitterControls } from './components/RequestSplitterControls';
@@ -19,12 +22,17 @@ import { HierarchicalToggle } from './components/HierarchicalToggle';
 import { CheckCircleIcon } from './components/icons/CheckCircleIcon';
 import { XCircleIcon } from './components/icons/XCircleIcon';
 import { DownloadIcon } from './components/icons/DownloadIcon';
+import { SendIcon } from './components/icons/SendIcon';
+import { PaperclipIcon } from './components/icons/PaperclipIcon';
+import { GearIcon } from './components/icons/GearIcon';
 import { useStarfield } from './hooks/useStarfield';
-import type { ProcessedOutput, ProgressUpdate, AppState, ProcessingError, Mode, RewriteLength, SummaryFormat, ReasoningSettings, ScaffolderSettings, RequestSplitterSettings, PromptEnhancerSettings, AgentDesignerSettings } from './types';
-import { INITIAL_PROGRESS, INITIAL_REASONING_SETTINGS, INITIAL_SCAFFOLDER_SETTINGS, INITIAL_REQUEST_SPLITTER_SETTINGS, INITIAL_PROMPT_ENHANCER_SETTINGS, INITIAL_AGENT_DESIGNER_SETTINGS } from './constants';
+import type { ProcessedOutput, ProgressUpdate, AppState, ProcessingError, Mode, RewriteLength, SummaryFormat, ReasoningSettings, ScaffolderSettings, RequestSplitterSettings, PromptEnhancerSettings, AgentDesignerSettings, ChatSettings, ChatMessage, ChatMessagePart } from './types';
+import { INITIAL_PROGRESS, INITIAL_REASONING_SETTINGS, INITIAL_SCAFFOLDER_SETTINGS, INITIAL_REQUEST_SPLITTER_SETTINGS, INITIAL_PROMPT_ENHANCER_SETTINGS, INITIAL_AGENT_DESIGNER_SETTINGS, INITIAL_CHAT_SETTINGS } from './constants';
 import { SUMMARY_FORMAT_OPTIONS } from './data/summaryFormats';
 import { TABS, DESCRIPTION_TEXT, getButtonText, RESET_BUTTON_TEXT } from './constants/uiConstants';
 import { handleSubmission } from './services/submissionService';
+import { ai } from './services/geminiService';
+import { fileToGenerativePart } from './utils/fileUtils';
 import {
   downloadReasoningArtifact,
   downloadScaffoldArtifact,
@@ -63,9 +71,29 @@ const App: React.FC = () => {
   const [requestSplitterSettings, setRequestSplitterSettings] = useState<RequestSplitterSettings>(INITIAL_REQUEST_SPLITTER_SETTINGS);
   const [promptEnhancerSettings, setPromptEnhancerSettings] = useState<PromptEnhancerSettings>(INITIAL_PROMPT_ENHANCER_SETTINGS);
   const [agentDesignerSettings, setAgentDesignerSettings] = useState<AgentDesignerSettings>(INITIAL_AGENT_DESIGNER_SETTINGS);
+  
+  // --- CHAT-SPECIFIC STATE ---
+  const [chatSettings, setChatSettings] = useState<ChatSettings>(INITIAL_CHAT_SETTINGS);
+  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
+  const [chatSession, setChatSession] = useState<Chat | null>(null);
+  const [isStreamingResponse, setIsStreamingResponse] = useState(false);
+  const [chatInput, setChatInput] = useState('');
+  const [chatFiles, setChatFiles] = useState<File[] | null>(null);
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
+  const [isChatSettingsModalOpen, setIsChatSettingsModalOpen] = useState(false);
+
 
   // --- HOOKS ---
   useStarfield('space-background');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // --- EFFECTS ---
+  // Effect to reset chat session when system prompt changes
+  useEffect(() => {
+    if (activeMode === 'chat') {
+        setChatSession(null); // Force re-initialization on next message
+    }
+  }, [chatSettings.systemInstruction, activeMode]);
 
   // --- MEMOS ---
   const filteredSummaryFormats = useMemo(() => {
@@ -103,6 +131,8 @@ const App: React.FC = () => {
         return hasFiles || !!promptEnhancerSettings.rawPrompt.trim();
       case 'agentDesigner':
         return hasFiles || !!agentDesignerSettings.goal.trim();
+      case 'chat':
+        return (!!chatInput.trim() || (chatFiles && chatFiles.length > 0)) && !isStreamingResponse;
       default:
         return false;
     }
@@ -115,6 +145,9 @@ const App: React.FC = () => {
     requestSplitterSpec,
     promptEnhancerSettings.rawPrompt,
     agentDesignerSettings.goal,
+    chatInput,
+    chatFiles,
+    isStreamingResponse,
   ]);
 
   const buttonText = useMemo(() => {
@@ -158,6 +191,12 @@ const App: React.FC = () => {
     setRequestSplitterSettings(INITIAL_REQUEST_SPLITTER_SETTINGS);
     setPromptEnhancerSettings(INITIAL_PROMPT_ENHANCER_SETTINGS);
     setAgentDesignerSettings(INITIAL_AGENT_DESIGNER_SETTINGS);
+    setChatSettings(INITIAL_CHAT_SETTINGS);
+    setChatHistory([]);
+    setChatSession(null);
+    setIsStreamingResponse(false);
+    setChatInput('');
+    setChatFiles(null);
   }, []);
 
   const handleSubmit = useCallback(() => {
@@ -171,7 +210,8 @@ const App: React.FC = () => {
         reasoningPrompt, reasoningSettings,
         scaffolderPrompt, scaffolderSettings,
         requestSplitterSpec, requestSplitterSettings,
-        promptEnhancerSettings, agentDesignerSettings
+        promptEnhancerSettings, agentDesignerSettings,
+        chatSettings,
       },
       setAppState, setError, setProcessedData, setProgress,
       setNextStepSuggestions, setSuggestionsLoading
@@ -181,12 +221,99 @@ const App: React.FC = () => {
     styleTarget, rewriteStyle, rewriteInstructions, rewriteLength,
     reasoningPrompt, reasoningSettings, scaffolderPrompt, scaffolderSettings,
     requestSplitterSpec, requestSplitterSettings, promptEnhancerSettings,
-    agentDesignerSettings
+    agentDesignerSettings, chatSettings
   ]);
+
+  const handleChatSubmit = useCallback(async (e?: FormEvent<HTMLFormElement>) => {
+    e?.preventDefault();
+    if (!ai || !canSubmit) return;
+
+    setIsStreamingResponse(true);
+    setError(null);
+
+    let currentChatSession = chatSession;
+    if (!currentChatSession) {
+        const newChat = ai.chats.create({
+            model: 'gemini-2.5-flash',
+            history: chatHistory,
+            config: {
+                systemInstruction: chatSettings.systemInstruction,
+            },
+        });
+        setChatSession(newChat);
+        currentChatSession = newChat;
+    }
+
+    try {
+        const fileParts = chatFiles ? await Promise.all(chatFiles.map(fileToGenerativePart)) : [];
+        const textPart = chatInput.trim() ? [{ text: chatInput }] : [];
+        const userMessageParts: ChatMessagePart[] = [...fileParts, ...textPart];
+
+        if (userMessageParts.length === 0) {
+            setIsStreamingResponse(false);
+            return;
+        }
+
+        setChatHistory(prev => [...prev, { role: 'user', parts: userMessageParts }]);
+        setChatInput('');
+        setChatFiles(null);
+        
+        setChatHistory(prev => [...prev, { role: 'model', parts: [{ text: '' }] }]);
+
+        const stream = await currentChatSession.sendMessageStream({ message: userMessageParts });
+
+        for await (const chunk of stream) {
+            if (chunk.text) {
+                setChatHistory(prev => {
+                    const newHistory = [...prev];
+                    const lastMessage = newHistory[newHistory.length - 1];
+                    if (lastMessage && lastMessage.role === 'model' && lastMessage.parts[0] && 'text' in lastMessage.parts[0]) {
+                        lastMessage.parts[0].text += chunk.text;
+                    }
+                    return newHistory;
+                });
+            }
+        }
+    } catch (err) {
+        console.error("Chat error:", err);
+        const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+        setError({ message: `Chat failed: ${errorMessage}` });
+        setChatHistory(prev => prev.slice(0, prev.length -1));
+    } finally {
+        setIsStreamingResponse(false);
+    }
+  }, [ai, canSubmit, chatSession, chatHistory, chatSettings, chatInput, chatFiles]);
+  
+    // --- CHAT FILE HANDLING ---
+    const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
+        e.preventDefault(); e.stopPropagation(); setIsDraggingOver(true);
+    };
+    const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+        e.preventDefault(); e.stopPropagation(); setIsDraggingOver(false);
+    };
+    const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+        e.preventDefault(); e.stopPropagation(); // Necessary to allow drop
+    };
+    const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+        e.preventDefault(); e.stopPropagation(); setIsDraggingOver(false);
+        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            setChatFiles(prev => [...(prev || []), ...Array.from(e.dataTransfer.files)]);
+        }
+    };
+    const handlePaperclipClick = () => { fileInputRef.current?.click(); };
+    const handleFileInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+        if (event.target.files && event.target.files.length > 0) {
+            setChatFiles(prev => [...(prev || []), ...Array.from(event.target.files!)]);
+        }
+        if(fileInputRef.current) fileInputRef.current.value = '';
+    };
+    const handleRemoveChatFile = (fileToRemove: File) => {
+        setChatFiles(prev => prev ? prev.filter(file => file !== fileToRemove) : null);
+    };
 
   const handleFileSelect = useCallback((files: File[]) => {
     if (files.length > 0) {
-      setSummaryTextInput(''); // Clear text input when files are selected
+      setSummaryTextInput(''); 
     }
     setCurrentFiles(files);
     setProcessedData(null);
@@ -200,7 +327,7 @@ const App: React.FC = () => {
   const handleSummaryTextChange = useCallback((text: string) => {
     setSummaryTextInput(text);
     if (text.trim()) {
-      setCurrentFiles(null); // Clear files when text is entered
+      setCurrentFiles(null); 
     }
   }, []);
   
@@ -245,8 +372,63 @@ const App: React.FC = () => {
             }} />
           </div>
 
-          {/* RENDER CONTROLS */}
-          {(appState === 'idle' || appState === 'fileSelected') && (
+          {/* RENDER CONTROLS & UI */}
+          {activeMode === 'chat' ? (
+              <div 
+                className={`relative animate-fade-in-scale flex flex-col h-[75vh] transition-all duration-300 rounded-lg ${isDraggingOver ? 'ring-4 ring-primary ring-offset-4 ring-offset-surface' : ''}`}
+                onDragEnter={handleDragEnter} onDragLeave={handleDragLeave} onDragOver={handleDragOver} onDrop={handleDrop}
+              >
+                {isDraggingOver && (
+                    <div className="absolute inset-0 bg-primary/20 rounded-lg pointer-events-none flex items-center justify-center z-10">
+                        <div className="text-center text-primary font-bold text-2xl p-8 bg-surface/80 rounded-lg">
+                            Drop files to attach
+                        </div>
+                    </div>
+                )}
+                
+                <ChatViewer history={chatHistory} isStreaming={isStreamingResponse} />
+                
+                {chatFiles && chatFiles.length > 0 && (
+                    <div className="mt-2 px-1 flex items-center gap-2 overflow-x-auto pb-2">
+                        {chatFiles.map((file, index) => (
+                            <div key={`${file.name}-${index}`} className="flex-shrink-0 flex items-center gap-2 bg-muted text-xs text-text-primary rounded-full py-1 pl-3 pr-2">
+                                <span className="truncate max-w-xs">{file.name}</span>
+                                <button onClick={() => handleRemoveChatFile(file)} className="text-muted-foreground hover:text-text-primary" aria-label={`Remove ${file.name}`}>
+                                    <XCircleIcon className="w-4 h-4" />
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                )}
+
+                <form onSubmit={handleChatSubmit} className="mt-2 flex items-start gap-2">
+                    <input type="file" ref={fileInputRef} onChange={handleFileInputChange} className="hidden" multiple accept=".txt,.md,text/plain,text/markdown,image/png,image/jpeg,image/webp,application/pdf,.js,.ts,.jsx,.tsx,.py,.html,.css,.json,.xml,.yaml,.yml" />
+                    <button type="button" onClick={handlePaperclipClick} aria-label="Attach files" className="p-2.5 bg-secondary text-text-secondary hover:text-text-primary rounded-lg transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-surface h-full">
+                        <PaperclipIcon className="w-5 h-5" />
+                    </button>
+                    <button type="button" onClick={() => setIsChatSettingsModalOpen(true)} aria-label="Chat settings" className="p-2.5 bg-secondary text-text-secondary hover:text-text-primary rounded-lg transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-surface h-full">
+                        <GearIcon className="w-5 h-5" />
+                    </button>
+                    <textarea
+                        value={chatInput}
+                        onChange={(e) => setChatInput(e.target.value)}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                                e.preventDefault();
+                                handleChatSubmit();
+                            }
+                        }}
+                        placeholder="Type your message or drop files here..."
+                        className="flex-grow w-full px-3 py-2 bg-input border border-border-color rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-ring text-text-primary placeholder-text-secondary text-sm resize-none"
+                        rows={2}
+                        disabled={isStreamingResponse}
+                    />
+                    <button type="submit" disabled={!canSubmit} className="px-4 py-2 bg-primary text-primary-foreground font-semibold rounded-lg hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-surface h-full">
+                        <SendIcon className="w-5 h-5" />
+                    </button>
+                </form>
+              </div>
+          ) : (appState === 'idle' || appState === 'fileSelected') && (
             <div className="animate-fade-in-scale">
               {activeMode === 'technical' && (
                 <>
@@ -351,7 +533,7 @@ const App: React.FC = () => {
           )}
 
           {/* SUBMIT BUTTON */}
-          {canSubmit && appState !== 'completed' && appState !== 'error' && (
+          {activeMode !== 'chat' && canSubmit && appState !== 'completed' && appState !== 'error' && (
             <div className="mt-6 text-center">
               <button
                 onClick={handleSubmit}
@@ -408,9 +590,9 @@ const App: React.FC = () => {
                     <button onClick={() => downloadAgentDesignerArtifact(processedData, 'md')} className={downloadButtonClass}><DownloadIcon className="w-5 h-5" />Design (.md)</button>
                     <button onClick={() => downloadAgentDesignerArtifact(processedData, 'json')} className={downloadButtonClass}><DownloadIcon className="w-5 h-5" />Plan (.json)</button>
                  </div>
-              ) : (
+              ) : activeMode !== 'chat' ? (
                 <button onClick={() => setIsReportModalOpen(true)} className={primaryActionButtonClass}><DownloadIcon className="w-5 h-5" />Download Report</button>
-              )}
+              ) : null}
             </div>
           </div>}
 
@@ -428,6 +610,15 @@ const App: React.FC = () => {
       </div>
 
       <ReportModal isOpen={isReportModalOpen} onClose={() => setIsReportModalOpen(false)} output={processedData} mode={activeMode} styleTarget={activeMode === 'styleExtractor' ? styleTarget : undefined} nextStepSuggestions={nextStepSuggestions} />
+      <ChatSettingsModal
+        isOpen={isChatSettingsModalOpen}
+        onClose={() => setIsChatSettingsModalOpen(false)}
+        currentSettings={chatSettings}
+        onSave={(newSettings) => {
+          setChatSettings(newSettings);
+          setIsChatSettingsModalOpen(false);
+        }}
+      />
     </>
   );
 };

@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import type { ReasoningOutput, ReasoningTree, ReasoningNode, ReasoningNodeType } from '../types';
+import { enhanceCodeBlocks } from '../utils/uiUtils';
 
 declare var marked: any;
 declare var mermaid: any;
@@ -76,6 +77,7 @@ export const ReasoningViewer: React.FC<{ output: ReasoningOutput }> = ({ output 
     useEffect(() => {
         if (activeTab === 'response' && responseRef.current && typeof marked !== 'undefined') {
             responseRef.current.innerHTML = marked.parse(output.finalResponseMd);
+            enhanceCodeBlocks(responseRef.current);
         }
     }, [activeTab, output.finalResponseMd]);
 

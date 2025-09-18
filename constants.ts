@@ -1,5 +1,5 @@
 
-import type { ProgressUpdate, ReasoningSettings, ScaffolderSettings, RequestSplitterSettings, PromptEnhancerSettings, AgentDesignerSettings } from './types';
+import type { ProgressUpdate, ReasoningSettings, ScaffolderSettings, RequestSplitterSettings, PromptEnhancerSettings, AgentDesignerSettings, ChatSettings } from './types';
 
 // Import all summary prompts from the new modular structure
 import * as summaryPrompts from './prompts/summaries';
@@ -93,6 +93,10 @@ export const INITIAL_AGENT_DESIGNER_SETTINGS: AgentDesignerSettings = {
     systemType: 'multiAgent',
 };
 
+export const INITIAL_CHAT_SETTINGS: ChatSettings = {
+    systemInstruction: 'You are a helpful and friendly AI assistant. Answer the user\'s questions clearly and concisely.',
+};
+
 // --- Prompt Collections (Re-constructed from imports) ---
 export const CHUNK_SUMMARY_PROMPTS = {
   default: summaryPrompts.CHUNK_SUMMARY_PROMPT_TEMPLATE_DEFAULT,
@@ -117,6 +121,7 @@ export const CHUNK_SUMMARY_PROMPTS = {
   milestoneTracker: summaryPrompts.CHUNK_SUMMARY_PROMPT_TEMPLATE_MILESTONE_TRACKER,
   glossaryTermMap: summaryPrompts.CHUNK_SUMMARY_PROMPT_TEMPLATE_GLOSSARY_TERM_MAP,
   hierarchyOfNeeds: summaryPrompts.CHUNK_SUMMARY_PROMPT_TEMPLATE_HIERARCHY_OF_NEEDS,
+  // FIX: Corrected typo from STAKEHOLDERS_MAP to STAKEHOLDER_MAP
   stakeholderMap: summaryPrompts.CHUNK_SUMMARY_PROMPT_TEMPLATE_STAKEHOLDER_MAP,
   constraintList: summaryPrompts.CHUNK_SUMMARY_PROMPT_TEMPLATE_CONSTRAINT_LIST,
   prosConsTable: summaryPrompts.CHUNK_SUMMARY_PROMPT_TEMPLATE_PROS_CONS_TABLE,
