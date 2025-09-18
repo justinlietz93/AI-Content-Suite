@@ -24,9 +24,9 @@ import { XCircleIcon } from './components/icons/XCircleIcon';
 import { DownloadIcon } from './components/icons/DownloadIcon';
 import { SendIcon } from './components/icons/SendIcon';
 import { PaperclipIcon } from './components/icons/PaperclipIcon';
-import { GearIcon } from './components/icons/GearIcon';
+import { CogIcon } from './components/icons/CogIcon';
 import { useStarfield } from './hooks/useStarfield';
-import type { ProcessedOutput, ProgressUpdate, AppState, ProcessingError, Mode, RewriteLength, SummaryFormat, ReasoningSettings, ScaffolderSettings, RequestSplitterSettings, PromptEnhancerSettings, AgentDesignerSettings, ChatSettings, ChatMessage, ChatMessagePart } from './types';
+import type { ProcessedOutput, ProgressUpdate, AppState, ProcessingError, Mode, RewriteLength, SummaryFormat, ReasoningSettings, ScaffolderSettings, RequestSplitterSettings, PromptEnhancerSettings, AgentDesignerSettings, ChatSettings, ChatMessage, ChatMessagePart, SavedPrompt } from './types';
 import { INITIAL_PROGRESS, INITIAL_REASONING_SETTINGS, INITIAL_SCAFFOLDER_SETTINGS, INITIAL_REQUEST_SPLITTER_SETTINGS, INITIAL_PROMPT_ENHANCER_SETTINGS, INITIAL_AGENT_DESIGNER_SETTINGS, INITIAL_CHAT_SETTINGS } from './constants';
 import { SUMMARY_FORMAT_OPTIONS } from './data/summaryFormats';
 import { TABS, DESCRIPTION_TEXT, getButtonText, RESET_BUTTON_TEXT } from './constants/uiConstants';
@@ -74,6 +74,7 @@ const App: React.FC = () => {
   
   // --- CHAT-SPECIFIC STATE ---
   const [chatSettings, setChatSettings] = useState<ChatSettings>(INITIAL_CHAT_SETTINGS);
+  const [savedPrompts, setSavedPrompts] = useState<SavedPrompt[]>([]);
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [chatSession, setChatSession] = useState<Chat | null>(null);
   const [isStreamingResponse, setIsStreamingResponse] = useState(false);
@@ -88,6 +89,27 @@ const App: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   // --- EFFECTS ---
+  // Load saved prompts from local storage on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('ai_content_suite_saved_prompts');
+      if (saved) {
+        setSavedPrompts(JSON.parse(saved));
+      }
+    } catch (e) {
+      console.error("Failed to load saved prompts from local storage:", e);
+    }
+  }, []);
+
+  // Save prompts to local storage whenever they change
+  useEffect(() => {
+    try {
+      localStorage.setItem('ai_content_suite_saved_prompts', JSON.stringify(savedPrompts));
+    } catch (e) {
+      console.error("Failed to save prompts to local storage:", e);
+    }
+  }, [savedPrompts]);
+
   // Effect to reset chat session when system prompt changes
   useEffect(() => {
     if (activeMode === 'chat') {
@@ -311,6 +333,26 @@ const App: React.FC = () => {
         setChatFiles(prev => prev ? prev.filter(file => file !== fileToRemove) : null);
     };
 
+    const handleSavePromptPreset = (name: string, prompt: string) => {
+      setSavedPrompts(prev => {
+        const existingIndex = prev.findIndex(p => p.name === name);
+        if (existingIndex > -1) {
+          // Update existing
+          const newPrompts = [...prev];
+          newPrompts[existingIndex] = { name, prompt };
+          return newPrompts;
+        } else {
+          // Add new
+          return [...prev, { name, prompt }];
+        }
+      });
+    };
+
+    const handleDeletePromptPreset = (name: string) => {
+      setSavedPrompts(prev => prev.filter(p => p.name !== name));
+    };
+
+
   const handleFileSelect = useCallback((files: File[]) => {
     if (files.length > 0) {
       setSummaryTextInput(''); 
@@ -355,7 +397,7 @@ const App: React.FC = () => {
   return (
     <>
       <div className="min-h-screen bg-transparent flex flex-col items-center justify-center p-4 sm:p-8 transition-all duration-300">
-        <div className="w-full max-w-3xl bg-surface shadow-2xl rounded-lg p-6 sm:p-10 border border-border-color animate-breathing-glow">
+        <div className={`w-full ${activeMode === 'chat' ? 'max-w-6xl' : 'max-w-3xl'} bg-surface shadow-2xl rounded-lg ${activeMode === 'chat' ? 'px-6 sm:px-10 pt-6 sm:pt-10 pb-2 sm:pb-3' : 'p-6 sm:p-10'} border border-border-color animate-breathing-glow transition-all duration-500 ease-in-out`}>
           <header className="mb-6 text-center">
             <h1 className="text-3xl sm:text-4xl font-bold text-text-primary">
               AI Content Suite
@@ -401,13 +443,13 @@ const App: React.FC = () => {
                     </div>
                 )}
 
-                <form onSubmit={handleChatSubmit} className="mt-2 flex items-start gap-2">
+                <form onSubmit={handleChatSubmit} className="mt-2 flex items-center gap-2">
                     <input type="file" ref={fileInputRef} onChange={handleFileInputChange} className="hidden" multiple accept=".txt,.md,text/plain,text/markdown,image/png,image/jpeg,image/webp,application/pdf,.js,.ts,.jsx,.tsx,.py,.html,.css,.json,.xml,.yaml,.yml" />
                     <button type="button" onClick={handlePaperclipClick} aria-label="Attach files" className="p-2.5 bg-secondary text-text-secondary hover:text-text-primary rounded-lg transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-surface h-full">
                         <PaperclipIcon className="w-5 h-5" />
                     </button>
                     <button type="button" onClick={() => setIsChatSettingsModalOpen(true)} aria-label="Chat settings" className="p-2.5 bg-secondary text-text-secondary hover:text-text-primary rounded-lg transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-surface h-full">
-                        <GearIcon className="w-5 h-5" />
+                        <CogIcon className="w-5 h-5" />
                     </button>
                     <textarea
                         value={chatInput}
@@ -420,11 +462,11 @@ const App: React.FC = () => {
                         }}
                         placeholder="Type your message or drop files here..."
                         className="flex-grow w-full px-3 py-2 bg-input border border-border-color rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-ring text-text-primary placeholder-text-secondary text-sm resize-none"
-                        rows={2}
+                        rows={1}
                         disabled={isStreamingResponse}
                     />
                     <button type="submit" disabled={!canSubmit} className="px-4 py-2 bg-primary text-primary-foreground font-semibold rounded-lg hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-surface h-full">
-                        <SendIcon className="w-5 h-5" />
+                        <SendIcon className="w-4 h-4" />
                     </button>
                 </form>
               </div>
@@ -618,6 +660,9 @@ const App: React.FC = () => {
           setChatSettings(newSettings);
           setIsChatSettingsModalOpen(false);
         }}
+        savedPrompts={savedPrompts}
+        onSavePreset={handleSavePromptPreset}
+        onDeletePreset={handleDeletePromptPreset}
       />
     </>
   );

@@ -117,7 +117,7 @@ export const ChatViewer: React.FC<ChatViewerProps> = ({ history, isStreaming }) 
                                     <>
                                         {isModelThinking && <ThinkingIndicator />}
                                         <div 
-                                            className="prose prose-sm prose-invert max-w-none" 
+                                            className="prose prose-base prose-invert max-w-none" 
                                             ref={el => {
                                                 if (el) {
                                                     messageRefs.current.set(index, el);
@@ -130,7 +130,7 @@ export const ChatViewer: React.FC<ChatViewerProps> = ({ history, isStreaming }) 
                                         </div>
                                     </>
                                 ) : (
-                                    <div className="whitespace-pre-wrap text-sm">
+                                    <div className="whitespace-pre-wrap text-base">
                                         {message.parts.map((part, partIndex) => {
                                             if ('text' in part) {
                                                 return <p key={partIndex} className="mb-2 last:mb-0">{part.text}</p>;

@@ -309,6 +309,11 @@ export interface AgentDesignerOutput {
 // --- End Agent Designer types ---
 
 // --- New types for LLM Chat ---
+export interface SavedPrompt {
+  name: string;
+  prompt: string;
+}
+
 export interface ChatSettings {
   systemInstruction: string;
 }
