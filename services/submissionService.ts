@@ -1,4 +1,3 @@
-
 import { processTranscript } from './summarizationService';
 import { processStyleExtraction } from './styleExtractionService';
 import { processRewrite } from './rewriterService';
@@ -224,7 +223,7 @@ export const handleSubmission = async ({
     } catch (err) {
       console.error(`Error during ${activeMode} processing:`, err);
       const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
-      const errorDetails = err instanceof Error && err.stack ? err.stack : undefined;
+      const errorDetails = err instanceof Error ? ((err as any).details || err.stack) : undefined;
       setError({ message: `Failed to process: ${errorMessage}`, details: errorDetails });
       setAppState('error');
       setSuggestionsLoading(false);

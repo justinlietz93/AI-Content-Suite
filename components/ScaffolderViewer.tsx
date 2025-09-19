@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect, useRef } from 'react';
 import type { ScaffolderOutput, ScaffoldPlan, ScaffoldTreeItem, ScaffoldTask } from '../types';
 import { ChevronRightIcon } from './icons/ChevronRightIcon';
@@ -14,7 +13,7 @@ const convertPlanToMermaid = (plan: ScaffoldPlan): string => {
     
     mermaidStr += `    subgraph "Project Goal: ${plan.project.name}"\n`;
     mermaidStr += `        direction TB\n`;
-    mermaidStr += `        g1((${plan.project.name}));\n`;
+    mermaidStr += `        g1(("${plan.project.name}"));\n`; // Corrected: circle shape
     mermaidStr += `    end\n\n`;
 
     plan.tasks.forEach((task, taskIndex) => {
@@ -29,8 +28,8 @@ const convertPlanToMermaid = (plan: ScaffoldPlan): string => {
             phase.tasks.forEach((subtask, subtaskIndex) => {
                 const subtaskId = `t${taskIndex}_${phaseIndex}_${subtaskIndex}`;
                 const validateId = `v${taskIndex}_${phaseIndex}_${subtaskIndex}`;
-                mermaidStr += `    ${subtaskId}(("${subtask.name}"));\n`;
-                mermaidStr += `    ${validateId}{"Validate"};\n`;
+                mermaidStr += `    ${subtaskId}(["${subtask.name}"]);\n`; // Corrected: stadium shape
+                mermaidStr += `    ${validateId}{"Validate"};\n`; // Corrected: rhombus shape
                 mermaidStr += `    ${phaseId} --> ${subtaskId};\n`;
                 mermaidStr += `    ${subtaskId} -.-> ${validateId};\n`;
                 mermaidStr += `    class ${validateId} validate-pass;\n`;

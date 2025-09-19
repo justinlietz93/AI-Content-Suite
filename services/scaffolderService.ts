@@ -1,6 +1,5 @@
-
 import type { ProgressUpdate, ScaffolderOutput, ScaffolderSettings } from '../types';
-import { generateText } from './geminiService';
+import { generateText, cleanAndParseJson } from './geminiService';
 import { SCAFFOLDER_PROMPT_TEMPLATE } from '../constants';
 
 export const processScaffoldingRequest = async (
@@ -40,17 +39,17 @@ export const processScaffoldingRequest = async (
     });
 
     try {
-        let jsonStr = rawJsonResult.trim();
-        const fenceRegex = /^```(\w*)?\s*\n?([\s\S]*?)\n?\s*```$/;
-        const match = jsonStr.match(fenceRegex);
-        if (match && match[2]) {
-            jsonStr = match[2].trim();
-        }
-        const parsedResponse = JSON.parse(jsonStr);
+        const parsedResponse = cleanAndParseJson<{
+            scaffoldScript: string;
+            scaffoldPlanJson: any;
+        }>(rawJsonResult);
+
 
         if (!parsedResponse.scaffoldScript || !parsedResponse.scaffoldPlanJson) {
             console.error("Invalid response structure from scaffolder engine:", parsedResponse);
-            throw new Error("The AI returned an invalid or incomplete data structure. Expected 'scaffoldScript' and 'scaffoldPlanJson' keys.");
+            const error = new Error("The AI returned an invalid or incomplete data structure. Expected 'scaffoldScript' and 'scaffoldPlanJson' keys.");
+            (error as any).details = rawJsonResult;
+            throw error;
         }
         
         onProgress({ stage: 'Completed', percentage: 100, message: 'Project scaffold generated successfully.' });
@@ -62,7 +61,9 @@ export const processScaffoldingRequest = async (
 
     } catch (e) {
         console.error("Failed to parse JSON response from scaffolder engine:", e);
-        console.log("Raw response from AI:", rawJsonResult);
-        throw new Error(`Failed to parse the response from the AI. The data might be malformed. See console for raw output.`);
+        const error = new Error(`Failed to parse the response from the AI. The data might be malformed.`);
+        // The error 'e' from cleanAndParseJson already has the raw details.
+        (error as any).details = (e as any).details || rawJsonResult;
+        throw error;
     }
 };

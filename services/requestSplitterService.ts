@@ -1,25 +1,6 @@
-
 import type { ProgressUpdate, RequestSplitterOutput, RequestSplitterSettings, SplitPlanJson, SplitPlanPrompt } from '../types';
-import { generateText } from './geminiService';
+import { generateText, cleanAndParseJson } from './geminiService';
 import { REQUEST_SPLITTER_PLANNING_PROMPT_TEMPLATE, REQUEST_SPLITTER_GENERATION_PROMPT_TEMPLATE } from '../constants';
-
-// Helper to safely parse JSON from AI response
-const parseJsonResponse = <T>(rawJson: string, context: string): T => {
-    try {
-        let jsonStr = rawJson.trim();
-        // Handle markdown code fences
-        const fenceRegex = /^```(\w*)?\s*\n?([\s\S]*?)\n?\s*```$/;
-        const match = jsonStr.match(fenceRegex);
-        if (match && match[2]) {
-            jsonStr = match[2].trim();
-        }
-        return JSON.parse(jsonStr) as T;
-    } catch (e) {
-        console.error(`Failed to parse JSON response from ${context}:`, e);
-        console.log(`Raw response from AI for ${context}:`, rawJson);
-        throw new Error(`Failed to parse the response from the AI. The data might be malformed. See console for raw output.`);
-    }
-};
 
 interface PlanningResponse {
     project: {
@@ -63,8 +44,19 @@ export const processRequestSplitting = async (
 
     const planningPrompt = REQUEST_SPLITTER_PLANNING_PROMPT_TEMPLATE(combinedSpec, settings);
     const planningResultJson = await generateText(planningPrompt);
-    const { project, plan } = parseJsonResponse<PlanningResponse>(planningResultJson, 'planning engine');
     
+    // FIX: Explicitly type 'project' and 'plan' to ensure correct type inference downstream.
+    let project: PlanningResponse['project'];
+    let plan: PlanningResponse['plan'];
+    try {
+        ({ project, plan } = cleanAndParseJson<PlanningResponse>(planningResultJson));
+    } catch(e) {
+        console.error("Failed to parse planning response from request splitter:", e);
+        const error = new Error(`Failed to parse the response from the AI (planning engine). The data might be malformed.`);
+        (error as any).details = (e as any).details || planningResultJson;
+        throw error;
+    }
+
     if (!plan || plan.length === 0) {
         throw new Error("The AI failed to generate a valid decomposition plan.");
     }

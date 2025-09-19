@@ -1,4 +1,3 @@
-
 import type { PromptEnhancerTemplate } from '../types';
 
 export const PROMPT_ENHANCER_PROMPT_TEMPLATE = (rawPrompt: string, template: PromptEnhancerTemplate) => `
@@ -12,7 +11,11 @@ You are an expert AI prompt engineer. Your task is to take a user's raw request 
 Failure to produce a perfectly valid JSON will render the entire output useless. Double-check your escaping. There should be NO unescaped control characters or quotes within strings.
 
 **OUTPUT REQUIREMENTS:**
-Your final output MUST be a single, valid, parsable JSON object with the following structure. Do not include any text, explanations, or code fences before or after the JSON object.
+Your final output MUST be a single, valid JSON object matching the schema below.
+DO NOT wrap the JSON in markdown code fences (\`\`\`json ... \`\`\`).
+The entire response should be ONLY the raw JSON object, starting with \`{\` and ending with \`}\`.
+
+**JSON OUTPUT SCHEMA:**
 \`\`\`json
 {
   "enhancedPromptMd": "...",

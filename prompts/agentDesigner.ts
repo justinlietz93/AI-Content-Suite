@@ -1,4 +1,3 @@
-
 import type { AgentDesignerSettings } from '../types';
 
 export const AGENT_DESIGNER_PROMPT_TEMPLATE = (settings: AgentDesignerSettings) => {
@@ -109,7 +108,11 @@ You must generate a comprehensive design document consisting of a Markdown overv
 Failure to produce a perfectly valid JSON will render the entire output useless. Double-check your escaping.
 
 **OUTPUT REQUIREMENTS:**
-Your final output MUST be a single, valid, parsable JSON object with the following structure. Do not include any text, explanations, or code fences before or after the JSON object.
+Your final output MUST be a single, valid, parsable JSON object with the following structure.
+DO NOT wrap the JSON in markdown code fences (\`\`\`json ... \`\`\`).
+The entire response should be ONLY the raw JSON object, starting with \`{\` and ending with \`}\`.
+
+**JSON OUTPUT SCHEMA:**
 \`\`\`json
 {
   "designMarkdown": "...",

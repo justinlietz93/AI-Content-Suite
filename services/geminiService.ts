@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 import type { Highlight, Mode } from '../types';
 import { 
@@ -7,6 +6,34 @@ import {
   NEXT_STEPS_TECHNICAL_SUMMARY_PROMPT_TEMPLATE,
   NEXT_STEPS_STYLE_MODEL_PROMPT_TEMPLATE
 } from '../constants';
+
+/**
+ * Cleans and parses a JSON string from an AI response, handling markdown fences.
+ * @param rawText The raw string response from the AI.
+ * @returns The parsed JSON object.
+ * @throws An error with a `details` property containing the raw text if parsing fails.
+ */
+export const cleanAndParseJson = <T>(rawText: string): T => {
+    let jsonStr = rawText.trim();
+    
+    // Regex to find content within ```json ... ``` or ``` ... ```
+    // This is more robust and doesn't require the fence to be the only thing in the string.
+    const fenceRegex = /```(?:json)?\s*([\s\S]*?)\s*```/;
+    const match = jsonStr.match(fenceRegex);
+
+    if (match && match[1]) {
+        jsonStr = match[1].trim();
+    }
+
+    try {
+        return JSON.parse(jsonStr) as T;
+    } catch (e) {
+        // Throw a new error that includes the ORIGINAL raw text for debugging
+        const parseError = new Error(`Failed to parse JSON. Error: ${e instanceof Error ? e.message : String(e)}`);
+        (parseError as any).details = rawText; // Attach the original, unmodified text
+        throw parseError;
+    }
+};
 
 
 // --- Retry Logic for API calls ---
@@ -109,8 +136,9 @@ export const generateMultiModalContent = async (parts: any[]): Promise<string> =
 export const extractHighlightsFromJson = async (summaryText: string): Promise<Highlight[]> => {
   if (!ai) throw new Error("Gemini AI SDK not initialized. API Key might be missing.");
   const prompt = HIGHLIGHT_EXTRACTION_PROMPT_TEMPLATE(summaryText);
+  let rawResponseText = '';
   try {
-    const response: GenerateContentResponse = await callGeminiWithRetry(() =>
+    const response = await callGeminiWithRetry(() =>
       ai!.models.generateContent({
         model: GEMINI_FLASH_MODEL,
         contents: prompt,
@@ -119,40 +147,38 @@ export const extractHighlightsFromJson = async (summaryText: string): Promise<Hi
         }
       })
     );
+    rawResponseText = response.text;
 
-    let jsonStr = response.text.trim();
-    const fenceRegex = /^```(\w*)?\s*\n?([\s\S]*?)\n?\s*```$/; 
-    const match = jsonStr.match(fenceRegex);
-    if (match && match[2]) {
-      jsonStr = match[2].trim();
-    }
+    const parsedData = cleanAndParseJson<any>(rawResponseText);
 
-    try {
-      const parsedData = JSON.parse(jsonStr);
-      if (Array.isArray(parsedData)) {
-        return parsedData.filter(item => item && typeof item.text === 'string') as Highlight[];
-      } else if (parsedData && typeof parsedData.text === 'string') {
-        return [parsedData as Highlight];
-      }
-      console.warn("Parsed JSON is not an array of highlights or a single highlight object:", parsedData);
-      return [];
-    } catch (e) {
-      console.error("Failed to parse JSON response from Gemini for highlights:", e, "Raw text:", response.text);
-      const lines = response.text.split('\n');
-      const fallbackHighlights: Highlight[] = lines
-        .map(line => line.trim())
-        .filter(line => line.startsWith('* ') || line.startsWith('- ') || /^\d+\.\s/.test(line))
-        .map(line => ({ text: line.replace(/^(\* |- |\d+\.\s)/, '') }))
-        .slice(0, 5); 
-      if (fallbackHighlights.length > 0) {
-        console.warn("Using fallback highlights due to JSON parsing error.");
-        return fallbackHighlights;
-      }
-      throw new Error('Failed to parse highlights JSON from Gemini response and no fallback available.');
+    if (Array.isArray(parsedData)) {
+      return parsedData.filter(item => item && typeof item.text === 'string') as Highlight[];
+    } else if (parsedData && typeof parsedData.text === 'string') {
+      return [parsedData as Highlight];
     }
+    console.warn("Parsed JSON is not an array of highlights or a single highlight object:", parsedData);
+    return [];
+
   } catch (error) {
-    console.error('Error extracting highlights from Gemini:', error);
-    throw new Error(`Gemini API error during highlight extraction: ${error instanceof Error ? error.message : String(error)}`);
+    // Non-critical failure: Log the detailed error to the console and return a fallback,
+    // so the main summary is still displayed.
+    const rawOutput = (error as any).details || rawResponseText;
+    console.error('Failed to parse highlights from Gemini. Raw output logged below.', error);
+    console.error('--- RAW HIGHLIGHTS OUTPUT ---\n', rawOutput);
+    
+    // Fallback to simple line extraction
+    const lines = rawOutput.split('\n');
+    const fallbackHighlights: Highlight[] = lines
+      .map(line => line.trim())
+      .filter(line => line.startsWith('* ') || line.startsWith('- ') || /^\d+\.\s/.test(line))
+      .map(line => ({ text: line.replace(/^(\* |- |\d+\.\s)/, '') }))
+      .slice(0, 5); 
+
+    if (fallbackHighlights.length > 0) {
+      console.warn("Using fallback highlights due to JSON parsing error.");
+      return fallbackHighlights;
+    }
+    return [];
   }
 };
 
@@ -176,12 +202,12 @@ export const generateSuggestions = async (
   } else if (mode === 'styleExtractor') {
     prompt = NEXT_STEPS_STYLE_MODEL_PROMPT_TEMPLATE(processedContent, styleTargetText);
   } else {
-    console.warn("Unknown mode for suggestions:", mode);
     return null;
   }
 
+  let rawResponseText: string | undefined;
   try {
-    const response: GenerateContentResponse = await callGeminiWithRetry(() =>
+    const response = await callGeminiWithRetry(() =>
       ai!.models.generateContent({
         model: GEMINI_FLASH_MODEL,
         contents: prompt,
@@ -190,23 +216,20 @@ export const generateSuggestions = async (
         }
       })
     );
+    rawResponseText = response.text;
 
-    let jsonStr = response.text.trim();
-    const fenceRegex = /^```(\w*)?\s*\n?([\s\S]*?)\n?\s*```$/;
-    const match = jsonStr.match(fenceRegex);
-    if (match && match[2]) {
-      jsonStr = match[2].trim();
-    }
+    const parsedData = cleanAndParseJson<string[]>(rawResponseText);
     
-    const parsedData = JSON.parse(jsonStr);
     if (Array.isArray(parsedData) && parsedData.every(item => typeof item === 'string')) {
-      const nonEmptySuggestions = (parsedData as string[]).filter(s => s.trim() !== "");
+      const nonEmptySuggestions = parsedData.filter(s => s.trim() !== "");
       return nonEmptySuggestions.length > 0 ? nonEmptySuggestions : null;
     }
-    console.warn("Parsed JSON for suggestions is not an array of strings or is empty:", parsedData, "Raw text:", response.text);
+    console.warn("Parsed JSON for suggestions is not an array of strings or is empty:", parsedData);
     return null;
   } catch (error) {
-    console.error('Error generating next step suggestions from Gemini:', error, "Prompt used:", prompt);
+    const rawOutput = (error as any).details || rawResponseText || 'Raw response not available.';
+    console.error('Error generating/parsing next step suggestions from Gemini. Raw output logged below.', error);
+    console.error('--- RAW SUGGESTIONS OUTPUT ---\n', rawOutput);
     return null; 
   }
 };
