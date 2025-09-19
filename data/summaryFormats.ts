@@ -100,6 +100,12 @@ export const SUMMARY_FORMAT_OPTIONS: SummaryFormatOption[] = [
     tags: ['ai', 'agent', 'system prompt', 'instructions', 'configuration', 'rules']
   },
   {
+    value: 'reverseEngineering',
+    label: 'Reverse Engineering Plan',
+    description: "Analyzes a codebase to produce an architectural overview, dependency map, and a plan to rebuild it.",
+    tags: ['code', 'technical', 'architecture', 'analysis', 'reverse engineering', 'project']
+  },
+  {
     value: 'metricsDashboard',
     label: 'Metrics Dashboard Snapshot',
     description: "Distills raw data into a numeric baseline table of key indicators (KPIs) and their values like current, min, max, and average.",

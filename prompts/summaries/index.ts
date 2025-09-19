@@ -20,6 +20,7 @@ export * from './prosConsTable';
 export * from './qaPairs';
 export * from './raciSnapshot';
 export * from './readme';
+export * from './reverseEngineering';
 export * from './riskRegister';
 export * from './rulesDistiller';
 export * from './sessionHandoff';

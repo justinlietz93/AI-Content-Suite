@@ -1,5 +1,4 @@
 
-
 import React, { useEffect, useRef } from 'react';
 import type { SummaryOutput, StyleModelOutput, ProcessedOutput, Highlight, Mode, RewriterOutput, MathFormatterOutput } from '../types';
 import { enhanceCodeBlocks } from '../utils/uiUtils';
@@ -69,7 +68,7 @@ export const SummaryViewer: React.FC<SummaryViewerProps> = ({ output, mode }) =>
       renderMarkdown(contentRef, (output as MathFormatterOutput).formattedContent, true);
     } else if (mode === 'technical' && 'finalSummary' in output) {
         const techOutput = output as SummaryOutput;
-        const isMarkdownSummary = ['sessionHandoff', 'readme', 'solutionFinder', 'timeline', 'decisionMatrix', 'pitchGenerator', 'causeEffectChain', 'swotAnalysis', 'checklist', 'dialogCondensation', 'graphTreeOutline', 'entityRelationshipDigest', 'rulesDistiller', 'metricsDashboard', 'qaPairs', 'processFlow', 'raciSnapshot', 'riskRegister', 'milestoneTracker', 'glossaryTermMap', 'hierarchyOfNeeds', 'stakeholderMap', 'constraintList', 'prosConsTable', 'priorityRanking', 'agentSystemInstructions'].includes(techOutput.summaryFormat ?? 'default');
+        const isMarkdownSummary = ['sessionHandoff', 'readme', 'solutionFinder', 'timeline', 'decisionMatrix', 'pitchGenerator', 'causeEffectChain', 'swotAnalysis', 'checklist', 'dialogCondensation', 'graphTreeOutline', 'entityRelationshipDigest', 'rulesDistiller', 'metricsDashboard', 'qaPairs', 'processFlow', 'raciSnapshot', 'riskRegister', 'milestoneTracker', 'glossaryTermMap', 'hierarchyOfNeeds', 'stakeholderMap', 'constraintList', 'prosConsTable', 'priorityRanking', 'agentSystemInstructions', 'reverseEngineering'].includes(techOutput.summaryFormat ?? 'default');
         if (isMarkdownSummary) {
             renderMarkdown(summaryContentRef, techOutput.finalSummary, false);
         }
@@ -160,7 +159,7 @@ export const SummaryViewer: React.FC<SummaryViewerProps> = ({ output, mode }) =>
 
   if (mode === 'technical' && 'finalSummary' in output) {
     const techOutput = output as SummaryOutput;
-    const isMarkdownSummary = ['sessionHandoff', 'readme', 'solutionFinder', 'timeline', 'decisionMatrix', 'pitchGenerator', 'causeEffectChain', 'swotAnalysis', 'checklist', 'dialogCondensation', 'graphTreeOutline', 'entityRelationshipDigest', 'rulesDistiller', 'metricsDashboard', 'qaPairs', 'processFlow', 'raciSnapshot', 'riskRegister', 'milestoneTracker', 'glossaryTermMap', 'hierarchyOfNeeds', 'stakeholderMap', 'constraintList', 'prosConsTable', 'priorityRanking', 'agentSystemInstructions'].includes(techOutput.summaryFormat ?? 'default');
+    const isMarkdownSummary = ['sessionHandoff', 'readme', 'solutionFinder', 'timeline', 'decisionMatrix', 'pitchGenerator', 'causeEffectChain', 'swotAnalysis', 'checklist', 'dialogCondensation', 'graphTreeOutline', 'entityRelationshipDigest', 'rulesDistiller', 'metricsDashboard', 'qaPairs', 'processFlow', 'raciSnapshot', 'riskRegister', 'milestoneTracker', 'glossaryTermMap', 'hierarchyOfNeeds', 'stakeholderMap', 'constraintList', 'prosConsTable', 'priorityRanking', 'agentSystemInstructions', 'reverseEngineering'].includes(techOutput.summaryFormat ?? 'default');
     return (
       <div className="space-y-8">
         {techOutput.processingTimeSeconds !== undefined && (
@@ -201,7 +200,7 @@ export const SummaryViewer: React.FC<SummaryViewerProps> = ({ output, mode }) =>
         {techOutput.mermaidDiagram && (
           <div>
             <div className="flex justify-between items-center mb-2">
-              <h2 className="text-2xl font-semibold text-text-primary">Entity-Relationship Diagram</h2>
+              <h2 className="text-2xl font-semibold text-text-primary">Architecture / Flow Diagram</h2>
               <button 
                 onClick={() => copyToClipboard(techOutput.mermaidDiagram!, "Mermaid Diagram Code")}
                 className="text-xs px-3 py-1 bg-sky-700 text-sky-100 rounded hover:bg-sky-600 transition-colors"

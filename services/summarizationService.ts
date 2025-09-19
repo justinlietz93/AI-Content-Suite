@@ -1,3 +1,4 @@
+
 import type { ProgressUpdate, SummaryOutput, SummaryFormat } from '../types';
 import { generateText, extractHighlightsFromJson } from './geminiService';
 import { 
@@ -11,6 +12,7 @@ import {
   REDUCE_SUMMARIES_PROMPTS,
   GENERATE_MERMAID_FROM_DIGEST_PROMPT,
   GENERATE_SIMPLIFIED_MERMAID_PROMPT,
+  GENERATE_REVERSE_ENGINEERING_MERMAID_PROMPT,
 } from '../constants';
 import { validateMermaidSyntax } from './validationService';
 import * as MermaidDocs from '../mermaid-docs-ts';
@@ -305,7 +307,7 @@ export const processTranscript = async (
   let mermaidDiagramSimple: string | undefined = undefined;
 
 
-  // STEP 2: If the format is entityRelationshipDigest, generate the diagram(s) with validation.
+  // STEP 2: If the format requires a diagram, generate it with validation.
   if (summaryFormat === 'entityRelationshipDigest') {
       onProgress({ 
           stage: 'Generating Diagram', 
@@ -334,6 +336,21 @@ export const processTranscript = async (
       } catch(e) {
           console.error("Failed to generate and validate simplified Mermaid diagram:", e);
       }
+  } else if (summaryFormat === 'reverseEngineering') {
+      onProgress({ 
+          stage: 'Generating Architecture Diagram', 
+          percentage: 80, 
+          message: 'Generating system architecture and flow diagram...',
+          thinkingHint: 'Creating visual representation of components...'
+      });
+      try {
+          const diagramPrompt = GENERATE_REVERSE_ENGINEERING_MERMAID_PROMPT(finalSummaryText);
+          mermaidDiagram = await generateAndValidateMermaid(diagramPrompt, onProgress, 'Generating architecture diagram...');
+      } catch (e) {
+          console.error("Failed to generate and validate reverse engineering Mermaid diagram:", e);
+          mermaidDiagram = "Error: Architecture diagram could not be generated.";
+      }
+      mermaidDiagramSimple = undefined;
   }
 
 

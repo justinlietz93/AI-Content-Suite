@@ -1,3 +1,4 @@
+
 export const GENERATE_MERMAID_FROM_DIGEST_PROMPT = (digest: string) => `
 You are a Mermaid.js expert. Based on the following entity-relationship digest, create a comprehensive Mermaid.js graph diagram (\`graph TD\`).
 
@@ -77,4 +78,24 @@ ${relevantDocs}
 5. Do not add any explanations, apologies, or any other text before or after the code fence.
 
 **Corrected Mermaid Diagram:**
+`;
+
+export const GENERATE_REVERSE_ENGINEERING_MERMAID_PROMPT = (report: string) => `
+You are a Mermaid.js expert specializing in visualizing software architecture.
+Based on the following reverse-engineering report, create a Mermaid.js \`graph TD\` that illustrates the system's architecture.
+
+**Instructions:**
+1.  Identify the **Core Components**, **Entry Points**, and **External/Proprietary Services** from the report.
+2.  Represent each as a distinct node in the graph. Use different shapes for different types of components if it enhances clarity (e.g., databases, external APIs).
+3.  Draw arrows to represent the **data and control flow** between components. Label the arrows to describe the interaction (e.g., "API Call", "Reads from", "Sends data to").
+4.  Group related components into subgraphs to represent layers or services.
+5.  The final output MUST be ONLY the Mermaid code inside a Markdown code fence (\`\`\`mermaid ... \`\`\`). Do not add any explanations or other text.
+6.  **CRITICAL SYNTAX FOR LINKS:** Use the format \`NodeA -- Link Label --> NodeB\`. Do NOT use quotes around the link label.
+
+**Reverse-Engineering Report:**
+---
+${report}
+---
+
+**Architecture Flow Diagram:**
 `;
