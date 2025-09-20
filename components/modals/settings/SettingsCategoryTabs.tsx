@@ -18,7 +18,7 @@ export const SettingsCategoryTabs: React.FC<SettingsCategoryTabsProps> = ({
   activeCategory,
   onSelect,
 }) => (
-  <nav className="sm:hidden px-4 pb-4 flex flex-wrap gap-2 border-b border-border-color/80 bg-secondary/30">
+  <nav className="sm:hidden px-4 pb-4 flex flex-wrap gap-2 border-b border-border-color/70 bg-background/80 backdrop-blur-sm">
     {categories.map(category => {
       const isActive = category.id === activeCategory;
       return (
@@ -27,10 +27,10 @@ export const SettingsCategoryTabs: React.FC<SettingsCategoryTabsProps> = ({
           type="button"
           onClick={() => onSelect(category.id)}
           id={`settings-tab-${category.id}`}
-          className={`px-4 py-2 text-sm rounded-md border transition-colors duration-200 ${
+          className={`px-4 py-2 text-sm rounded-lg border transition-colors duration-200 ${
             isActive
-              ? 'bg-primary/10 border-primary text-primary font-semibold'
-              : 'bg-surface/80 border-border-color text-text-secondary hover:text-text-primary'
+              ? 'bg-primary/15 border-primary/60 text-primary font-semibold'
+              : 'bg-background/70 border-border-color/70 text-text-secondary hover:text-text-primary hover:border-border-color/50 hover:bg-background/80'
           }`}
         >
           {category.label}

@@ -35,14 +35,21 @@ import { SETTINGS_CATEGORIES } from './settings/categories';
 import { SettingsCategoryTabs } from './settings/SettingsCategoryTabs';
 import { SettingsCategorySidebar } from './settings/SettingsCategorySidebar';
 
-const DEFAULT_MODAL_WIDTH = 1040;
-const DEFAULT_MODAL_HEIGHT = 640;
-const MIN_MODAL_WIDTH = 720;
-const MIN_MODAL_HEIGHT = 540;
-const MAX_MODAL_WIDTH = 1200;
-const MAX_MODAL_HEIGHT = 840;
+const DEFAULT_MODAL_WIDTH = 1200;
+const DEFAULT_MODAL_HEIGHT = 720;
+const MIN_MODAL_WIDTH = 640;
+const MIN_MODAL_HEIGHT = 560;
+const MAX_MODAL_WIDTH = 1440;
+const MAX_MODAL_HEIGHT = 900;
 const VIEWPORT_MARGIN_X = 48;
 const VIEWPORT_MARGIN_Y = 64;
+const WORKSPACE_LAYOUT_WIDTH_KEY = 'ai_content_suite_layout_width';
+const MIN_WORKSPACE_CONTENT_WIDTH = 640;
+const MAX_WORKSPACE_CONTENT_WIDTH = 1440;
+const DEFAULT_WORKSPACE_LAYOUT_PERCENT = 70;
+const CHAT_HEIGHT_VIEWPORT_RATIO = 0.75;
+const WORKSPACE_SCROLLBAR_STYLE_ID = 'workspace-settings-scrollbar-theme';
+const WORKSPACE_SCROLLBAR_CLASS = 'workspace-settings-scrollbar';
 
 interface ModalSize {
   width: number;
@@ -140,6 +147,44 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     },
     [],
   );
+
+  /**
+   * Ensures the workspace-themed scrollbar styling is present so modal scroll regions
+   * inherit the darker treatment that matches the rest of the application chrome.
+   */
+  const ensureScrollbarTheme = useCallback(() => {
+    if (typeof document === 'undefined') {
+      return;
+    }
+
+    if (document.getElementById(WORKSPACE_SCROLLBAR_STYLE_ID)) {
+      return;
+    }
+
+    const styleElement = document.createElement('style');
+    styleElement.id = WORKSPACE_SCROLLBAR_STYLE_ID;
+    styleElement.textContent = `
+.${WORKSPACE_SCROLLBAR_CLASS} {
+  scrollbar-width: thin;
+  scrollbar-color: oklch(0.35 0 0 / 0.85) transparent;
+}
+.${WORKSPACE_SCROLLBAR_CLASS}::-webkit-scrollbar {
+  width: 12px;
+}
+.${WORKSPACE_SCROLLBAR_CLASS}::-webkit-scrollbar-track {
+  background: transparent;
+}
+.${WORKSPACE_SCROLLBAR_CLASS}::-webkit-scrollbar-thumb {
+  background-color: oklch(0.32 0 0 / 0.85);
+  border-radius: 9999px;
+  border: 2px solid oklch(0.18 0 0 / 0.8);
+}
+.${WORKSPACE_SCROLLBAR_CLASS}::-webkit-scrollbar-thumb:hover {
+  background-color: oklch(0.36 0 0 / 0.9);
+}
+`;
+    document.head.appendChild(styleElement);
+  }, []);
 
   /**
    * Cleans up any active resize gesture by removing event listeners and restoring the document
@@ -334,14 +379,45 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     }
   }, [onFetchModels, providers]);
 
+  /**
+   * Derives a modal footprint that mirrors the active workspace layout so each settings
+   * category opens at the same scale as the LLM chat experience.
+   */
+  const computeWorkspaceAlignedSize = useCallback((): ModalSize => {
+    if (typeof window === 'undefined') {
+      return clampModalSize(DEFAULT_MODAL_WIDTH, DEFAULT_MODAL_HEIGHT);
+    }
+
+    const storedPercentRaw = Number(localStorage.getItem(WORKSPACE_LAYOUT_WIDTH_KEY));
+    const storedPercent = Number.isFinite(storedPercentRaw)
+      ? storedPercentRaw
+      : DEFAULT_WORKSPACE_LAYOUT_PERCENT;
+    const normalizedPercent = Math.min(Math.max(storedPercent, 0), 100);
+
+    const referenceWidth =
+      normalizedPercent >= 100
+        ? Math.min(MAX_WORKSPACE_CONTENT_WIDTH, window.innerWidth - VIEWPORT_MARGIN_X)
+        : MIN_WORKSPACE_CONTENT_WIDTH +
+          ((MAX_WORKSPACE_CONTENT_WIDTH - MIN_WORKSPACE_CONTENT_WIDTH) * normalizedPercent) / 100;
+
+    const referenceHeight = window.innerHeight * CHAT_HEIGHT_VIEWPORT_RATIO;
+
+    return clampModalSize(referenceWidth, referenceHeight);
+  }, [clampModalSize]);
+
   useEffect(() => {
+    ensureScrollbarTheme();
+  }, [ensureScrollbarTheme]);
+
+  useEffect(() => {
+
     if (!isOpen) {
       initialSizeAppliedRef.current = false;
       return;
     }
 
     if (!initialSizeAppliedRef.current) {
-      const defaultSize = clampModalSize(DEFAULT_MODAL_WIDTH, DEFAULT_MODAL_HEIGHT);
+      const defaultSize = computeWorkspaceAlignedSize();
       setModalSize(prevSize => {
         if (prevSize.width === defaultSize.width && prevSize.height === defaultSize.height) {
           return prevSize;
@@ -374,6 +450,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     currentSettings,
     providerSettings,
     clampModalSize,
+    computeWorkspaceAlignedSize,
   ]);
 
   useEffect(() => {
@@ -657,24 +734,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 sm:p-8 z-50 transition-opacity duration-300 animate-fade-in-scale"
+      className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 sm:p-8 z-50 transition-opacity duration-300 animate-fade-in-scale"
       onClick={handleOverlayClick}
       role="dialog"
       aria-modal="true"
       aria-labelledby="workspace-settings-modal"
     >
       <div
-        className={`relative bg-surface/95 border border-border-strong rounded-lg shadow-2xl flex flex-col overflow-hidden ${
+        className={`relative flex flex-col overflow-hidden rounded-xl border border-border-color/80 bg-background/95 shadow-[0_40px_120px_-35px_rgba(0,0,0,0.85)] ${
           isResizing ? 'select-none' : ''
         }`}
         style={{
           width: modalSize.width,
           height: modalSize.height,
-          minWidth: 'min(720px, calc(100vw - 3rem))',
-          minHeight: 'min(540px, calc(100vh - 4rem))',
-          maxWidth: 'min(1200px, calc(100vw - 2rem))',
-          maxHeight: 'min(840px, calc(100vh - 2rem))',
-          transition: isResizing ? 'none' : 'width 160ms ease-out, height 160ms ease-out',
+          minWidth: `min(${MIN_MODAL_WIDTH}px, calc(100vw - 3rem))`,
+          minHeight: `min(${MIN_MODAL_HEIGHT}px, calc(100vh - 4rem))`,
+          maxWidth: `min(${MAX_MODAL_WIDTH}px, calc(100vw - 2rem))`,
+          maxHeight: `min(${MAX_MODAL_HEIGHT}px, calc(100vh - 2rem))`,
+          transition: isResizing ? 'none' : 'width 220ms ease, height 220ms ease',
         }}
       >
         <SettingsModalHeader onClose={onClose} />
@@ -689,22 +766,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             categories={SETTINGS_CATEGORIES}
             activeCategory={activeCategory}
             onSelect={categoryId => setActiveCategory(categoryId)}
+            scrollbarClassName={WORKSPACE_SCROLLBAR_CLASS}
           />
 
           <div
-            className="relative flex-1"
+            className="relative flex-1 bg-background/80 sm:border-l sm:border-border-color/70"
             role="tabpanel"
             id={`settings-panel-${activeCategory}`}
             aria-labelledby={`settings-tab-${activeCategory}`}
           >
             <div
               key={activeCategory}
-              className="h-full overflow-y-auto p-5 sm:p-8 transition-opacity duration-200 ease-out"
+              className={`h-full overflow-y-auto ${WORKSPACE_SCROLLBAR_CLASS} px-6 py-6 sm:px-9 sm:py-8 transition-opacity duration-200 ease-out`}
             >
               {activeCategoryConfig && (
                 <div className="mb-6 hidden sm:block">
                   <h3 className="text-lg font-semibold text-text-primary">{activeCategoryConfig.label}</h3>
-                  <p className="mt-1 text-sm text-text-secondary">{activeCategoryConfig.description}</p>
+                  <p className="mt-1 text-sm text-text-secondary/80">{activeCategoryConfig.description}</p>
                 </div>
               )}
               {renderCategoryContent()}
