@@ -6,6 +6,8 @@ import { UserIcon } from '../../icons/UserIcon';
 import { SparklesIcon } from '../../icons/SparklesIcon';
 import { CopyIcon } from '../../icons/CopyIcon';
 import { CheckCircleIcon } from '../../icons/CheckCircleIcon';
+import { ChevronRightIcon } from '../../icons/ChevronRightIcon';
+import { ProcessingIcon } from '../../icons/ProcessingIcon';
 import { enhanceCodeBlocks } from '../../../utils/uiUtils';
 
 
@@ -43,6 +45,8 @@ export const ChatViewer: React.FC<ChatViewerProps> = ({ history, isStreaming }) 
     const chatContainerRef = useRef<HTMLDivElement>(null);
     const messageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
     const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+    const [copiedThinkingIndex, setCopiedThinkingIndex] = useState<number | null>(null);
+    const [expandedThinking, setExpandedThinking] = useState<Record<number, boolean>>({});
 
     useEffect(() => {
         // Render markdown for new/updated messages
@@ -72,6 +76,29 @@ export const ChatViewer: React.FC<ChatViewerProps> = ({ history, isStreaming }) 
         }
     }, [history, isStreaming]);
     
+    useEffect(() => {
+        setExpandedThinking(prev => {
+            const preserved: Record<number, boolean> = {};
+            history.forEach((message, index) => {
+                if (prev[index]) {
+                    preserved[index] = true;
+                }
+            });
+            const lastIndex = history.length - 1;
+            if (lastIndex >= 0) {
+                const lastMessage = history[lastIndex];
+                if (lastMessage.role === 'model' && lastMessage.thinking && lastMessage.thinking.length > 0) {
+                    preserved[lastIndex] = true;
+                }
+            }
+            return preserved;
+        });
+    }, [history]);
+
+    const toggleThinking = (index: number) => {
+        setExpandedThinking(prev => ({ ...prev, [index]: !prev[index] }));
+    };
+
     const handleCopy = (message: ChatMessage, index: number) => {
         const contentToCopy = message.parts.map(part => {
             if ('text' in part) {
@@ -93,6 +120,31 @@ export const ChatViewer: React.FC<ChatViewerProps> = ({ history, isStreaming }) 
         }
     };
 
+    const handleCopyThinking = (segments: ChatMessage['thinking'], index: number) => {
+        if (!segments || segments.length === 0) {
+            return;
+        }
+        const contentToCopy = segments
+            .map((segment) => {
+                const label = segment.label ? `${segment.label}:` : '';
+                return [label, segment.text].filter(Boolean).join('\n');
+            })
+            .filter(Boolean)
+            .join('\n\n')
+            .trim();
+
+        if (!contentToCopy) {
+            return;
+        }
+
+        navigator.clipboard.writeText(contentToCopy).then(() => {
+            setCopiedThinkingIndex(index);
+            setTimeout(() => setCopiedThinkingIndex(null), 2000);
+        }).catch(err => {
+            console.error('Failed to copy thinking: ', err);
+        });
+    };
+
 
     return (
         <div ref={chatContainerRef} className="flex-grow h-full max-h-[65vh] overflow-y-auto p-4 space-y-4 rounded-lg">
@@ -102,10 +154,18 @@ export const ChatViewer: React.FC<ChatViewerProps> = ({ history, isStreaming }) 
                     ? message.parts.map(p => 'text' in p ? p.text : '').join('')
                     : '';
                 const isModelThinking = isStreaming && isLastMessage && message.role === 'model' && modelContent.trim() === '';
+                const isUserMessage = message.role === 'user';
+                const messageAlignmentClass = isUserMessage ? 'justify-end mr-11' : 'justify-start ml-11';
+                const thinkingSegments = Array.isArray(message.thinking)
+                    ? message.thinking.filter(segment => segment && segment.text && segment.text.trim() !== '')
+                    : [];
+                const hasThinkingSegments = thinkingSegments.length > 0;
+                const isThinkingExpanded = !!expandedThinking[index];
+                const showActiveSpinner = isStreaming && isLastMessage && message.role === 'model';
 
                 return (
                     <div key={index} className="group">
-                        <div className={`flex items-start gap-3 ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`flex items-start gap-3 ${isUserMessage ? 'justify-end' : 'justify-start'}`}>
                             {message.role === 'model' && (
                                 <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground">
                                     <SparklesIcon className="w-5 h-5" />
@@ -147,7 +207,7 @@ export const ChatViewer: React.FC<ChatViewerProps> = ({ history, isStreaming }) 
                                 </div>
                             )}
                         </div>
-                         <div className={`mt-1.5 px-3 flex ${message.role === 'user' ? 'justify-end mr-11' : 'justify-start ml-11'}`}>
+                        <div className={`mt-1.5 px-3 flex ${messageAlignmentClass}`}>
                             {copiedIndex === index ? (
                                 <div className="flex items-center gap-1 text-xs text-green-400">
                                     <CheckCircleIcon className="w-3.5 h-3.5" />
@@ -164,6 +224,65 @@ export const ChatViewer: React.FC<ChatViewerProps> = ({ history, isStreaming }) 
                                 </button>
                             )}
                         </div>
+                        {hasThinkingSegments && (
+                            <div className={`mt-2 px-3 flex ${messageAlignmentClass}`}>
+                                <div className="w-full max-w-xl space-y-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => toggleThinking(index)}
+                                        className={`w-full flex items-center gap-2 px-3 py-2 rounded-md border border-border-color/60 transition-colors ${isThinkingExpanded ? 'bg-muted/40 text-text-primary' : 'bg-muted/20 text-muted-foreground hover:text-text-primary'}`}
+                                        aria-expanded={isThinkingExpanded}
+                                    >
+                                        <span className={`transition-transform duration-200 ${isThinkingExpanded ? 'rotate-90' : ''}`}>
+                                            <ChevronRightIcon className="w-4 h-4" />
+                                        </span>
+                                        <span className="flex items-center gap-2">
+                                            {showActiveSpinner ? (
+                                                <ProcessingIcon className="w-4 h-4 text-primary" />
+                                            ) : (
+                                                <SparklesIcon className="w-4 h-4 text-primary" />
+                                            )}
+                                            <span className="font-medium">Model thinking</span>
+                                        </span>
+                                        <span className="ml-auto text-xs text-muted-foreground">
+                                            {thinkingSegments.length > 1 ? `${thinkingSegments.length} steps` : '1 step'}
+                                        </span>
+                                    </button>
+                                    {isThinkingExpanded && (
+                                        <div className="space-y-3 rounded-lg border border-border-color/60 bg-background/80 p-3 shadow-inner">
+                                            {thinkingSegments.map((segment, segIndex) => (
+                                                <div key={`${index}-thinking-${segIndex}`} className="space-y-2">
+                                                    <div className="flex items-center justify-between text-[11px] uppercase tracking-wide text-muted-foreground">
+                                                        <span>{segment.label || `Step ${segIndex + 1}`}</span>
+                                                        <span className="font-mono text-[10px] text-muted-foreground/70">#{segIndex + 1}</span>
+                                                    </div>
+                                                    <div className="rounded-md border border-border-color/40 bg-surface/70 p-3 text-sm leading-relaxed text-muted-foreground whitespace-pre-wrap">
+                                                        {segment.text}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                            <div className="flex justify-end pt-1">
+                                                {copiedThinkingIndex === index ? (
+                                                    <div className="flex items-center gap-1 text-xs text-green-400">
+                                                        <CheckCircleIcon className="w-3.5 h-3.5" />
+                                                        <span>Copied thinking!</span>
+                                                    </div>
+                                                ) : (
+                                                    <button
+                                                        onClick={() => handleCopyThinking(thinkingSegments, index)}
+                                                        className="flex items-center gap-1 text-xs text-muted-foreground hover:text-text-primary transition-colors"
+                                                        aria-label="Copy model thinking"
+                                                    >
+                                                        <CopyIcon className="w-3.5 h-3.5" />
+                                                        <span>Copy thinking</span>
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
                     </div>
                 );
             })}

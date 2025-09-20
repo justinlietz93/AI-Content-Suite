@@ -1,7 +1,7 @@
 
 
 import type { ProgressUpdate, ReasoningOutput, ReasoningSettings, ReasoningNode, ReasoningNodeType, ReasoningTree } from '../types';
-import { generateText } from './geminiService';
+import { generateText, getActiveModelName } from './geminiService';
 // FIX: Corrected import path for reasoning prompts
 import * as Prompts from '../prompts/reasoning/index';
 import { processTranscript } from './summarizationService';
@@ -186,7 +186,7 @@ export const processReasoningRequest = async (
             exported_at: new Date().toISOString(),
         },
         audit: {
-            model: 'gemini-2.5-flash',
+            model: getActiveModelName(),
             tokens_in: 0,
             tokens_out: 0,
             cost_usd: 0.0,

@@ -314,15 +314,62 @@ export interface SavedPrompt {
   prompt: string;
 }
 
+export type AIProviderId = 'xai' | 'openrouter' | 'openai' | 'deepseek' | 'anthropic' | 'ollama';
+
+export type EmbeddingProviderId = 'openai' | 'openrouter' | 'deepseek' | 'ollama' | 'custom';
+
+export interface ModelOption {
+  id: string;
+  label: string;
+}
+
+export type ProviderApiKeys = Partial<Record<AIProviderId, string>>;
+
+export interface EmbeddingSettings {
+  provider: EmbeddingProviderId;
+  model: string;
+  apiKey?: string;
+  baseUrl?: string;
+}
+
+export interface VectorStoreSettings {
+  enabled: boolean;
+  url: string;
+  apiKey?: string;
+  collection: string;
+  topK: number;
+  embedding: EmbeddingSettings;
+}
+
+export interface VectorStoreMatch {
+  text: string;
+  score: number;
+  metadata?: Record<string, unknown>;
+}
+
+export interface AIProviderSettings {
+  selectedProvider: AIProviderId;
+  selectedModel: string;
+  apiKeys: ProviderApiKeys;
+}
+
 export interface ChatSettings {
   systemInstruction: string;
+  vectorStore?: VectorStoreSettings;
 }
 
 export type ChatMessagePart = { text: string } | { inlineData: { mimeType: string; data: string } };
 
+export interface ThinkingSegment {
+  type?: string;
+  label: string;
+  text: string;
+}
+
 export interface ChatMessage {
     role: 'user' | 'model';
     parts: ChatMessagePart[];
+    thinking?: ThinkingSegment[];
 }
 
 export interface ChatOutput {

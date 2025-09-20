@@ -12,7 +12,7 @@ import { CheckCircleIcon } from '../icons/CheckCircleIcon';
 import { DownloadIcon } from '../icons/DownloadIcon';
 import { RESET_BUTTON_TEXT } from '../../constants/uiConstants';
 
-interface ResultsViewerProps {
+export interface ResultsViewerProps {
     processedData: ProcessedOutput;
     activeMode: Mode;
     scaffolderSettings: ScaffolderSettings;

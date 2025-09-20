@@ -1,6 +1,7 @@
 
 
 import type { ProcessedOutput, Mode, SummaryOutput, StyleModelOutput, RewriterOutput, MathFormatterOutput } from '../types';
+import { getActiveModelName, getActiveProviderLabel } from './geminiService';
 
 declare var marked: any;
 declare var hljs: any;
@@ -29,6 +30,14 @@ const formatDate = (date: Date) => {
   });
 };
 
+const escapeHtml = (value: string): string =>
+  value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
 const generateHtmlReport = (output: ProcessedOutput, mode: Mode, styleTarget?: string, suggestions?: string[] | null): string => {
   const generationDate = formatDate(new Date());
   const isTechnical = mode === 'technical' && 'finalSummary' in output;
@@ -40,6 +49,11 @@ const generateHtmlReport = (output: ProcessedOutput, mode: Mode, styleTarget?: s
   const styleOutput = isStyle ? output as StyleModelOutput : null;
   const rewriterOutput = isRewriter ? output as RewriterOutput : null;
   const formatterOutput = isFormatter ? output as MathFormatterOutput : null;
+
+  const providerLabel = getActiveProviderLabel();
+  const modelName = getActiveModelName();
+  const providerSummary = modelName ? `${providerLabel} • ${modelName}` : providerLabel;
+  const providerSummaryHtml = escapeHtml(providerSummary);
 
   const title = isTechnical 
     ? 'Technical Summary Report' 
@@ -282,7 +296,7 @@ ${techOutput.mermaidDiagram}
     </div>
     ${bodyContent}
     <div class="footer">
-      <p>Powered by AI Content Suite & Gemini</p>
+      <p>Powered by AI Content Suite • ${providerSummaryHtml}</p>
     </div>
   </div>
   <script>
@@ -386,7 +400,10 @@ const generateMarkdownReport = (output: ProcessedOutput, mode: Mode, styleTarget
   }
 
   content += `---\n\n`;
-  content += `*Powered by AI Content Suite & Gemini*\n`;
+  const providerLabel = getActiveProviderLabel();
+  const modelName = getActiveModelName();
+  const providerSummary = modelName ? `${providerLabel} • ${modelName}` : providerLabel;
+  content += `*Powered by AI Content Suite • ${providerSummary}*\n`;
 
   return content;
 };

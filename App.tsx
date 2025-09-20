@@ -1,130 +1,107 @@
-
-
-
-import React, { useState, useCallback, useMemo, useEffect, FormEvent, useRef } from 'react';
-import type { Chat } from "@google/genai";
-import { HarmCategory, HarmBlockThreshold } from "@google/genai";
-import { ProgressBar } from './components/ui/ProgressBar';
-import { Tabs } from './components/ui/Tabs';
+import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { ReportModal } from './components/modals/ReportModal';
 import { ChatSettingsModal } from './components/modals/ChatSettingsModal';
-import { XCircleIcon } from './components/icons/XCircleIcon';
 import { useStarfield } from './hooks/useStarfield';
-import type { ProcessedOutput, ProgressUpdate, AppState, ProcessingError, Mode, RewriteLength, SummaryFormat, ReasoningSettings, ScaffolderSettings, RequestSplitterSettings, PromptEnhancerSettings, AgentDesignerSettings, ChatSettings, ChatMessage, SavedPrompt } from './types';
-import { INITIAL_PROGRESS, INITIAL_REASONING_SETTINGS, INITIAL_SCAFFOLDER_SETTINGS, INITIAL_REQUEST_SPLITTER_SETTINGS, INITIAL_PROMPT_ENHANCER_SETTINGS, INITIAL_AGENT_DESIGNER_SETTINGS, INITIAL_CHAT_SETTINGS } from './constants';
-import { SUMMARY_FORMAT_OPTIONS } from './data/summaryFormats';
-import { TABS, DESCRIPTION_TEXT, getButtonText } from './constants/uiConstants';
+import type { Mode } from './types';
+import {
+  INITIAL_PROGRESS,
+  DEFAULT_PROVIDER_MODELS,
+} from './constants';
 import { handleSubmission } from './services/submissionService';
-import { ai } from './services/geminiService';
-import { fileToGenerativePart } from './utils/fileUtils';
+import { setActiveProviderConfig } from './services/geminiService';
+import { AI_PROVIDERS, fetchModelsForProvider } from './services/providerRegistry';
 import {
   downloadReasoningArtifact,
   downloadScaffoldArtifact,
   downloadRequestSplitterArtifact,
   downloadPromptEnhancerArtifact,
-  downloadAgentDesignerArtifact
+  downloadAgentDesignerArtifact,
 } from './utils/downloadUtils';
-
-// Import new modular components
-import { ChatInterface } from './components/layouts/ChatInterface';
-import { MainForm } from './components/layouts/MainForm';
-import { SubmitButton } from './components/ui/SubmitButton';
-import { StopButton } from './components/ui/StopButton';
-import { ResultsViewer } from './components/layouts/ResultsViewer';
-
-
-const safetySettings = [
-    { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-    { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
-    { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
-    { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-];
+import { useWorkspaceState } from './hooks/useWorkspaceState';
+import { usePersistentChatSettings } from './hooks/usePersistentChatSettings';
+import { usePersistentProviderSettings } from './hooks/usePersistentProviderSettings';
+import { useSavedPrompts } from './hooks/useSavedPrompts';
+import { useLayoutPreferences } from './hooks/useLayoutPreferences';
+import { useMainFormProps } from './hooks/useMainFormProps';
+import { useChatSubmission } from './hooks/useChatSubmission';
+import { WorkspaceLayout } from './components/layouts/WorkspaceLayout';
+import { getButtonText } from './constants/uiConstants';
+import { deepClone } from './utils/deepClone';
 
 const App: React.FC = () => {
-  // --- STATE MANAGEMENT ---
-  const [currentFiles, setCurrentFiles] = useState<File[] | null>(null);
-  const [appState, setAppState] = useState<AppState>('idle');
   const [activeMode, setActiveMode] = useState<Mode>('technical');
-  const [progress, setProgress] = useState<ProgressUpdate>(INITIAL_PROGRESS);
-  const [processedData, setProcessedData] = useState<ProcessedOutput | null>(null);
-  const [error, setError] = useState<ProcessingError | null>(null);
-  const [nextStepSuggestions, setNextStepSuggestions] = useState<string[] | null>(null);
-  const [suggestionsLoading, setSuggestionsLoading] = useState<boolean>(false);
+  const {
+    state: modeState,
+    setValue: setModeValue,
+    mergeState,
+    resetMode,
+    getStateForMode,
+  } = useWorkspaceState(activeMode);
+  const abortControllersRef = useRef<Partial<Record<Mode, AbortController>>>({});
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
-  const abortControllerRef = useRef<AbortController | null>(null);
-
-  // --- MODE-SPECIFIC SETTINGS ---
-  const [styleTarget, setStyleTarget] = useState<string>('');
-  const [rewriteStyle, setRewriteStyle] = useState<string>('');
-  const [rewriteInstructions, setRewriteInstructions] = useState<string>('');
-  const [rewriteLength, setRewriteLength] = useState<RewriteLength>('medium');
-  const [useHierarchical, setUseHierarchical] = useState(false);
-  const [summaryFormat, setSummaryFormat] = useState<SummaryFormat>('default');
-  const [summarySearchTerm, setSummarySearchTerm] = useState('');
-  const [summaryTextInput, setSummaryTextInput] = useState('');
-  const [reasoningPrompt, setReasoningPrompt] = useState('');
-  const [reasoningSettings, setReasoningSettings] = useState<ReasoningSettings>(INITIAL_REASONING_SETTINGS);
-  const [scaffolderPrompt, setScaffolderPrompt] = useState('');
-  const [scaffolderSettings, setScaffolderSettings] = useState<ScaffolderSettings>(INITIAL_SCAFFOLDER_SETTINGS);
-  const [requestSplitterSpec, setRequestSplitterSpec] = useState('');
-  const [requestSplitterSettings, setRequestSplitterSettings] = useState<RequestSplitterSettings>(INITIAL_REQUEST_SPLITTER_SETTINGS);
-  const [promptEnhancerSettings, setPromptEnhancerSettings] = useState<PromptEnhancerSettings>(INITIAL_PROMPT_ENHANCER_SETTINGS);
-  const [agentDesignerSettings, setAgentDesignerSettings] = useState<AgentDesignerSettings>(INITIAL_AGENT_DESIGNER_SETTINGS);
-  
-  // --- CHAT-SPECIFIC STATE ---
-  const [chatSettings, setChatSettings] = useState<ChatSettings>(INITIAL_CHAT_SETTINGS);
-  const [savedPrompts, setSavedPrompts] = useState<SavedPrompt[]>([]);
-  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
-  const [chatSession, setChatSession] = useState<Chat | null>(null);
-  const [isStreamingResponse, setIsStreamingResponse] = useState(false);
-  const [chatInput, setChatInput] = useState('');
-  const [chatFiles, setChatFiles] = useState<File[] | null>(null);
   const [isChatSettingsModalOpen, setIsChatSettingsModalOpen] = useState(false);
 
+  const { chatSettings, setChatSettings } = usePersistentChatSettings();
+  const {
+    providerSettings: aiProviderSettings,
+    setProviderSettings: setAiProviderSettings,
+    activeProviderInfo,
+    activeProviderLabel,
+    activeModelName,
+    providerStatusText,
+    providerStatusTone,
+    providerSummaryText,
+  } = usePersistentProviderSettings();
+  const { savedPrompts, setSavedPrompts } = useSavedPrompts();
+  const {
+    isSidebarCollapsed,
+    toggleSidebar,
+    contentWidthPercent,
+    setContentWidthPercent,
+    appliedContentWidth,
+    contentWidthLabel,
+  } = useLayoutPreferences();
 
-  // --- HOOKS ---
+  const {
+    currentFiles,
+    appState,
+    progress,
+    processedData,
+    error,
+    nextStepSuggestions,
+    styleTarget,
+    summaryTextInput,
+    reasoningPrompt,
+    scaffolderPrompt,
+    scaffolderSettings,
+    requestSplitterSpec,
+    promptEnhancerSettings,
+    agentDesignerSettings,
+    chatHistory,
+    isStreamingResponse,
+    chatInput,
+    chatFiles,
+  } = modeState;
+
   useStarfield('space-background');
-  
-  // --- EFFECTS ---
-  // Load saved prompts from local storage on mount
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem('ai_content_suite_saved_prompts');
-      if (saved) {
-        setSavedPrompts(JSON.parse(saved));
-      }
-    } catch (e) {
-      console.error("Failed to load saved prompts from local storage:", e);
-    }
-  }, []);
 
-  // Save prompts to local storage whenever they change
   useEffect(() => {
-    try {
-      localStorage.setItem('ai_content_suite_saved_prompts', JSON.stringify(savedPrompts));
-    } catch (e) {
-      console.error("Failed to save prompts to local storage:", e);
-    }
-  }, [savedPrompts]);
+    const apiKey = aiProviderSettings.apiKeys?.[aiProviderSettings.selectedProvider];
+    const model =
+      aiProviderSettings.selectedModel && aiProviderSettings.selectedModel.trim().length > 0
+        ? aiProviderSettings.selectedModel
+        : DEFAULT_PROVIDER_MODELS[aiProviderSettings.selectedProvider];
 
-  // Effect to reset chat session when system prompt changes
-  useEffect(() => {
-    if (activeMode === 'chat') {
-        setChatSession(null); // Force re-initialization on next message
-    }
-  }, [chatSettings.systemInstruction, activeMode]);
-  
-  // Effect to handle state changes for cancellation
-  useEffect(() => {
-    if (appState === 'cancelled') {
-      handleReset();
-    }
-  }, [appState]);
+    setActiveProviderConfig({
+      providerId: aiProviderSettings.selectedProvider,
+      model,
+      apiKey,
+    });
+  }, [aiProviderSettings]);
 
-  // --- MEMOS ---
   const canSubmit = useMemo(() => {
     const hasFiles = currentFiles && currentFiles.length > 0;
-    
+
     switch (activeMode) {
       case 'technical':
         return hasFiles || !!summaryTextInput.trim();
@@ -161,302 +138,296 @@ const App: React.FC = () => {
     isStreamingResponse,
   ]);
 
-  const buttonText = useMemo(() => {
-    return getButtonText(
+  const buttonText = useMemo(
+    () =>
+      getButtonText(
+        activeMode,
+        currentFiles?.length || 0,
+        summaryTextInput,
+        reasoningPrompt,
+        scaffolderPrompt,
+        requestSplitterSpec,
+        promptEnhancerSettings.rawPrompt,
+        agentDesignerSettings.goal,
+      ),
+    [
       activeMode,
-      currentFiles?.length || 0,
+      currentFiles,
       summaryTextInput,
       reasoningPrompt,
       scaffolderPrompt,
       requestSplitterSpec,
       promptEnhancerSettings.rawPrompt,
-      agentDesignerSettings.goal
-    );
-  }, [activeMode, currentFiles, summaryTextInput, reasoningPrompt, scaffolderPrompt, requestSplitterSpec, promptEnhancerSettings.rawPrompt, agentDesignerSettings.goal]);
-  
-  // --- EVENT HANDLERS ---
-  const handleReset = useCallback(() => {
-    if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-        abortControllerRef.current = null;
-    }
-    setCurrentFiles(null);
-    setProcessedData(null);
-    setError(null);
-    setAppState('idle');
-    setProgress(INITIAL_PROGRESS);
-    setStyleTarget('');
-    setRewriteStyle('');
-    setRewriteInstructions('');
-    setRewriteLength('medium');
-    setNextStepSuggestions(null);
-    setSuggestionsLoading(false);
-    setUseHierarchical(false);
-    setSummaryFormat('default');
-    setSummarySearchTerm('');
-    setSummaryTextInput('');
-    setReasoningPrompt('');
-    setReasoningSettings(INITIAL_REASONING_SETTINGS);
-    setScaffolderPrompt('');
-    setScaffolderSettings(INITIAL_SCAFFOLDER_SETTINGS);
-    setRequestSplitterSpec('');
-    setRequestSplitterSettings(INITIAL_REQUEST_SPLITTER_SETTINGS);
-    setPromptEnhancerSettings(INITIAL_PROMPT_ENHANCER_SETTINGS);
-    setAgentDesignerSettings(INITIAL_AGENT_DESIGNER_SETTINGS);
-    setChatSettings(INITIAL_CHAT_SETTINGS);
-    setChatHistory([]);
-    setChatSession(null);
-    setIsStreamingResponse(false);
-    setChatInput('');
-    setChatFiles(null);
-  }, []);
-  
-  const handleStop = useCallback(() => {
-    if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-    }
-    setAppState('cancelled');
-  }, []);
+      agentDesignerSettings.goal,
+    ],
+  );
+
+  const handleReset = useCallback(
+    (mode?: Mode) => {
+      const targetMode = mode ?? activeMode;
+      const controller = abortControllersRef.current[targetMode];
+      if (controller) {
+        controller.abort();
+        delete abortControllersRef.current[targetMode];
+      }
+      resetMode(targetMode);
+      setIsReportModalOpen(false);
+    },
+    [activeMode, resetMode],
+  );
+
+  const handleStop = useCallback(
+    (mode?: Mode) => {
+      const targetMode = mode ?? activeMode;
+      const controller = abortControllersRef.current[targetMode];
+      if (controller) {
+        controller.abort();
+        delete abortControllersRef.current[targetMode];
+      }
+      setModeValue('appState', 'idle', targetMode);
+      setModeValue('progress', deepClone(INITIAL_PROGRESS), targetMode);
+      setModeValue('suggestionsLoading', false, targetMode);
+      setModeValue('nextStepSuggestions', null, targetMode);
+    },
+    [activeMode, setModeValue],
+  );
 
   const handleSubmit = useCallback(() => {
-    abortControllerRef.current = new AbortController();
-    const { signal } = abortControllerRef.current;
+    const modeAtSubmission = activeMode;
+    const controller = new AbortController();
+    abortControllersRef.current[modeAtSubmission] = controller;
+    const { signal } = controller;
+
+    const stateForMode = getStateForMode(modeAtSubmission);
 
     handleSubmission({
-      activeMode,
-      currentFiles,
+      activeMode: modeAtSubmission,
+      currentFiles: stateForMode.currentFiles,
       settings: {
-        summaryTextInput, useHierarchical, summaryFormat,
-        styleTarget,
-        rewriteStyle, rewriteInstructions, rewriteLength,
-        reasoningPrompt, reasoningSettings,
-        scaffolderPrompt, scaffolderSettings,
-        requestSplitterSpec, requestSplitterSettings,
-        promptEnhancerSettings, agentDesignerSettings,
+        summaryTextInput: stateForMode.summaryTextInput,
+        useHierarchical: stateForMode.useHierarchical,
+        summaryFormat: stateForMode.summaryFormat,
+        styleTarget: stateForMode.styleTarget,
+        rewriteStyle: stateForMode.rewriteStyle,
+        rewriteInstructions: stateForMode.rewriteInstructions,
+        rewriteLength: stateForMode.rewriteLength,
+        reasoningPrompt: stateForMode.reasoningPrompt,
+        reasoningSettings: stateForMode.reasoningSettings,
+        scaffolderPrompt: stateForMode.scaffolderPrompt,
+        scaffolderSettings: stateForMode.scaffolderSettings,
+        requestSplitterSpec: stateForMode.requestSplitterSpec,
+        requestSplitterSettings: stateForMode.requestSplitterSettings,
+        promptEnhancerSettings: stateForMode.promptEnhancerSettings,
+        agentDesignerSettings: stateForMode.agentDesignerSettings,
         chatSettings,
       },
-      setAppState, setError, setProcessedData, setProgress,
-      setNextStepSuggestions, setSuggestionsLoading,
+      setAppState: value => setModeValue('appState', value, modeAtSubmission),
+      setError: value => setModeValue('error', value, modeAtSubmission),
+      setProcessedData: value => setModeValue('processedData', value, modeAtSubmission),
+      setProgress: value => setModeValue('progress', value, modeAtSubmission),
+      setNextStepSuggestions: value => setModeValue('nextStepSuggestions', value, modeAtSubmission),
+      setSuggestionsLoading: value => setModeValue('suggestionsLoading', value, modeAtSubmission),
       signal,
+    }).finally(() => {
+      if (abortControllersRef.current[modeAtSubmission] === controller) {
+        delete abortControllersRef.current[modeAtSubmission];
+      }
     });
-  }, [
-    activeMode, currentFiles, summaryTextInput, useHierarchical, summaryFormat,
-    styleTarget, rewriteStyle, rewriteInstructions, rewriteLength,
-    reasoningPrompt, reasoningSettings, scaffolderPrompt, scaffolderSettings,
-    requestSplitterSpec, requestSplitterSettings, promptEnhancerSettings,
-    agentDesignerSettings, chatSettings
+  }, [activeMode, chatSettings, getStateForMode, setModeValue]);
+
+  const handleChatSubmit = useChatSubmission({
+    activeMode,
+    aiProviderSettings,
+    activeProviderInfo,
+    chatSettings,
+    canSubmit,
+    chatInput,
+    chatFiles,
+    getStateForMode,
+    setModeValue,
+  });
+
+  const handleSavePromptPreset = useCallback((name: string, prompt: string) => {
+    setSavedPrompts(prev => {
+      const existingIndex = prev.findIndex(item => item.name === name);
+      if (existingIndex > -1) {
+        const updated = [...prev];
+        updated[existingIndex] = { name, prompt };
+        return updated;
+      }
+      return [...prev, { name, prompt }];
+    });
+  }, [setSavedPrompts]);
+
+  const handleDeletePromptPreset = useCallback((name: string) => {
+    setSavedPrompts(prev => prev.filter(item => item.name !== name));
+  }, [setSavedPrompts]);
+
+  const handleFileSelect = useCallback(
+    (files: File[]) => {
+      if (files.length > 0) {
+        setModeValue('summaryTextInput', '', activeMode);
+      }
+      const nextFiles = files.length > 0 ? Array.from(files) : null;
+      mergeState(
+        {
+          currentFiles: nextFiles,
+          processedData: null,
+          error: null,
+          appState: 'fileSelected',
+          progress: deepClone(INITIAL_PROGRESS),
+          nextStepSuggestions: null,
+          suggestionsLoading: false,
+        },
+        activeMode,
+      );
+    },
+    [activeMode, mergeState, setModeValue],
+  );
+
+  const handleSummaryTextChange = useCallback(
+    (text: string) => {
+      setModeValue('summaryTextInput', text);
+      if (text.trim()) {
+        setModeValue('currentFiles', null);
+      }
+    },
+    [setModeValue],
+  );
+
+  const handleModeChange = useCallback(
+    (mode: Mode) => {
+      setActiveMode(prev => (prev === mode ? prev : mode));
+      setIsReportModalOpen(false);
+    },
+    [],
+  );
+
+  const handleWidthSliderChange = useCallback(
+    (percent: number) => {
+      setContentWidthPercent(percent);
+    },
+    [setContentWidthPercent],
+  );
+
+  const showMainForm = activeMode !== 'chat' && (appState === 'idle' || appState === 'fileSelected');
+  const showSubmitButton = activeMode !== 'chat' && canSubmit && appState !== 'completed' && appState !== 'error';
+  const showResults = appState === 'completed' && !!processedData;
+  const showError = appState === 'error' && !!error;
+
+  const mainFormProps = useMainFormProps({
+    activeMode,
+    state: modeState,
+    setModeValue,
+    onFileSelect: handleFileSelect,
+    onSummaryTextChange: handleSummaryTextChange,
+  });
+
+  const chatInterfaceProps = useMemo(() => ({
+    history: chatHistory,
+    isStreaming: isStreamingResponse,
+    chatInput,
+    onChatInputChange: (value: string) => setModeValue('chatInput', value),
+    chatFiles,
+    onChatFilesChange: (value: File[] | null) => setModeValue('chatFiles', value),
+    onSubmit: handleChatSubmit,
+    canSubmit,
+    onOpenSettings: () => setIsChatSettingsModalOpen(true),
+  }), [
+    chatHistory,
+    isStreamingResponse,
+    chatInput,
+    chatFiles,
+    setModeValue,
+    handleChatSubmit,
+    canSubmit,
   ]);
 
-  const handleChatSubmit = useCallback(async (e?: FormEvent<HTMLFormElement>) => {
-    e?.preventDefault();
-    if (!ai || !canSubmit) return;
-
-    setIsStreamingResponse(true);
-    setError(null);
-
-    let currentChatSession = chatSession;
-    if (!currentChatSession) {
-        // Fix: Moved `safetySettings` into the `config` object as it's not a top-level parameter for `ai.chats.create`.
-        const newChat: Chat = ai.chats.create({
-            model: 'gemini-2.5-flash',
-            history: chatHistory,
-            config: {
-                systemInstruction: chatSettings.systemInstruction,
-                safetySettings: safetySettings,
-            },
-        });
-        setChatSession(newChat);
-        currentChatSession = newChat;
-    }
-
-    try {
-        const fileParts = chatFiles ? await Promise.all(chatFiles.map(fileToGenerativePart)) : [];
-        const textPart = chatInput.trim() ? [{ text: chatInput }] : [];
-        const userMessageParts = [...fileParts, ...textPart];
-
-        if (userMessageParts.length === 0) {
-            setIsStreamingResponse(false);
-            return;
-        }
-
-        setChatHistory(prev => [...prev, { role: 'user', parts: userMessageParts }]);
-        setChatInput('');
-        setChatFiles(null);
-        
-        setChatHistory(prev => [...prev, { role: 'model', parts: [{ text: '' }] }]);
-
-        const stream = await currentChatSession.sendMessageStream({ message: userMessageParts });
-
-        for await (const chunk of stream) {
-            if (chunk.text) {
-                setChatHistory(prev => {
-                    const newHistory = [...prev];
-                    const lastMessage = newHistory[newHistory.length - 1];
-                    if (lastMessage && lastMessage.role === 'model' && lastMessage.parts[0] && 'text' in lastMessage.parts[0]) {
-                        lastMessage.parts[0].text += chunk.text;
-                    }
-                    return newHistory;
-                });
-            }
-        }
-    } catch (err) {
-        console.error("Chat error:", err);
-        const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
-        setError({ message: `Chat failed: ${errorMessage}` });
-        setChatHistory(prev => prev.slice(0, prev.length -1));
-    } finally {
-        setIsStreamingResponse(false);
-    }
-  }, [ai, canSubmit, chatSession, chatHistory, chatSettings, chatInput, chatFiles]);
-  
-    const handleSavePromptPreset = (name: string, prompt: string) => {
-      setSavedPrompts(prev => {
-        const existingIndex = prev.findIndex(p => p.name === name);
-        if (existingIndex > -1) {
-          // Update existing
-          const newPrompts = [...prev];
-          newPrompts[existingIndex] = { name, prompt };
-          return newPrompts;
-        } else {
-          // Add new
-          return [...prev, { name, prompt }];
-        }
-      });
+  const resultsViewerProps = useMemo(() => {
+    if (!processedData) return undefined;
+    return {
+      processedData,
+      activeMode,
+      scaffolderSettings,
+      onReset: () => handleReset(),
+      onOpenReportModal: () => setIsReportModalOpen(true),
+      onDownloadReasoning: (type: 'md' | 'json') => downloadReasoningArtifact(processedData, type),
+      onDownloadScaffold: (type: 'script' | 'plan') => downloadScaffoldArtifact(processedData, scaffolderSettings, type),
+      onDownloadRequestSplitter: (type: 'md' | 'json') => downloadRequestSplitterArtifact(processedData, type),
+      onDownloadPromptEnhancer: (type: 'md' | 'json') => downloadPromptEnhancerArtifact(processedData, type),
+      onDownloadAgentDesigner: (type: 'md' | 'json') => downloadAgentDesignerArtifact(processedData, type),
     };
+  }, [processedData, activeMode, scaffolderSettings, handleReset]);
 
-    const handleDeletePromptPreset = (name: string) => {
-      setSavedPrompts(prev => prev.filter(p => p.name !== name));
-    };
-
-
-  const handleFileSelect = useCallback((files: File[]) => {
-    if (files.length > 0) {
-      setSummaryTextInput(''); 
-    }
-    setCurrentFiles(files);
-    setProcessedData(null);
-    setError(null);
-    setAppState('fileSelected');
-    setProgress(INITIAL_PROGRESS);
-    setNextStepSuggestions(null);
-    setSuggestionsLoading(false);
-  }, []);
-
-  const handleSummaryTextChange = useCallback((text: string) => {
-    setSummaryTextInput(text);
-    if (text.trim()) {
-      setCurrentFiles(null); 
-    }
-  }, []);
-  
   return (
     <>
-      <div className="min-h-screen bg-transparent flex flex-col items-center justify-center p-4 sm:p-8 transition-all duration-300">
-        <div className={`w-full ${activeMode === 'chat' ? 'max-w-6xl' : 'max-w-3xl'} bg-surface shadow-2xl rounded-lg ${activeMode === 'chat' ? 'px-6 sm:px-10 pt-6 sm:pt-10 pb-2 sm:pb-3' : 'p-6 sm:p-10'} border border-border-color animate-breathing-glow transition-all duration-500 ease-in-out`}>
-          <header className="mb-6 text-center">
-            <h1 className="text-3xl sm:text-4xl font-bold text-text-primary">
-              AI Content Suite
-            </h1>
-            <p className="text-text-secondary mt-2 text-sm sm:text-base">
-              {DESCRIPTION_TEXT[activeMode]}
-            </p>
-          </header>
+      <canvas id="space-background" className="fixed inset-0 -z-10 h-full w-full" aria-hidden="true" />
+      <WorkspaceLayout
+        activeMode={activeMode}
+        sidebarProps={{
+          collapsed: isSidebarCollapsed,
+          onToggle: toggleSidebar,
+          activeMode,
+          onSelectMode: handleModeChange,
+        }}
+        onModeChange={handleModeChange}
+        headerProps={{
+          isSidebarCollapsed,
+          onToggleSidebar: toggleSidebar,
+          activeProviderLabel,
+          activeModelName,
+        }}
+        layoutControls={{
+          contentWidthLabel,
+          contentWidthPercent,
+          onWidthPercentChange: handleWidthSliderChange,
+          appliedContentWidth,
+        }}
+        providerBanner={{
+          activeProviderLabel,
+          activeModelName,
+          statusText: providerStatusText,
+          statusTone: providerStatusTone,
+          onManageSettings: () => setIsChatSettingsModalOpen(true),
+        }}
+        showChat={activeMode === 'chat'}
+        chatProps={activeMode === 'chat' ? chatInterfaceProps : undefined}
+        showMainForm={showMainForm}
+        mainFormProps={showMainForm ? mainFormProps : undefined}
+        showSubmitButton={showSubmitButton}
+        buttonText={buttonText}
+        onSubmit={handleSubmit}
+        appState={appState}
+        progress={progress}
+        onStop={() => handleStop()}
+        showResults={showResults}
+        resultsProps={showResults ? resultsViewerProps : undefined}
+        showError={showError}
+        error={error}
+        onErrorReset={() => handleReset()}
+        providerSummaryText={providerSummaryText}
+      />
 
-          <div className="mb-6">
-            <Tabs tabs={TABS} activeTabId={activeMode} onTabChange={(id) => {
-              setActiveMode(id as Mode);
-              handleReset();
-            }} />
-          </div>
-
-          {activeMode === 'chat' ? (
-              <ChatInterface
-                history={chatHistory}
-                isStreaming={isStreamingResponse}
-                chatInput={chatInput}
-                onChatInputChange={setChatInput}
-                chatFiles={chatFiles}
-                onChatFilesChange={setChatFiles}
-                onSubmit={handleChatSubmit}
-                canSubmit={canSubmit}
-                onOpenSettings={() => setIsChatSettingsModalOpen(true)}
-              />
-          ) : (appState === 'idle' || appState === 'fileSelected') && (
-            <MainForm 
-              activeMode={activeMode}
-              currentFiles={currentFiles}
-              summaryFormat={summaryFormat} onSummaryFormatChange={setSummaryFormat}
-              summarySearchTerm={summarySearchTerm} onSummarySearchTermChange={setSummarySearchTerm}
-              summaryTextInput={summaryTextInput} onSummaryTextChange={handleSummaryTextChange}
-              useHierarchical={useHierarchical} onUseHierarchicalChange={setUseHierarchical}
-              styleTarget={styleTarget} onStyleTargetChange={setStyleTarget}
-              rewriteStyle={rewriteStyle} onRewriteStyleChange={setRewriteStyle}
-              rewriteInstructions={rewriteInstructions} onRewriteInstructionsChange={setRewriteInstructions}
-              rewriteLength={rewriteLength} onRewriteLengthChange={setRewriteLength}
-              reasoningPrompt={reasoningPrompt} onReasoningPromptChange={setReasoningPrompt}
-              reasoningSettings={reasoningSettings} onReasoningSettingsChange={setReasoningSettings}
-              scaffolderPrompt={scaffolderPrompt} onScaffolderPromptChange={setScaffolderPrompt}
-              scaffolderSettings={scaffolderSettings} onScaffolderSettingsChange={setScaffolderSettings}
-              requestSplitterSpec={requestSplitterSpec} onRequestSplitterSpecChange={setRequestSplitterSpec}
-              requestSplitterSettings={requestSplitterSettings} onRequestSplitterSettingsChange={setRequestSplitterSettings}
-              promptEnhancerSettings={promptEnhancerSettings} onPromptEnhancerSettingsChange={setPromptEnhancerSettings}
-              agentDesignerSettings={agentDesignerSettings} onAgentDesignerSettingsChange={setAgentDesignerSettings}
-              onFileSelect={handleFileSelect}
-            />
-          )}
-
-          {activeMode !== 'chat' && canSubmit && appState !== 'completed' && appState !== 'error' && (
-            <SubmitButton 
-              onClick={handleSubmit}
-              disabled={appState === 'processing'}
-              appState={appState}
-              buttonText={buttonText}
-            />
-          )}
-
-          {appState === 'processing' && (
-            <div className="mt-8">
-              <ProgressBar progress={progress} />
-              <StopButton onClick={handleStop} />
-            </div>
-          )}
-          
-          {appState === 'completed' && processedData && (
-            <ResultsViewer 
-              processedData={processedData}
-              activeMode={activeMode}
-              scaffolderSettings={scaffolderSettings}
-              onReset={handleReset}
-              onOpenReportModal={() => setIsReportModalOpen(true)}
-              onDownloadReasoning={(type) => downloadReasoningArtifact(processedData, type)}
-              onDownloadScaffold={(type) => downloadScaffoldArtifact(processedData, scaffolderSettings, type)}
-              onDownloadRequestSplitter={(type) => downloadRequestSplitterArtifact(processedData, type)}
-              onDownloadPromptEnhancer={(type) => downloadPromptEnhancerArtifact(processedData, type)}
-              onDownloadAgentDesigner={(type) => downloadAgentDesignerArtifact(processedData, type)}
-            />
-          )}
-
-          {appState === 'error' && error && <div className="mt-8 p-4 bg-red-900 border border-red-700 rounded-lg text-red-100 animate-fade-in-scale" role="alert">
-            <div className="flex items-center mb-2"><XCircleIcon className="w-6 h-6 mr-2" aria-hidden="true" /><h3 className="text-lg font-semibold">Error</h3></div>
-            <p className="text-sm">{error.message}</p>
-            {error.details && <details className="mt-2 text-xs"><summary>Show Details</summary><pre className="whitespace-pre-wrap break-all bg-red-800 p-2 rounded mt-1">{error.details}</pre></details>}
-            <button onClick={handleReset} className="mt-4 w-full px-6 py-2 bg-red-700 text-white font-semibold rounded-lg hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-surface">Try Again</button>
-          </div>}
-        </div>
-        <footer className="text-center mt-8 text-text-secondary text-xs">
-          <p>&copy; {new Date().getFullYear()} AI Content Suite. Powered by Gemini.</p>
-        </footer>
-      </div>
-
-      <ReportModal isOpen={isReportModalOpen} onClose={() => setIsReportModalOpen(false)} output={processedData} mode={activeMode} styleTarget={activeMode === 'styleExtractor' ? styleTarget : undefined} nextStepSuggestions={nextStepSuggestions} />
+      <ReportModal
+        isOpen={isReportModalOpen}
+        onClose={() => setIsReportModalOpen(false)}
+        output={processedData}
+        mode={activeMode}
+        styleTarget={activeMode === 'styleExtractor' ? styleTarget : undefined}
+        nextStepSuggestions={nextStepSuggestions}
+      />
       <ChatSettingsModal
         isOpen={isChatSettingsModalOpen}
         onClose={() => setIsChatSettingsModalOpen(false)}
         currentSettings={chatSettings}
-        onSave={(newSettings) => {
+        providerSettings={aiProviderSettings}
+        providers={AI_PROVIDERS}
+        onSave={(newSettings, newProviderSettings) => {
           setChatSettings(newSettings);
+          setAiProviderSettings(newProviderSettings);
           setIsChatSettingsModalOpen(false);
         }}
+        onFetchModels={fetchModelsForProvider}
         savedPrompts={savedPrompts}
         onSavePreset={handleSavePromptPreset}
         onDeletePreset={handleDeletePromptPreset}

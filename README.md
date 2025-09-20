@@ -23,6 +23,6 @@ View your app in AI Studio: https://ai.studio/apps/drive/1AAdFi9Y_nFooagUjpfxZdO
 
 1. Install dependencies:
    `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
+2. Run the app:
    `npm run dev`
+3. In the app, open **Manage AI Settings** and add API keys for the providers you plan to use (OpenAI, OpenRouter, xAI, DeepSeek, Anthropic, or Ollama). Keys are stored locally in your browser.

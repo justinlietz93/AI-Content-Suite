@@ -8,7 +8,7 @@ import { PaperclipIcon } from '../icons/PaperclipIcon';
 import { CogIcon } from '../icons/CogIcon';
 import { XCircleIcon } from '../icons/XCircleIcon';
 
-interface ChatInterfaceProps {
+export interface ChatInterfaceProps {
     history: ChatMessage[];
     isStreaming: boolean;
     chatInput: string;

@@ -12,7 +12,9 @@ export const TABS = [
     { id: 'promptEnhancer', label: 'Prompt Enhancer' },
     { id: 'agentDesigner', label: 'Agent Designer' },
     { id: 'chat', label: 'LLM Chat' },
-];
+] as const;
+
+export const MODE_IDS: Mode[] = TABS.map(tab => tab.id as Mode);
 
 export const DESCRIPTION_TEXT: Record<Mode, string> = {
     technical: "Upload files, or paste text below, to get a concise summary and key highlights.",
