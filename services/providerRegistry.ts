@@ -93,7 +93,7 @@ export const EMBEDDING_PROVIDERS: EmbeddingProviderInfo[] = [
   },
 ];
 
-const STATIC_MODEL_OPTIONS: Record<AIProviderId, ModelOption[]> = {
+const DEFAULT_MODEL_OPTIONS: Record<AIProviderId, ModelOption[]> = {
   openai: [
     { id: 'gpt-4o', label: 'gpt-4o', description: 'Flagship general-purpose model' },
     { id: 'gpt-4o-mini', label: 'gpt-4o-mini', description: 'Fast and cost-effective 4o variant' },
@@ -123,6 +123,17 @@ const STATIC_MODEL_OPTIONS: Record<AIProviderId, ModelOption[]> = {
   ],
 };
 
+const providerModelOptions: Record<AIProviderId, ModelOption[]> = Object.fromEntries(
+  (Object.entries(DEFAULT_MODEL_OPTIONS) as Array<[AIProviderId, ModelOption[]]>).map(([providerId, models]) => [
+    providerId,
+    [...models],
+  ]),
+) as Record<AIProviderId, ModelOption[]>;
+
+export const registerProviderModels = (providerId: AIProviderId, models: ModelOption[]): void => {
+  providerModelOptions[providerId] = models.map(model => ({ ...model }));
+};
+
 export const getProviderLabel = (providerId: AIProviderId): string => {
   return AI_PROVIDERS.find(provider => provider.id === providerId)?.label ?? providerId;
 };
@@ -146,9 +157,9 @@ export const fetchModelsForProvider = async (
   apiKey?: string,
 ): Promise<ModelOption[]> => {
   void apiKey; // Currently unused but retained for future dynamic fetching support
-  const models = STATIC_MODEL_OPTIONS[providerId];
+  const models = providerModelOptions[providerId];
   if (models && models.length > 0) {
-    return models;
+    return models.map(model => ({ ...model }));
   }
   const fallback = DEFAULT_PROVIDER_MODELS[providerId];
   if (fallback) {
