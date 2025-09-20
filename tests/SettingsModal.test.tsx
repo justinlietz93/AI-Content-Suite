@@ -1,6 +1,6 @@
 /* @vitest-environment jsdom */
-import { describe, it, expect, vi } from 'vitest';
-import { render, fireEvent, screen, act } from '@testing-library/react';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { render, fireEvent, screen, act, cleanup } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { SettingsModal } from '../components/modals/SettingsModal';
 import { INITIAL_CHAT_SETTINGS } from '../constants';
@@ -27,6 +27,10 @@ const baseProviderSettings: AIProviderSettings = {
 const providers: ProviderInfo[] = [
   { id: 'openai', label: 'OpenAI', requiresApiKey: true },
 ];
+
+afterEach(() => {
+  cleanup();
+});
 
 describe('SettingsModal', () => {
   it('does not close when resizing the modal', async () => {
@@ -69,5 +73,29 @@ describe('SettingsModal', () => {
 
     fireEvent.click(overlay, { target: overlay, currentTarget: overlay });
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('avoids width and height transitions on the modal container', async () => {
+    render(
+      <SettingsModal
+        isOpen
+        onClose={vi.fn()}
+        currentSettings={createChatSettings()}
+        providerSettings={baseProviderSettings}
+        providers={providers}
+        onSave={vi.fn()}
+        onFetchModels={async () => []}
+        savedPrompts={[]}
+        onSavePreset={vi.fn()}
+        onDeletePreset={vi.fn()}
+      />,
+    );
+
+    const modalWindows = await screen.findAllByTestId('settings-modal-window');
+    expect(modalWindows.length).toBeGreaterThan(0);
+    const modalWindow = modalWindows[0];
+    expect(modalWindow.style.transition).toBe('box-shadow 220ms ease, opacity 220ms ease');
+    expect(modalWindow.style.transition.includes('width')).toBe(false);
+    expect(modalWindow.style.transition.includes('height')).toBe(false);
   });
 });

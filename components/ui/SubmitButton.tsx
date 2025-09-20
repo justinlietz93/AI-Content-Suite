@@ -8,11 +8,17 @@ interface SubmitButtonProps {
     disabled: boolean;
     appState: AppState;
     buttonText: string;
+    wrapperClassName?: string;
 }
 
-export const SubmitButton: React.FC<SubmitButtonProps> = ({ onClick, disabled, appState, buttonText }) => {
+/**
+ * Renders the primary call-to-action button used by non-chat feature tabs. Consumers can
+ * optionally override the wrapper class to integrate the button into custom layout
+ * containers without duplicating its styling logic.
+ */
+export const SubmitButton: React.FC<SubmitButtonProps> = ({ onClick, disabled, appState, buttonText, wrapperClassName = 'mt-6 text-center' }) => {
     return (
-        <div className="mt-6 text-center">
+        <div className={wrapperClassName}>
             <button
                 onClick={onClick}
                 disabled={disabled}

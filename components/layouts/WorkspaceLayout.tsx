@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { type CSSProperties } from 'react';
 import type { Mode, ProcessingError } from '../../types';
 import type { AppState, ProgressUpdate } from '../../types';
 import { Sidebar } from './Sidebar';
@@ -9,8 +9,14 @@ import { SubmitButton } from '../ui/SubmitButton';
 import { StopButton } from '../ui/StopButton';
 import { ResultsViewer, ResultsViewerProps } from './ResultsViewer';
 import { ProgressBar } from '../ui/ProgressBar';
+import { FeaturePanel } from './FeaturePanel';
 import { DESCRIPTION_TEXT, TABS } from '../../constants/uiConstants';
-import { WORKSPACE_CARD_MIN_HEIGHT } from '../../config/uiConfig';
+import {
+  FEATURE_PANEL_DEFAULT_FOOTER_HEIGHT,
+  FEATURE_PANEL_HEIGHT,
+  FEATURE_PANEL_PROCESSING_FOOTER_HEIGHT,
+  WORKSPACE_CARD_MIN_HEIGHT,
+} from '../../config/uiConfig';
 import { XCircleIcon } from '../icons/XCircleIcon';
 
 interface WorkspaceLayoutProps {
@@ -80,6 +86,51 @@ export const WorkspaceLayout: React.FC<WorkspaceLayoutProps> = ({
 }) => {
   const description = DESCRIPTION_TEXT[activeMode];
   const isProcessing = appState === 'processing';
+  const workspaceCardStyle = {
+    minHeight: WORKSPACE_CARD_MIN_HEIGHT,
+    maxHeight: WORKSPACE_CARD_MIN_HEIGHT,
+    height: WORKSPACE_CARD_MIN_HEIGHT,
+    '--feature-panel-height': FEATURE_PANEL_HEIGHT,
+    '--feature-panel-footer-default': FEATURE_PANEL_DEFAULT_FOOTER_HEIGHT,
+    '--feature-panel-footer-processing': FEATURE_PANEL_PROCESSING_FOOTER_HEIGHT,
+  } as CSSProperties & {
+    '--feature-panel-height': string;
+    '--feature-panel-footer-default': string;
+    '--feature-panel-footer-processing': string;
+  };
+
+  const featurePanelContent = showChat && chatProps
+    ? <ChatInterface {...chatProps} />
+    : showMainForm && mainFormProps
+      ? <MainForm {...mainFormProps} />
+      : null;
+
+  const panelFooter = isProcessing
+    ? (
+        <div className="flex h-full w-full flex-col justify-center gap-4">
+          <ProgressBar progress={progress} />
+          <StopButton onClick={onStop} wrapperClassName="text-center" />
+        </div>
+      )
+    : showSubmitButton
+      ? (
+          <div className="flex h-full w-full items-center justify-center">
+            <SubmitButton
+              onClick={onSubmit}
+              disabled={isProcessing}
+              appState={appState}
+              buttonText={buttonText}
+              wrapperClassName="text-center"
+            />
+          </div>
+        )
+      : null;
+
+  const panelFooterHeight = isProcessing
+    ? 'var(--feature-panel-footer-processing)'
+    : showSubmitButton
+      ? 'var(--feature-panel-footer-default)'
+      : undefined;
 
   return (
     <div className="relative min-h-screen flex bg-transparent text-text-primary">
@@ -140,11 +191,7 @@ export const WorkspaceLayout: React.FC<WorkspaceLayoutProps> = ({
             <div
               data-testid="workspace-card"
               className="bg-surface/95 shadow-2xl rounded-2xl animate-breathing-glow p-6 sm:p-8 backdrop-blur-sm flex flex-col min-h-0 overflow-hidden"
-              style={{
-                minHeight: WORKSPACE_CARD_MIN_HEIGHT,
-                maxHeight: WORKSPACE_CARD_MIN_HEIGHT,
-                height: WORKSPACE_CARD_MIN_HEIGHT,
-              }}
+              style={workspaceCardStyle}
             >
               <header className="mb-6 text-center">
                 <h2 className="text-3xl sm:text-4xl font-bold text-text-primary">AI Content Suite</h2>
@@ -174,24 +221,9 @@ export const WorkspaceLayout: React.FC<WorkspaceLayoutProps> = ({
                 </div>
               </div>
 
-              <div className="flex flex-col gap-6 flex-1 min-h-0">
-                {showChat && chatProps ? (
-                  <ChatInterface {...chatProps} />
-                ) : showMainForm && mainFormProps ? (
-                  <MainForm {...mainFormProps} />
-                ) : null}
-
-                {showSubmitButton && (
-                  <SubmitButton onClick={onSubmit} disabled={isProcessing} appState={appState} buttonText={buttonText} />
-                )}
-
-                {isProcessing && (
-                  <div className="flex flex-col gap-4">
-                    <ProgressBar progress={progress} />
-                    <StopButton onClick={onStop} />
-                  </div>
-                )}
-              </div>
+              <FeaturePanel footer={panelFooter} footerHeight={panelFooterHeight}>
+                {featurePanelContent}
+              </FeaturePanel>
 
               {showResults && resultsProps && <ResultsViewer {...resultsProps} />}
 

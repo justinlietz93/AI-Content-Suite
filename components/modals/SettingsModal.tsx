@@ -798,6 +798,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       aria-labelledby="workspace-settings-modal"
     >
       <div
+        data-testid="settings-modal-window"
         className={`relative flex flex-col overflow-hidden rounded-2xl bg-background/95 border border-border-color shadow-[0_48px_140px_-40px_rgba(0,0,0,0.85)] backdrop-blur-md ${
           isResizing ? 'select-none' : ''
         }`}
@@ -808,7 +809,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           minHeight: `min(${MIN_MODAL_HEIGHT}px, calc(100vh - 4rem))`,
           maxWidth: `min(${MAX_MODAL_WIDTH}px, calc(100vw - 2rem))`,
           maxHeight: `min(${MAX_MODAL_HEIGHT}px, calc(100vh - 2rem))`,
-          transition: isResizing ? 'none' : 'width 220ms ease, height 220ms ease',
+          transition: isResizing ? 'none' : 'box-shadow 220ms ease, opacity 220ms ease',
         }}
       >
         <SettingsModalHeader onClose={onClose} />

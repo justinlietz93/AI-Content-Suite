@@ -1,7 +1,7 @@
 
 
 
-import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef, type CSSProperties } from 'react';
 import { ProgressBar } from './components/ui/ProgressBar';
 import { Tabs } from './components/ui/Tabs';
 import { ReportModal } from './components/modals/ReportModal';
@@ -46,6 +46,13 @@ import { MainForm } from './components/layouts/MainForm';
 import { SubmitButton } from './components/ui/SubmitButton';
 import { StopButton } from './components/ui/StopButton';
 import { ResultsViewer } from './components/layouts/ResultsViewer';
+import { FeaturePanel } from './components/layouts/FeaturePanel';
+import {
+  FEATURE_PANEL_DEFAULT_FOOTER_HEIGHT,
+  FEATURE_PANEL_HEIGHT,
+  FEATURE_PANEL_PROCESSING_FOOTER_HEIGHT,
+  WORKSPACE_CARD_MIN_HEIGHT,
+} from './config/uiConfig';
 
 
 const App: React.FC = () => {
@@ -385,6 +392,50 @@ const App: React.FC = () => {
     canSubmit,
   ]);
 
+  const isProcessing = appState === 'processing';
+
+  const workspaceCardStyle = {
+    minHeight: WORKSPACE_CARD_MIN_HEIGHT,
+    maxHeight: WORKSPACE_CARD_MIN_HEIGHT,
+    height: WORKSPACE_CARD_MIN_HEIGHT,
+    '--feature-panel-height': FEATURE_PANEL_HEIGHT,
+    '--feature-panel-footer-default': FEATURE_PANEL_DEFAULT_FOOTER_HEIGHT,
+    '--feature-panel-footer-processing': FEATURE_PANEL_PROCESSING_FOOTER_HEIGHT,
+  } as CSSProperties & {
+    '--feature-panel-height': string;
+    '--feature-panel-footer-default': string;
+    '--feature-panel-footer-processing': string;
+  };
+
+  const featurePanelContent = activeMode === 'chat'
+    ? <ChatInterface {...chatInterfaceProps} />
+    : showMainForm
+      ? <MainForm {...mainFormProps} />
+      : null;
+
+  const panelFooter = isProcessing ? (
+    <div className="flex h-full w-full flex-col justify-center gap-4">
+      <ProgressBar progress={progress} />
+      <StopButton onClick={handleStop} wrapperClassName="w-full text-center" />
+    </div>
+  ) : showSubmitButton ? (
+    <div className="flex h-full w-full items-center justify-center">
+      <SubmitButton
+        onClick={handleSubmit}
+        disabled={isProcessing}
+        appState={appState}
+        buttonText={buttonText}
+        wrapperClassName="w-full text-center"
+      />
+    </div>
+  ) : null;
+
+  const panelFooterHeight = isProcessing
+    ? 'var(--feature-panel-footer-processing)'
+    : showSubmitButton
+      ? 'var(--feature-panel-footer-default)'
+      : undefined;
+
   const resultsViewerProps = useMemo(() => {
     if (!processedData) return undefined;
     return {
@@ -405,7 +456,14 @@ const App: React.FC = () => {
     <>
       <MenuBar onOpenSettings={() => setIsSettingsModalOpen(true)} />
       <div className="min-h-screen bg-transparent flex flex-col items-center justify-center p-4 sm:p-8 transition-all duration-300">
-        <div className={`w-full ${activeMode === 'chat' ? 'max-w-6xl' : 'max-w-3xl'} bg-surface shadow-2xl rounded-lg ${activeMode === 'chat' ? 'px-6 sm:px-10 pt-6 sm:pt-10 pb-2 sm:pb-3' : 'p-6 sm:p-10'} border border-border-color animate-breathing-glow transition-all duration-500 ease-in-out`}>
+        <div
+          className={`w-full ${
+            activeMode === 'chat' ? 'max-w-6xl' : 'max-w-3xl'
+          } bg-surface shadow-2xl rounded-lg ${
+            activeMode === 'chat' ? 'px-6 sm:px-10 pt-6 sm:pt-10 pb-2 sm:pb-3' : 'p-6 sm:p-10'
+          } border border-border-color animate-breathing-glow transition-colors duration-500 ease-in-out`}
+          style={workspaceCardStyle}
+        >
           <header className="mb-6 text-center">
             <h1 className="text-3xl sm:text-4xl font-bold text-text-primary">
               AI Content Suite
@@ -438,27 +496,9 @@ const App: React.FC = () => {
             <span className={`font-medium ${providerStatusTone}`}>{providerStatusText}</span>
           </div>
 
-          {activeMode === 'chat' ? (
-            <ChatInterface {...chatInterfaceProps} />
-          ) : (
-            showMainForm && <MainForm {...mainFormProps} />
-          )}
-
-          {showSubmitButton && (
-            <SubmitButton
-              onClick={handleSubmit}
-              disabled={appState === 'processing'}
-              appState={appState}
-              buttonText={buttonText}
-            />
-          )}
-
-          {appState === 'processing' && (
-            <div className="mt-8">
-              <ProgressBar progress={progress} />
-              <StopButton onClick={handleStop} />
-            </div>
-          )}
+          <FeaturePanel footer={panelFooter} footerHeight={panelFooterHeight} className="mb-6">
+            {featurePanelContent}
+          </FeaturePanel>
 
           {showResults && resultsViewerProps && <ResultsViewer {...resultsViewerProps} />}
 
