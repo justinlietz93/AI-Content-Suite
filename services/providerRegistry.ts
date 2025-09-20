@@ -14,7 +14,6 @@ export interface EmbeddingProviderInfo {
   docsUrl?: string;
   defaultEndpoint?: string;
 }
-
 export const ANTHROPIC_API_VERSION = '2023-06-01';
 
 export const AI_PROVIDERS: ProviderInfo[] = [

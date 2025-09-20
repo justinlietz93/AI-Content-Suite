@@ -1,5 +1,4 @@
 
-
 import type {
   ProgressUpdate,
   ReasoningSettings,
@@ -140,6 +139,12 @@ export const INITIAL_CHAT_SETTINGS: ChatSettings = {
             baseUrl: '',
         },
     },
+};
+
+export const INITIAL_AI_PROVIDER_SETTINGS: AIProviderSettings = {
+    selectedProvider: 'openai',
+    selectedModel: DEFAULT_PROVIDER_MODELS.openai,
+    apiKeys: {},
 };
 
 export const INITIAL_AI_PROVIDER_SETTINGS: AIProviderSettings = {

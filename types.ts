@@ -315,7 +315,6 @@ export interface SavedPrompt {
 }
 
 export type AIProviderId = 'xai' | 'openrouter' | 'openai' | 'deepseek' | 'anthropic' | 'ollama';
-
 export type EmbeddingProviderId = 'openai' | 'openrouter' | 'deepseek' | 'ollama' | 'custom';
 
 export interface ModelOption {
@@ -324,7 +323,6 @@ export interface ModelOption {
 }
 
 export type ProviderApiKeys = Partial<Record<AIProviderId, string>>;
-
 export interface EmbeddingSettings {
   provider: EmbeddingProviderId;
   model: string;
