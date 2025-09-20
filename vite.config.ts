@@ -15,6 +15,24 @@ export default defineConfig(({ mode }) => {
         alias: {
           '@': path.resolve(__dirname, '.'),
         }
-      }
+      },
+      test: {
+        environment: 'jsdom',
+        setupFiles: ['./tests/setupTests.ts'],
+        coverage: {
+          reporter: ['text', 'lcov'],
+          include: [
+            'hooks/useChatSubmission.ts',
+            'services/providerRegistry.ts',
+            'utils/deepClone.ts',
+          ],
+          thresholds: {
+            lines: 95,
+            functions: 95,
+            branches: 95,
+            statements: 95,
+          },
+        },
+      },
     };
 });
