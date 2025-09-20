@@ -1,5 +1,6 @@
 import type { AIProviderId, ThinkingSegment } from '../types';
 import { DEFAULT_PROVIDER_MODELS } from '../constants';
+import { GENERATION_DEFAULTS, ReasoningEffortLevel } from '../config/generationConfig';
 import { getProviderLabel, requiresApiKey, ANTHROPIC_API_VERSION } from './providerRegistry';
 
 export type ResponseFormat = 'text' | 'json';
@@ -9,10 +10,24 @@ export type ProviderMessages = Array<{
   content: string;
 }>;
 
+export interface ReasoningBehavior {
+  enabled?: boolean;
+  effort?: ReasoningEffortLevel;
+  budgetTokens?: number;
+}
+
+export interface ThinkingBehavior {
+  enabled?: boolean;
+  budgetTokens?: number;
+}
+
 export type ProviderCallArgs = {
   messages: ProviderMessages;
   maxOutputTokens?: number;
   responseFormat?: ResponseFormat;
+  temperature?: number;
+  reasoning?: ReasoningBehavior;
+  thinking?: ThinkingBehavior;
   signal?: AbortSignal;
 };
 
@@ -63,6 +78,17 @@ const toOpenAIMessage = (messages: ProviderMessages) =>
     role: message.role,
     content: message.content,
   }));
+
+const REASONING_MODEL_PREFIXES = ['gpt-5', 'o1', 'o3', 'o4'];
+const REASONING_MODEL_KEYWORDS = ['reason', 'thinking', 'r1'];
+
+const isReasoningModelId = (modelId: string): boolean => {
+  const normalized = modelId.toLowerCase();
+  return (
+    REASONING_MODEL_PREFIXES.some(prefix => normalized.startsWith(prefix)) ||
+    REASONING_MODEL_KEYWORDS.some(keyword => normalized.includes(keyword))
+  );
+};
 
 const THINKING_HINT_KEYWORDS = ['reason', 'think', 'analysis', 'chain', 'deliberat', 'scratchpad', 'plan', 'inner', 'cot', 'reflect'];
 const THINKING_LABEL_ALIASES: Record<string, string> = {
@@ -270,19 +296,47 @@ const extractFirstNonEmpty = (candidates: unknown[]): string | undefined => {
 const callOpenAICompatible = async (
   endpoint: string,
   apiKey: string,
-  { messages, maxOutputTokens, responseFormat, signal }: ProviderCallArgs,
+  { messages, maxOutputTokens, responseFormat, temperature, reasoning, thinking, signal }: ProviderCallArgs,
   extraHeaders: Record<string, string> = {},
 ): Promise<ProviderTextResponse> => {
+  const { model } = ensureConfig();
   const requestBody: Record<string, unknown> = {
-    model: ensureConfig().model,
+    model,
     messages: toOpenAIMessage(messages),
-    temperature: 0.7,
     stream: false,
   };
 
-  if (typeof maxOutputTokens === 'number') {
-    requestBody.max_tokens = maxOutputTokens;
+  const resolvedTemperature = typeof temperature === 'number' ? temperature : GENERATION_DEFAULTS.temperature;
+  const resolvedMaxOutputTokens = typeof maxOutputTokens === 'number'
+    ? Math.max(1, Math.round(maxOutputTokens))
+    : GENERATION_DEFAULTS.maxOutputTokens;
+  const isReasoningModel = isReasoningModelId(model);
+
+  if (isReasoningModel) {
+    requestBody.temperature = resolvedTemperature;
+    requestBody.max_output_tokens = resolvedMaxOutputTokens;
+
+    const reasoningPayload: Record<string, unknown> = {
+      effort: reasoning?.effort ?? GENERATION_DEFAULTS.reasoningEffort,
+    };
+    if (typeof reasoning?.budgetTokens === 'number') {
+      reasoningPayload.budget_tokens = Math.max(1, Math.round(reasoning.budgetTokens));
+    }
+    requestBody.reasoning = reasoningPayload;
+
+    const thinkingEnabled = thinking?.enabled ?? false;
+    const thinkingPayload: Record<string, unknown> = {
+      enabled: thinkingEnabled,
+    };
+    if (typeof thinking?.budgetTokens === 'number') {
+      thinkingPayload.budget_tokens = Math.max(1, Math.round(thinking.budgetTokens));
+    }
+    requestBody.thinking = thinkingPayload;
+  } else {
+    requestBody.temperature = resolvedTemperature;
+    requestBody.max_tokens = resolvedMaxOutputTokens;
   }
+
   if (responseFormat === 'json') {
     requestBody.response_format = { type: 'json_object' };
   }
@@ -326,7 +380,7 @@ const callOpenAICompatible = async (
 };
 
 const callAnthropic = async (
-  { messages, maxOutputTokens, responseFormat, signal }: ProviderCallArgs,
+  { messages, maxOutputTokens, responseFormat, temperature, signal }: ProviderCallArgs,
   apiKey: string,
 ): Promise<ProviderTextResponse> => {
   const systemMessage = messages.find((msg) => msg.role === 'system');
@@ -337,8 +391,8 @@ const callAnthropic = async (
 
   const body: Record<string, unknown> = {
     model: ensureConfig().model,
-    max_tokens: maxOutputTokens ?? 4096,
-    temperature: 0.7,
+    max_tokens: typeof maxOutputTokens === 'number' ? maxOutputTokens : GENERATION_DEFAULTS.maxOutputTokens,
+    temperature: typeof temperature === 'number' ? temperature : GENERATION_DEFAULTS.temperature,
     messages: conversation,
   };
 
@@ -378,7 +432,7 @@ const callAnthropic = async (
   return result;
 };
 
-const callOllama = async ({ messages, maxOutputTokens, signal }: ProviderCallArgs): Promise<ProviderTextResponse> => {
+const callOllama = async ({ messages, maxOutputTokens, temperature, signal }: ProviderCallArgs): Promise<ProviderTextResponse> => {
   const systemMessages = messages.filter((msg) => msg.role === 'system');
   const conversation = messages.filter((msg) => msg.role !== 'system');
 
@@ -399,8 +453,15 @@ const callOllama = async ({ messages, maxOutputTokens, signal }: ProviderCallArg
     stream: false,
   };
 
-  if (typeof maxOutputTokens === 'number') {
-    body.options = { num_predict: maxOutputTokens };
+  if (typeof maxOutputTokens === 'number' || typeof temperature === 'number') {
+    const options: Record<string, unknown> = {};
+    if (typeof maxOutputTokens === 'number') {
+      options.num_predict = maxOutputTokens;
+    }
+    if (typeof temperature === 'number') {
+      options.temperature = temperature;
+    }
+    body.options = options;
   }
 
   const response = await fetch('http://127.0.0.1:11434/api/generate', {
@@ -422,7 +483,15 @@ const callOllama = async ({ messages, maxOutputTokens, signal }: ProviderCallArg
   return { text: data.response, thinking: [] };
 };
 
-export const callProvider = async ({ messages, maxOutputTokens, responseFormat = 'text', signal }: ProviderCallArgs): Promise<ProviderTextResponse> => {
+export const callProvider = async ({
+  messages,
+  maxOutputTokens,
+  responseFormat = 'text',
+  temperature,
+  reasoning,
+  thinking,
+  signal,
+}: ProviderCallArgs): Promise<ProviderTextResponse> => {
   if (signal?.aborted) {
     throw new DOMException('Aborted by user', 'AbortError');
   }
@@ -442,6 +511,9 @@ export const callProvider = async ({ messages, maxOutputTokens, responseFormat =
           messages,
           maxOutputTokens,
           responseFormat,
+          temperature,
+          reasoning,
+          thinking,
           signal,
         });
       case 'openrouter': {
@@ -449,7 +521,7 @@ export const callProvider = async ({ messages, maxOutputTokens, responseFormat =
         return await callOpenAICompatible(
           'https://openrouter.ai/api/v1/chat/completions',
           apiKey!,
-          { messages, maxOutputTokens, responseFormat, signal },
+          { messages, maxOutputTokens, responseFormat, temperature, reasoning, thinking, signal },
           { 'HTTP-Referer': referer, 'X-Title': 'AI Content Suite' },
         );
       }
@@ -458,6 +530,9 @@ export const callProvider = async ({ messages, maxOutputTokens, responseFormat =
           messages,
           maxOutputTokens,
           responseFormat,
+          temperature,
+          reasoning,
+          thinking,
           signal,
         });
       case 'deepseek':
@@ -465,12 +540,15 @@ export const callProvider = async ({ messages, maxOutputTokens, responseFormat =
           messages,
           maxOutputTokens,
           responseFormat,
+          temperature,
+          reasoning,
+          thinking,
           signal,
         });
       case 'anthropic':
-        return await callAnthropic({ messages, maxOutputTokens, responseFormat, signal }, apiKey!);
+        return await callAnthropic({ messages, maxOutputTokens, responseFormat, temperature, signal }, apiKey!);
       case 'ollama':
-        return await callOllama({ messages, maxOutputTokens, responseFormat, signal });
+        return await callOllama({ messages, maxOutputTokens, responseFormat, temperature, signal });
       default:
         throw new Error(`Unsupported provider: ${config.providerId}`);
     }

@@ -17,6 +17,7 @@ import {
   requiresEmbeddingApiKey,
   getEmbeddingProviderDefaultEndpoint,
 } from '../../services/providerRegistry';
+import { UI_DIMENSIONS, UI_STORAGE_KEYS, SETTINGS_SCROLLBAR_THEME } from '../../config/uiConfig';
 import { sanitizeFeatureModelPreferences } from '../../utils/providerSettings';
 import { GlobalProviderSection } from './settings/GlobalProviderSection';
 import { FeatureOverridesSection } from './settings/FeatureOverridesSection';
@@ -35,21 +36,29 @@ import { SETTINGS_CATEGORIES } from './settings/categories';
 import { SettingsCategoryTabs } from './settings/SettingsCategoryTabs';
 import { SettingsCategorySidebar } from './settings/SettingsCategorySidebar';
 
-const DEFAULT_MODAL_WIDTH = 1200;
-const DEFAULT_MODAL_HEIGHT = 720;
-const MIN_MODAL_WIDTH = 640;
-const MIN_MODAL_HEIGHT = 560;
-const MAX_MODAL_WIDTH = 1440;
-const MAX_MODAL_HEIGHT = 900;
-const VIEWPORT_MARGIN_X = 48;
-const VIEWPORT_MARGIN_Y = 64;
-const WORKSPACE_LAYOUT_WIDTH_KEY = 'ai_content_suite_layout_width';
-const MIN_WORKSPACE_CONTENT_WIDTH = 640;
-const MAX_WORKSPACE_CONTENT_WIDTH = 1440;
-const DEFAULT_WORKSPACE_LAYOUT_PERCENT = 70;
-const CHAT_HEIGHT_VIEWPORT_RATIO = 0.75;
-const WORKSPACE_SCROLLBAR_STYLE_ID = 'workspace-settings-scrollbar-theme';
-const WORKSPACE_SCROLLBAR_CLASS = 'workspace-settings-scrollbar';
+const {
+  settingsModal: {
+    defaultWidth: DEFAULT_MODAL_WIDTH,
+    defaultHeight: DEFAULT_MODAL_HEIGHT,
+    minWidth: MIN_MODAL_WIDTH,
+    minHeight: MIN_MODAL_HEIGHT,
+    maxWidth: MAX_MODAL_WIDTH,
+    maxHeight: MAX_MODAL_HEIGHT,
+    viewportMarginX: VIEWPORT_MARGIN_X,
+    viewportMarginY: VIEWPORT_MARGIN_Y,
+  },
+  workspace: {
+    minContentWidth: MIN_WORKSPACE_CONTENT_WIDTH,
+    maxContentWidth: MAX_WORKSPACE_CONTENT_WIDTH,
+    defaultContentWidthPercent: DEFAULT_WORKSPACE_LAYOUT_PERCENT,
+  },
+  chat: { heightViewportRatio: CHAT_HEIGHT_VIEWPORT_RATIO },
+} = UI_DIMENSIONS;
+
+const WORKSPACE_LAYOUT_WIDTH_KEY = UI_STORAGE_KEYS.layoutWidth;
+const WORKSPACE_SCROLLBAR_STYLE_ID = SETTINGS_SCROLLBAR_THEME.styleId;
+const WORKSPACE_SCROLLBAR_CLASS = SETTINGS_SCROLLBAR_THEME.className;
+const RESIZE_OVERLAY_SUPPRESSION_MS = 150;
 
 interface ModalSize {
   width: number;
@@ -63,7 +72,11 @@ interface SettingsModalProps {
   providerSettings: AIProviderSettings;
   providers: ProviderInfo[];
   onSave: (newSettings: ChatSettings, providerSettings: AIProviderSettings) => void;
-  onFetchModels: (providerId: AIProviderId, apiKey?: string) => Promise<ModelOption[]>;
+  onFetchModels: (
+    providerId: AIProviderId,
+    apiKey?: string,
+    options?: { signal?: AbortSignal; forceRefresh?: boolean },
+  ) => Promise<ModelOption[]>;
   savedPrompts: SavedPrompt[];
   onSavePreset: (name: string, prompt: string) => void;
   onDeletePreset: (name: string) => void;
@@ -99,6 +112,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     height: DEFAULT_MODAL_HEIGHT,
   });
   const [isResizing, setIsResizing] = useState(false);
+  const isResizingRef = useRef(false);
   const loadRequestIdRef = useRef(0);
   const initialSizeAppliedRef = useRef(false);
   const resizeStateRef = useRef<{
@@ -112,6 +126,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     end: (event: PointerEvent) => void;
   } | null>(null);
   const previousBodyStylesRef = useRef<{ cursor: string; userSelect: string } | null>(null);
+  const ignoreOverlayClickRef = useRef(false);
+  const suppressOverlayClickTimeoutRef = useRef<number | null>(null);
+
+  const setResizingState = useCallback((value: boolean) => {
+    isResizingRef.current = value;
+    setIsResizing(value);
+  }, []);
 
   /**
    * Constrains the requested modal dimensions so the window remains within the viewport bounds
@@ -166,21 +187,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     styleElement.textContent = `
 .${WORKSPACE_SCROLLBAR_CLASS} {
   scrollbar-width: thin;
-  scrollbar-color: oklch(0.35 0 0 / 0.85) transparent;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
 }
 .${WORKSPACE_SCROLLBAR_CLASS}::-webkit-scrollbar {
   width: 12px;
 }
 .${WORKSPACE_SCROLLBAR_CLASS}::-webkit-scrollbar-track {
-  background: transparent;
+  background: var(--scrollbar-track);
 }
 .${WORKSPACE_SCROLLBAR_CLASS}::-webkit-scrollbar-thumb {
-  background-color: oklch(0.32 0 0 / 0.85);
+  background-color: var(--scrollbar-thumb);
   border-radius: 9999px;
-  border: 2px solid oklch(0.18 0 0 / 0.8);
+  border: 2px solid var(--scrollbar-track);
 }
 .${WORKSPACE_SCROLLBAR_CLASS}::-webkit-scrollbar-thumb:hover {
-  background-color: oklch(0.36 0 0 / 0.9);
+  background-color: var(--scrollbar-thumb-hover);
 }
 `;
     document.head.appendChild(styleElement);
@@ -204,14 +225,26 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     }
 
     resizeStateRef.current = null;
-    setIsResizing(false);
+    setResizingState(false);
 
     if (previousBodyStylesRef.current) {
       document.body.style.cursor = previousBodyStylesRef.current.cursor;
       document.body.style.userSelect = previousBodyStylesRef.current.userSelect;
       previousBodyStylesRef.current = null;
     }
-  }, []);
+
+    if (suppressOverlayClickTimeoutRef.current !== null) {
+      window.clearTimeout(suppressOverlayClickTimeoutRef.current);
+      suppressOverlayClickTimeoutRef.current = null;
+    }
+
+    ignoreOverlayClickRef.current = true;
+
+    suppressOverlayClickTimeoutRef.current = window.setTimeout(() => {
+      ignoreOverlayClickRef.current = false;
+      suppressOverlayClickTimeoutRef.current = null;
+    }, RESIZE_OVERLAY_SUPPRESSION_MS);
+  }, [setResizingState]);
 
   /**
    * Begins a resize gesture when the resize affordance is activated, tracking pointer movement
@@ -228,6 +261,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       event.preventDefault();
       event.stopPropagation();
 
+      if (suppressOverlayClickTimeoutRef.current !== null) {
+        window.clearTimeout(suppressOverlayClickTimeoutRef.current);
+        suppressOverlayClickTimeoutRef.current = null;
+      }
+      ignoreOverlayClickRef.current = true;
+
       resizeStateRef.current = {
         startX: event.clientX,
         startY: event.clientY,
@@ -235,7 +274,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         startHeight: modalSize.height,
       };
 
-      setIsResizing(true);
+      setResizingState(true);
 
       if (!previousBodyStylesRef.current) {
         previousBodyStylesRef.current = {
@@ -281,7 +320,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       window.addEventListener('pointerup', handlePointerEnd);
       window.addEventListener('pointercancel', handlePointerEnd);
     },
-    [clampModalSize, endResize, modalSize.height, modalSize.width],
+    [clampModalSize, endResize, modalSize.height, modalSize.width, setResizingState],
   );
 
   const updateVectorStore = useCallback((updater: (prev: VectorStoreSettings) => VectorStoreSettings) => {
@@ -351,7 +390,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setModelOptions([]);
 
     try {
-      const models = await onFetchModels(providerId, trimmedKey);
+      const models = await onFetchModels(providerId, trimmedKey, { forceRefresh: true });
       if (loadRequestIdRef.current !== requestId) {
         return;
       }
@@ -478,6 +517,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   }, [isOpen, clampModalSize]);
 
   useEffect(() => () => {
+    if (typeof window !== 'undefined' && suppressOverlayClickTimeoutRef.current !== null) {
+      window.clearTimeout(suppressOverlayClickTimeoutRef.current);
+      suppressOverlayClickTimeoutRef.current = null;
+    }
     endResize();
   }, [endResize]);
 
@@ -640,11 +683,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     }
   };
 
-  const handleOverlayClick = (e: MouseEvent<HTMLDivElement>) => {
-    if (e.target === e.currentTarget) {
-      onClose();
-    }
-  };
+  const handleOverlayClick = useCallback(
+    (event: MouseEvent<HTMLDivElement>) => {
+      if (isResizingRef.current) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+      if (ignoreOverlayClickRef.current) {
+        ignoreOverlayClickRef.current = false;
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+      if (event.target === event.currentTarget) {
+        onClose();
+      }
+    },
+    [onClose],
+  );
 
   const selectedProviderInfo = providers.find(p => p.id === editedProviderSettings.selectedProvider);
   const globalProviderLabel = selectedProviderInfo?.label ?? 'Selected provider';
@@ -734,14 +791,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 sm:p-8 z-50 transition-opacity duration-300 animate-fade-in-scale"
+      className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 sm:p-10 z-50 transition-opacity duration-300 animate-fade-in-scale"
       onClick={handleOverlayClick}
       role="dialog"
       aria-modal="true"
       aria-labelledby="workspace-settings-modal"
     >
       <div
-        className={`relative flex flex-col overflow-hidden rounded-xl border border-border-color/80 bg-background/95 shadow-[0_40px_120px_-35px_rgba(0,0,0,0.85)] ${
+        className={`relative flex flex-col overflow-hidden rounded-2xl bg-background/95 border border-border-color shadow-[0_48px_140px_-40px_rgba(0,0,0,0.85)] backdrop-blur-md ${
           isResizing ? 'select-none' : ''
         }`}
         style={{
@@ -770,7 +827,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           />
 
           <div
-            className="relative flex-1 bg-background/80 sm:border-l sm:border-border-color/70"
+            className="relative flex-1 bg-background/85"
             role="tabpanel"
             id={`settings-panel-${activeCategory}`}
             aria-labelledby={`settings-tab-${activeCategory}`}
@@ -796,6 +853,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           onPointerDown={handleResizePointerDown}
           role="presentation"
           aria-hidden="true"
+          data-testid="settings-modal-resize-handle"
         >
           <div
             className={`pointer-events-none h-3 w-3 border-b border-r border-current ${

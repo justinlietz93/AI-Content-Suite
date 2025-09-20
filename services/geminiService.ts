@@ -6,7 +6,13 @@ import {
 } from '../constants';
 import { cleanAndParseJson } from '../utils';
 import { fetchVectorStoreContext } from './vectorStoreService';
-import type { ProviderMessages, ResponseFormat, ProviderTextResponse } from './providerClient';
+import type {
+  ProviderMessages,
+  ResponseFormat,
+  ProviderTextResponse,
+  ReasoningBehavior,
+  ThinkingBehavior,
+} from './providerClient';
 import { callProvider } from './providerClient';
 
 export { AI_PROVIDERS, fetchModelsForProvider } from './providerRegistry';
@@ -75,14 +81,31 @@ const buildMessages = (
   return messages;
 };
 
+export type GenerateTextConfig = {
+  maxOutputTokens?: number;
+  responseMimeType?: string;
+  systemInstruction?: string;
+  temperature?: number;
+  reasoning?: ReasoningBehavior;
+  thinking?: ThinkingBehavior;
+};
+
 export const generateText = async (
   prompt: string,
-  config?: { maxOutputTokens?: number; responseMimeType?: string; systemInstruction?: string },
+  config?: GenerateTextConfig,
   signal?: AbortSignal,
 ): Promise<string> => {
   const messages = buildMessages([], [{ text: prompt }], config?.systemInstruction, undefined);
   const responseFormat: ResponseFormat | undefined = config?.responseMimeType === 'application/json' ? 'json' : 'text';
-  const result = await callProvider({ messages, maxOutputTokens: config?.maxOutputTokens, responseFormat, signal });
+  const result = await callProvider({
+    messages,
+    maxOutputTokens: config?.maxOutputTokens,
+    responseFormat,
+    temperature: config?.temperature,
+    reasoning: config?.reasoning,
+    thinking: config?.thinking,
+    signal,
+  });
   return result.text;
 };
 

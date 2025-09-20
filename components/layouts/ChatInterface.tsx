@@ -51,7 +51,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
     return (
         <div
-            className={`relative animate-fade-in-scale flex flex-col h-[75vh] transition-all duration-300 rounded-lg ${isDraggingOver ? 'ring-4 ring-primary ring-offset-4 ring-offset-surface' : ''}`}
+            className={`relative animate-fade-in-scale flex flex-col flex-1 min-h-0 transition-all duration-300 rounded-lg ${isDraggingOver ? 'ring-4 ring-primary ring-offset-4 ring-offset-surface' : ''}`}
             onDragEnter={handleDragEnter} onDragLeave={handleDragLeave} onDragOver={handleDragOver} onDrop={handleDrop}
         >
             {isDraggingOver && (
