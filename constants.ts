@@ -43,6 +43,7 @@ export const INITIAL_AI_PROVIDER_SETTINGS: AIProviderSettings = {
   selectedProvider: 'openai',
   selectedModel: DEFAULT_PROVIDER_MODELS.openai,
   apiKeys: {},
+  featureModelPreferences: undefined,
 };
 
 export const DEFAULT_EMBEDDING_MODELS: Record<EmbeddingProviderId, string> = {

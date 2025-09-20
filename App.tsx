@@ -5,10 +5,19 @@ import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import { ProgressBar } from './components/ui/ProgressBar';
 import { Tabs } from './components/ui/Tabs';
 import { ReportModal } from './components/modals/ReportModal';
-import { ChatSettingsModal } from './components/modals/ChatSettingsModal';
+import { SettingsModal } from './components/modals/SettingsModal';
 import { useStarfield } from './hooks/useStarfield';
 import type { ProcessedOutput, ProgressUpdate, AppState, ProcessingError, Mode, RewriteLength, SummaryFormat, ReasoningSettings, ScaffolderSettings, RequestSplitterSettings, PromptEnhancerSettings, AgentDesignerSettings, ChatSettings, ChatMessage, SavedPrompt, AIProviderSettings } from './types';
-import { INITIAL_PROGRESS, INITIAL_REASONING_SETTINGS, INITIAL_SCAFFOLDER_SETTINGS, INITIAL_REQUEST_SPLITTER_SETTINGS, INITIAL_PROMPT_ENHANCER_SETTINGS, INITIAL_AGENT_DESIGNER_SETTINGS, INITIAL_CHAT_SETTINGS, DEFAULT_PROVIDER_MODELS } from './constants';
+import {
+  INITIAL_PROGRESS,
+  INITIAL_REASONING_SETTINGS,
+  INITIAL_SCAFFOLDER_SETTINGS,
+  INITIAL_REQUEST_SPLITTER_SETTINGS,
+  INITIAL_PROMPT_ENHANCER_SETTINGS,
+  INITIAL_AGENT_DESIGNER_SETTINGS,
+  INITIAL_CHAT_SETTINGS,
+  DEFAULT_PROVIDER_MODELS,
+} from './constants';
 import { TABS, DESCRIPTION_TEXT, getButtonText } from './constants/uiConstants';
 import { handleSubmission } from './services/submissionService';
 import { setActiveProviderConfig } from './services/geminiService';
@@ -29,6 +38,7 @@ import { useMainFormProps } from './hooks/useMainFormProps';
 import { useChatSubmission } from './hooks/useChatSubmission';
 import { deepClone } from './utils/deepClone';
 import { XCircleIcon } from './components/icons/XCircleIcon';
+import { MenuBar } from './components/layouts/MenuBar';
 
 // Import new modular components
 import { ChatInterface } from './components/layouts/ChatInterface';
@@ -49,19 +59,20 @@ const App: React.FC = () => {
   } = useWorkspaceState(activeMode);
   const abortControllersRef = useRef<Partial<Record<Mode, AbortController>>>({});
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
-  const [isChatSettingsModalOpen, setIsChatSettingsModalOpen] = useState(false);
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
 
   const { chatSettings, setChatSettings } = usePersistentChatSettings();
   const {
     providerSettings: aiProviderSettings,
     setProviderSettings: setAiProviderSettings,
+    resolveProviderForMode,
     activeProviderInfo,
     activeProviderLabel,
     activeModelName,
     providerStatusText,
     providerStatusTone,
     providerSummaryText,
-  } = usePersistentProviderSettings();
+  } = usePersistentProviderSettings(activeMode);
   const { savedPrompts, setSavedPrompts } = useSavedPrompts();
   const {
     isSidebarCollapsed,
@@ -105,16 +116,25 @@ const App: React.FC = () => {
   useStarfield('space-background');
 
   useEffect(() => {
-    const apiKey = aiProviderSettings.apiKeys?.[aiProviderSettings.selectedProvider];
-    const model = aiProviderSettings.selectedModel && aiProviderSettings.selectedModel.trim() !== ''
-      ? aiProviderSettings.selectedModel
-      : DEFAULT_PROVIDER_MODELS[aiProviderSettings.selectedProvider];
+    const { providerId, model } = resolveProviderForMode(activeMode);
+    const providerIdFallback = aiProviderSettings.selectedProvider;
+    const modelFallback =
+      (aiProviderSettings.selectedModel && aiProviderSettings.selectedModel.trim()) ||
+      DEFAULT_PROVIDER_MODELS[providerIdFallback];
+
+    const resolvedProviderId = providerId ?? providerIdFallback;
+    const resolvedModel =
+      (model && model.trim()) ||
+      modelFallback ||
+      DEFAULT_PROVIDER_MODELS[resolvedProviderId];
+
+    const apiKey = aiProviderSettings.apiKeys?.[resolvedProviderId];
     setActiveProviderConfig({
-      providerId: aiProviderSettings.selectedProvider,
-      model,
+      providerId: resolvedProviderId,
+      model: resolvedModel,
       apiKey,
     });
-  }, [aiProviderSettings]);
+  }, [activeMode, aiProviderSettings, resolveProviderForMode]);
 
   // Effect to handle state changes for cancellation
   // --- MEMOS ---
@@ -354,7 +374,7 @@ const App: React.FC = () => {
     onChatFilesChange: (value: File[] | null) => setModeValue('chatFiles', value),
     onSubmit: handleChatSubmit,
     canSubmit,
-    onOpenSettings: () => setIsChatSettingsModalOpen(true),
+    onOpenSettings: () => setIsSettingsModalOpen(true),
   }), [
     chatHistory,
     isStreamingResponse,
@@ -383,6 +403,7 @@ const App: React.FC = () => {
 
   return (
     <>
+      <MenuBar onOpenSettings={() => setIsSettingsModalOpen(true)} />
       <div className="min-h-screen bg-transparent flex flex-col items-center justify-center p-4 sm:p-8 transition-all duration-300">
         <div className={`w-full ${activeMode === 'chat' ? 'max-w-6xl' : 'max-w-3xl'} bg-surface shadow-2xl rounded-lg ${activeMode === 'chat' ? 'px-6 sm:px-10 pt-6 sm:pt-10 pb-2 sm:pb-3' : 'p-6 sm:p-10'} border border-border-color animate-breathing-glow transition-all duration-500 ease-in-out`}>
           <header className="mb-6 text-center">
@@ -414,16 +435,7 @@ const App: React.FC = () => {
                 <span className="font-medium text-text-primary">{activeModelName || 'Select a model'}</span>
               </div>
             </div>
-            <div className="flex flex-col sm:flex-row sm:items-center gap-2 text-xs sm:text-sm">
-              <span className={`font-medium ${providerStatusTone}`}>{providerStatusText}</span>
-              <button
-                type="button"
-                onClick={() => setIsChatSettingsModalOpen(true)}
-                className="px-4 py-2 bg-primary text-primary-foreground font-semibold rounded-lg hover:bg-primary-hover transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-secondary"
-              >
-                Manage AI Settings
-              </button>
-            </div>
+            <span className={`font-medium ${providerStatusTone}`}>{providerStatusText}</span>
           </div>
 
           {activeMode === 'chat' ? (
@@ -485,16 +497,16 @@ const App: React.FC = () => {
         styleTarget={activeMode === 'styleExtractor' ? styleTarget : undefined}
         nextStepSuggestions={nextStepSuggestions}
       />
-      <ChatSettingsModal
-        isOpen={isChatSettingsModalOpen}
-        onClose={() => setIsChatSettingsModalOpen(false)}
+      <SettingsModal
+        isOpen={isSettingsModalOpen}
+        onClose={() => setIsSettingsModalOpen(false)}
         currentSettings={chatSettings}
         providerSettings={aiProviderSettings}
         providers={AI_PROVIDERS}
         onSave={(newSettings, newProviderSettings) => {
           setChatSettings(newSettings);
           setAiProviderSettings(newProviderSettings);
-          setIsChatSettingsModalOpen(false);
+          setIsSettingsModalOpen(false);
         }}
         onFetchModels={fetchModelsForProvider}
         savedPrompts={savedPrompts}
