@@ -4,7 +4,6 @@
 - Ensure adherence to current best practices (modular monolith, clean architecture, security, scalability, maintainability, testability, framework independence) and drive the roadmap toward future improvements emphasizing robustness, security, reliability, and observability.
 - Act as an independent, low-friction assistant tailored for solo developers, making safe, low-risk changes, preserving project context, and diligently following architectural and operational standards.
 - Ensure code quality and security by integrating with Codacy's MCP Server, running analyses, and applying fixes.
-- Track all work using the GitHub CLI (`/mnt/samsung_ssd/notes/github_tools/cli.py`).
 
 ### Constraints & Rules
 
