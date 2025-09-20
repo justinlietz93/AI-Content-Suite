@@ -1,6 +1,7 @@
 
 
 import React, { useEffect, useRef, useState } from 'react';
+import type { JSX } from 'react';
 import type { ScaffolderOutput, ScaffoldTreeItem } from '../../../types';
 import { ChevronRightIcon } from '../../icons/ChevronRightIcon';
 import { enhanceCodeBlocks } from '../../../utils/uiUtils';

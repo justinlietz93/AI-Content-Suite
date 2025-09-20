@@ -1,3 +1,4 @@
+import type { Dispatch, SetStateAction } from 'react';
 import { processTranscript } from './summarizationService';
 import { processStyleExtraction } from './styleExtractionService';
 import { processRewrite } from './rewriterService';
@@ -29,12 +30,12 @@ interface SubmissionArgs {
     activeMode: Mode;
     currentFiles: File[] | null;
     settings: AllSettings;
-    setAppState: React.Dispatch<React.SetStateAction<AppState>>;
-    setError: React.Dispatch<React.SetStateAction<ProcessingError | null>>;
-    setProcessedData: React.Dispatch<React.SetStateAction<ProcessedOutput | null>>;
-    setProgress: React.Dispatch<React.SetStateAction<ProgressUpdate>>;
-    setNextStepSuggestions: React.Dispatch<React.SetStateAction<string[] | null>>;
-    setSuggestionsLoading: React.Dispatch<React.SetStateAction<boolean>>;
+    setAppState: Dispatch<SetStateAction<AppState>>;
+    setError: Dispatch<SetStateAction<ProcessingError | null>>;
+    setProcessedData: Dispatch<SetStateAction<ProcessedOutput | null>>;
+    setProgress: Dispatch<SetStateAction<ProgressUpdate>>;
+    setNextStepSuggestions: Dispatch<SetStateAction<string[] | null>>;
+    setSuggestionsLoading: Dispatch<SetStateAction<boolean>>;
     signal: AbortSignal;
 }
 
