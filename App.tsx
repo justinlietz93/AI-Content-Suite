@@ -129,7 +129,6 @@ const App: React.FC = () => {
       DEFAULT_PROVIDER_MODELS[resolvedProviderId];
 
     const apiKey = aiProviderSettings.apiKeys?.[resolvedProviderId];
-
     setActiveProviderConfig({
       providerId: resolvedProviderId,
       model: resolvedModel,
