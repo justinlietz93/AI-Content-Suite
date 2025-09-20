@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useRef, MouseEvent } from 'react';
 import type {
   ChatSettings,
@@ -64,6 +65,7 @@ export const ChatSettingsModal: React.FC<ChatSettingsModalProps> = ({
   onSavePreset,
   onDeletePreset,
 }) => {
+
   const [editedSettings, setEditedSettings] = useState<ChatSettings>(() => withDefaults(currentSettings));
   const [editedProviderSettings, setEditedProviderSettings] = useState<AIProviderSettings>(providerSettings);
   const [modelOptions, setModelOptions] = useState<ModelOption[]>([]);
@@ -180,7 +182,6 @@ export const ChatSettingsModal: React.FC<ChatSettingsModalProps> = ({
             : undefined,
       },
     };
-
     const finalProviderSettings: AIProviderSettings = {
       selectedProvider: providerId,
       selectedModel: trimmedModel || fallbackModel,
@@ -603,7 +604,6 @@ export const ChatSettingsModal: React.FC<ChatSettingsModalProps> = ({
                 </div>
               </div>
             </div>
-
             <div>
               <label htmlFor="preset-selector" className="block text-sm font-medium text-text-secondary mb-2">
                 Manage Presets
