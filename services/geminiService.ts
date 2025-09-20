@@ -1,195 +1,130 @@
-
-
-
-import { GoogleGenAI, GenerateContentResponse, HarmCategory, HarmBlockThreshold } from "@google/genai";
-import type { Highlight, Mode } from '../types';
-import { 
-  GEMINI_FLASH_MODEL, 
+import type { Highlight, Mode, ChatMessage, ChatMessagePart, VectorStoreSettings } from '../types';
+import {
   HIGHLIGHT_EXTRACTION_PROMPT_TEMPLATE,
   NEXT_STEPS_TECHNICAL_SUMMARY_PROMPT_TEMPLATE,
-  NEXT_STEPS_STYLE_MODEL_PROMPT_TEMPLATE
+  NEXT_STEPS_STYLE_MODEL_PROMPT_TEMPLATE,
 } from '../constants';
-import { cleanAndParseJson } from "../utils";
+import { cleanAndParseJson } from '../utils';
+import { fetchVectorStoreContext } from './vectorStoreService';
+import type { ProviderMessages, ResponseFormat, ProviderTextResponse } from './providerClient';
+import { callProvider } from './providerClient';
 
-const safetySettings = [
-    { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-    { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
-    { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
-    { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-];
+export { AI_PROVIDERS, fetchModelsForProvider } from './providerRegistry';
+export type { ProviderInfo } from './providerRegistry';
+export {
+  setActiveProviderConfig,
+  getActiveProviderConfig,
+  getActiveProviderLabel,
+  getActiveModelName,
+} from './providerClient';
 
-// --- Retry Logic for API calls ---
-const MAX_RETRIES = 5;
-const INITIAL_BACKOFF_MS = 1000;
 
-const isRateLimitError = (error: any): boolean => {
-    if (!error) return false;
-    const errorString = String(error).toLowerCase();
-    return errorString.includes('429') || errorString.includes('resource_exhausted') || errorString.includes('rate limit');
-}
-
-/**
- * Wraps a Gemini API call with retry logic for rate limiting errors.
- * @param apiCall The function that makes the Gemini API call.
- * @param signal An AbortSignal to cancel the operation.
- * @returns The result of the API call.
- */
-const callGeminiWithRetry = async <T>(apiCall: () => Promise<T>, signal?: AbortSignal): Promise<T> => {
-    let retries = 0;
-    let backoffMs = INITIAL_BACKOFF_MS;
-
-    while (true) {
-        if (signal?.aborted) {
-            throw new DOMException('Aborted by user', 'AbortError');
-        }
-
-        try {
-            return await apiCall();
-        } catch (error) {
-            if (isRateLimitError(error) && retries < MAX_RETRIES) {
-                retries++;
-                const jitter = Math.random() * 500;
-                const waitTime = backoffMs + jitter;
-                console.warn(`Rate limit exceeded. Retrying in ${waitTime.toFixed(0)}ms... (Attempt ${retries}/${MAX_RETRIES})`);
-                await new Promise(resolve => setTimeout(resolve, waitTime));
-                backoffMs *= 2; // Exponential backoff
-            } else {
-                if (isRateLimitError(error)) {
-                    console.error(`Exceeded maximum retries (${MAX_RETRIES}) for Gemini API call due to persistent rate limiting.`);
-                }
-                // Re-throw the error if it's not a rate limit error or if we've exhausted retries
-                throw error;
-            }
-        }
-    }
+const partsToPlainText = (parts: ChatMessagePart[]): string => {
+  return parts
+    .map((part) => {
+      if ('text' in part) {
+        return part.text;
+      }
+      if ('inlineData' in part) {
+        const preview = part.inlineData.data.slice(0, 40);
+        return `Attached data (${part.inlineData.mimeType}): ${preview}...`;
+      }
+      return '';
+    })
+    .filter(Boolean)
+    .join('\n\n');
 };
 
-
-// --- Original Service Code ---
-const getApiKey = (): string => {
-  const apiKey = typeof process !== 'undefined' && process.env && process.env.API_KEY
-    ? process.env.API_KEY
-    : undefined;
-
-  if (!apiKey) {
-    const errorMsg = "API_KEY is not configured. Please set the API_KEY environment variable.";
-    console.error(errorMsg);
-    throw new Error(errorMsg);
+const buildMessages = (
+  history: ChatMessage[],
+  userMessage: ChatMessagePart[] | null,
+  systemInstruction?: string,
+  contextSections?: string[],
+): ProviderMessages => {
+  const messages: ProviderMessages = [];
+  if (systemInstruction && systemInstruction.trim() !== '') {
+    messages.push({ role: 'system', content: systemInstruction.trim() });
   }
-  return apiKey;
+
+  if (contextSections && contextSections.length > 0) {
+    const trimmedSections = contextSections.map(section => section.trim()).filter(Boolean);
+    if (trimmedSections.length > 0) {
+      messages.push({
+        role: 'system',
+        content:
+          'Relevant knowledge base references (use when helpful and cite the reference number):\n\n' +
+          trimmedSections.join('\n\n'),
+      });
+    }
+  }
+
+  history.forEach((message) => {
+    const content = partsToPlainText(message.parts);
+    if (!content) return;
+    const role = message.role === 'model' ? 'assistant' : 'user';
+    messages.push({ role, content });
+  });
+
+  if (userMessage) {
+    const content = partsToPlainText(userMessage);
+    if (content) {
+      messages.push({ role: 'user', content });
+    }
+  }
+
+  return messages;
 };
-
-let aiInstance: GoogleGenAI | null = null;
-try {
-    aiInstance = new GoogleGenAI({ apiKey: getApiKey() });
-} catch (e) {
-    console.error("Failed to initialize GoogleGenAI:", e);
-}
-
-export const ai = aiInstance;
 
 export const generateText = async (
   prompt: string,
-  config?: { maxOutputTokens?: number, thinkingConfig?: { thinkingBudget: number } },
-  signal?: AbortSignal
+  config?: { maxOutputTokens?: number; responseMimeType?: string; systemInstruction?: string },
+  signal?: AbortSignal,
 ): Promise<string> => {
-  if (!ai) throw new Error("Gemini AI SDK not initialized. API Key might be missing.");
-  try {
-    const response = await callGeminiWithRetry<GenerateContentResponse>(() => 
-      ai!.models.generateContent({
-        model: GEMINI_FLASH_MODEL,
-        contents: prompt,
-        config: {
-          ...config,
-          safetySettings,
-          // FIX: The AbortSignal must be passed inside the 'config' object.
-          signal,
-        },
-      }),
-      signal
-    );
-    return response.text ?? '';
-  } catch (error) {
-    console.error('Error generating text from Gemini:', error);
-    if ((error as any).name === 'AbortError') throw error;
-    throw new Error(`Gemini API error: ${error instanceof Error ? error.message : String(error)}`);
-  }
+  const messages = buildMessages([], [{ text: prompt }], config?.systemInstruction, undefined);
+  const responseFormat: ResponseFormat | undefined = config?.responseMimeType === 'application/json' ? 'json' : 'text';
+  const result = await callProvider({ messages, maxOutputTokens: config?.maxOutputTokens, responseFormat, signal });
+  return result.text;
 };
 
-export const generateMultiModalContent = async (parts: any[], signal?: AbortSignal): Promise<string> => {
-    if (!ai) throw new Error("Gemini AI SDK not initialized. API Key might be missing.");
-    try {
-        const response = await callGeminiWithRetry<GenerateContentResponse>(() =>
-          ai!.models.generateContent({
-            model: GEMINI_FLASH_MODEL,
-            contents: { parts },
-            config: {
-                safetySettings,
-                // FIX: The AbortSignal must be passed inside the 'config' object.
-                signal,
-            },
-          }),
-          signal
-        );
-        return response.text ?? '';
-    } catch (error) {
-        console.error('Error generating multimodal content from Gemini:', error);
-        if ((error as any).name === 'AbortError') throw error;
-        throw new Error(`Gemini API error: ${error instanceof Error ? error.message : String(error)}`);
-    }
+export const generateMultiModalContent = async (parts: ChatMessagePart[], signal?: AbortSignal): Promise<string> => {
+  const content = partsToPlainText(parts);
+  const messages: ProviderMessages = buildMessages([], [{ text: content }], undefined, undefined);
+  const result = await callProvider({ messages, signal });
+  return result.text;
 };
 
 export const extractHighlightsFromJson = async (summaryText: string, signal?: AbortSignal): Promise<Highlight[]> => {
-  if (!ai) throw new Error("Gemini AI SDK not initialized. API Key might be missing.");
+  if (!summaryText) return [];
+
   const prompt = HIGHLIGHT_EXTRACTION_PROMPT_TEMPLATE(summaryText);
   let rawResponseText = '';
   try {
-    const response = await callGeminiWithRetry<GenerateContentResponse>(() =>
-      ai!.models.generateContent({
-        model: GEMINI_FLASH_MODEL,
-        contents: prompt,
-        config: {
-          responseMimeType: "application/json",
-          safetySettings,
-          // FIX: The AbortSignal must be passed inside the 'config' object.
-          signal,
-        },
-      }),
-      signal
-    );
-    rawResponseText = response.text ?? '';
-
+    rawResponseText = await generateText(prompt, { responseMimeType: 'application/json' }, signal);
     const parsedData = cleanAndParseJson<any>(rawResponseText);
 
     if (Array.isArray(parsedData)) {
-      return parsedData.filter(item => item && typeof item.text === 'string') as Highlight[];
+      return parsedData.filter((item) => item && typeof item.text === 'string') as Highlight[];
     } else if (parsedData && typeof parsedData.text === 'string') {
       return [parsedData as Highlight];
     }
-    console.warn("Parsed JSON is not an array of highlights or a single highlight object:", parsedData);
+    console.warn('Parsed JSON is not an array of highlights or a single highlight object:', parsedData);
     return [];
-
   } catch (error) {
-    if ((error as any).name === 'AbortError') throw error;
-    // Non-critical failure: Log the detailed error to the console and return a fallback,
-    // so the main summary is still displayed.
-    const rawOutput = (error as any).details || rawResponseText;
-    console.error('Failed to parse highlights from Gemini. Raw output logged below.', error);
-    console.error('--- RAW HIGHLIGHTS OUTPUT ---\n', rawOutput);
-    
-    // Fallback to simple line extraction
-    const lines = rawOutput.split('\n');
-    const fallbackHighlights: Highlight[] = lines
-      .map(line => line.trim())
-      .filter(line => line.startsWith('* ') || line.startsWith('- ') || /^\d+\.\s/.test(line))
-      .map(line => ({ text: line.replace(/^(\* |- |\d+\.\s)/, '') }))
-      .slice(0, 5); 
-
-    if (fallbackHighlights.length > 0) {
-      console.warn("Using fallback highlights due to JSON parsing error.");
-      return fallbackHighlights;
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw error;
     }
-    return [];
+    const rawOutput = (error as any)?.details || rawResponseText;
+    console.error('Failed to parse highlights. Raw output logged below.', error);
+    console.error('--- RAW HIGHLIGHTS OUTPUT ---\n', rawOutput);
+
+    const lines = String(rawOutput || '')
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.startsWith('* ') || line.startsWith('- ') || /^\d+\.\s/.test(line))
+      .map((line) => ({ text: line.replace(/^(\* |- |\d+\.\s)/, '') }))
+      .slice(0, 5);
+
+    return lines;
   }
 };
 
@@ -197,18 +132,13 @@ export const generateSuggestions = async (
   mode: Mode,
   processedContent: string,
   styleTargetText?: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ): Promise<string[] | null> => {
-  if (!ai) {
-    console.warn("Gemini AI SDK not initialized. Cannot generate suggestions.");
-    return null;
-  }
-  if (!processedContent || processedContent.trim() === "") {
-    console.warn("No content provided to generate suggestions on.");
+  if (!processedContent || processedContent.trim() === '') {
     return null;
   }
 
-  let prompt = "";
+  let prompt = '';
   if (mode === 'technical') {
     prompt = NEXT_STEPS_TECHNICAL_SUMMARY_PROMPT_TEMPLATE(processedContent);
   } else if (mode === 'styleExtractor') {
@@ -217,36 +147,61 @@ export const generateSuggestions = async (
     return null;
   }
 
-  let rawResponseText: string | undefined;
+  let rawResponseText = '';
   try {
-    const response = await callGeminiWithRetry<GenerateContentResponse>(() =>
-      ai!.models.generateContent({
-        model: GEMINI_FLASH_MODEL,
-        contents: prompt,
-        config: {
-          responseMimeType: "application/json",
-          safetySettings,
-          // FIX: The AbortSignal must be passed inside the 'config' object.
-          signal,
-        },
-      }),
-      signal
-    );
-    rawResponseText = response.text ?? '';
-
+    rawResponseText = await generateText(prompt, { responseMimeType: 'application/json' }, signal);
     const parsedData = cleanAndParseJson<string[]>(rawResponseText);
-    
-    if (Array.isArray(parsedData) && parsedData.every(item => typeof item === 'string')) {
-      const nonEmptySuggestions = parsedData.filter(s => s.trim() !== "");
-      return nonEmptySuggestions.length > 0 ? nonEmptySuggestions : null;
+    if (Array.isArray(parsedData)) {
+      const suggestions = parsedData.filter((item) => typeof item === 'string' && item.trim() !== '');
+      return suggestions.length > 0 ? suggestions : null;
     }
-    console.warn("Parsed JSON for suggestions is not an array of strings or is empty:", parsedData);
     return null;
   } catch (error) {
-    if ((error as any).name === 'AbortError') throw error;
-    const rawOutput = (error as any).details || rawResponseText || 'Raw response not available.';
-    console.error('Error generating/parsing next step suggestions from Gemini. Raw output logged below.', error);
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw error;
+    }
+    const rawOutput = (error as any)?.details || rawResponseText || 'Raw response not available.';
+    console.error('Error generating or parsing next step suggestions.', error);
     console.error('--- RAW SUGGESTIONS OUTPUT ---\n', rawOutput);
-    return null; 
+    return null;
   }
+};
+
+export const sendChatMessage = async (
+  args: {
+    history: ChatMessage[];
+    userMessage: ChatMessagePart[];
+    systemInstruction: string;
+    vectorStoreSettings?: VectorStoreSettings;
+    signal?: AbortSignal;
+  },
+): Promise<ProviderTextResponse> => {
+  const { history, userMessage, systemInstruction, vectorStoreSettings, signal } = args;
+
+  let contextSections: string[] | undefined;
+  if (vectorStoreSettings?.enabled) {
+    const queryText = partsToPlainText(userMessage).trim();
+    if (queryText) {
+      try {
+        const matches = await fetchVectorStoreContext(queryText, vectorStoreSettings, signal);
+        if (matches.length > 0) {
+          contextSections = matches.map((match, index) => {
+            const headerParts: string[] = [`#${index + 1}`];
+            if (Number.isFinite(match.score)) {
+              headerParts.push(`score=${match.score.toFixed(3)}`);
+            }
+            const metadataText = match.metadata && Object.keys(match.metadata).length > 0
+              ? `\nMetadata: ${JSON.stringify(match.metadata)}`
+              : '';
+            return `${headerParts.join(' ')}\n${match.text}${metadataText ? `\n${metadataText}` : ''}`;
+          });
+        }
+      } catch (error) {
+        console.warn('Failed to load vector store context:', error);
+      }
+    }
+  }
+
+  const messages = buildMessages(history, userMessage, systemInstruction, contextSections);
+  return callProvider({ messages, signal });
 };

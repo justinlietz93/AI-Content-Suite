@@ -7,7 +7,8 @@ import { processScaffoldingRequest } from './scaffolderService';
 import { processRequestSplitting } from './requestSplitterService';
 import { processPromptEnhancement } from './promptEnhancerService';
 import { processAgentDesign } from './agentDesignerService';
-import { generateSuggestions } from './geminiService';
+import { generateSuggestions, getActiveProviderConfig } from './geminiService';
+import { AI_PROVIDERS } from './providerRegistry';
 import { ocrPdf } from './ocrService';
 import type { ProcessedOutput, ProgressUpdate, AppState, ProcessingError, Mode, SummaryOutput, StyleModelOutput, RewriteLength, SummaryFormat, ReasoningSettings, ScaffolderSettings, RequestSplitterSettings, PromptEnhancerSettings, AgentDesignerSettings, ChatSettings } from '../types';
 import { fileToGenerativePart, readFileAsText } from '../utils/fileUtils';
@@ -85,6 +86,17 @@ export const handleSubmission = async ({
     }
 
     if (!isReadyForSubmit) return;
+
+    const activeProviderConfig = getActiveProviderConfig();
+    const providerInfo = AI_PROVIDERS.find(provider => provider.id === activeProviderConfig.providerId);
+    if (providerInfo?.requiresApiKey && (!activeProviderConfig.apiKey || activeProviderConfig.apiKey.trim() === '')) {
+      setError({ message: `${providerInfo.label} requires an API key. Please add it in settings before running this feature.` });
+      return;
+    }
+    if (!activeProviderConfig.model || activeProviderConfig.model.trim() === '') {
+      setError({ message: 'No model selected. Please choose a model in settings before running this feature.' });
+      return;
+    }
 
     setAppState('processing');
     setError(null);
