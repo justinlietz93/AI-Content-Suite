@@ -245,7 +245,6 @@ const App: React.FC = () => {
     activeMode,
     aiProviderSettings,
     activeProviderInfo,
-    resolveProviderForMode,
     chatSettings,
     canSubmit,
     chatInput,

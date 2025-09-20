@@ -80,23 +80,21 @@ const createParams = (
     apiKeys: { openai: 'sk-test-key' },
   };
   const chatSettings: ChatSettings = overrides.chatSettings ?? { systemInstruction: 'Be helpful' };
-  const activeProviderInfo: ProviderInfo | undefined = overrides.activeProviderInfo ?? {
-    id: 'openai',
-    label: 'OpenAI',
-    requiresApiKey: true,
-  };
+  const activeProviderInfo: ProviderInfo | undefined =
+    'activeProviderInfo' in overrides
+      ? overrides.activeProviderInfo
+      : {
+          id: 'openai',
+          label: 'OpenAI',
+          requiresApiKey: true,
+        };
   const setModeValue = createSetModeValue(state);
   const getStateForMode = vi.fn(() => state);
-  const resolveProviderForMode = overrides.resolveProviderForMode ?? (() => ({
-    providerId: aiProviderSettings.selectedProvider,
-    model: aiProviderSettings.selectedModel,
-  }));
 
   return {
     activeMode: (overrides.activeMode ?? 'chat') as Mode,
     aiProviderSettings,
     activeProviderInfo,
-    resolveProviderForMode,
     chatSettings,
     canSubmit: overrides.canSubmit ?? true,
     chatInput: overrides.chatInput ?? state.chatInput ?? '',
@@ -158,13 +156,15 @@ describe('useChatSubmission', () => {
         selectedProvider: 'openai',
         selectedModel: 'gpt-4o-mini',
         apiKeys: { openai: 'sk-test-key' },
+        featureModelPreferences: {
+          chat: { provider: 'openrouter', model: 'openrouter/auto' },
+        },
       },
       activeProviderInfo: {
         id: 'openrouter',
         label: 'OpenRouter',
         requiresApiKey: true,
       },
-      resolveProviderForMode: () => ({ providerId: 'openrouter', model: 'openrouter/auto' }),
       chatInput: 'Hello override',
     });
 
@@ -179,6 +179,30 @@ describe('useChatSubmission', () => {
       message: 'OpenRouter requires an API key. Please add it in settings before starting a chat.',
     });
     expect(state.chatHistory).toEqual([]);
+  });
+
+  it('falls back to registry metadata when active provider info is unavailable', async () => {
+    const state = createWorkspaceState();
+    const params = createParams(state, {
+      aiProviderSettings: {
+        selectedProvider: 'openrouter',
+        selectedModel: 'openrouter/auto',
+        apiKeys: {},
+      },
+      activeProviderInfo: undefined,
+      chatInput: 'Need credentials',
+    });
+
+    const { result } = renderHook(() => useChatSubmission(params));
+
+    await act(async () => {
+      await result.current();
+    });
+
+    expect(sendChatMessageMock).not.toHaveBeenCalled();
+    expect(state.error).toEqual({
+      message: 'OpenRouter requires an API key. Please add it in settings before starting a chat.',
+    });
   });
 
   it('returns early when no text or files are provided', async () => {
