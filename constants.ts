@@ -1,16 +1,6 @@
 
-import type {
-  ProgressUpdate,
-  ReasoningSettings,
-  ScaffolderSettings,
-  RequestSplitterSettings,
-  PromptEnhancerSettings,
-  AgentDesignerSettings,
-  ChatSettings,
-  AIProviderSettings,
-  AIProviderId,
-  EmbeddingProviderId,
-} from './types';
+
+import type { ProgressUpdate, ReasoningSettings, ScaffolderSettings, RequestSplitterSettings, PromptEnhancerSettings, AgentDesignerSettings, ChatSettings } from './types';
 
 // Import all summary prompts from the new modular structure
 import * as summaryPrompts from './prompts/summaries';
@@ -126,31 +116,6 @@ export const INITIAL_AGENT_DESIGNER_SETTINGS: AgentDesignerSettings = {
 
 export const INITIAL_CHAT_SETTINGS: ChatSettings = {
     systemInstruction: 'You are a helpful and friendly AI assistant. Answer the user\'s questions clearly and concisely.',
-    vectorStore: {
-        enabled: false,
-        url: '',
-        apiKey: '',
-        collection: '',
-        topK: 5,
-        embedding: {
-            provider: 'openai',
-            model: DEFAULT_EMBEDDING_MODELS.openai,
-            apiKey: '',
-            baseUrl: '',
-        },
-    },
-};
-
-export const INITIAL_AI_PROVIDER_SETTINGS: AIProviderSettings = {
-    selectedProvider: 'openai',
-    selectedModel: DEFAULT_PROVIDER_MODELS.openai,
-    apiKeys: {},
-};
-
-export const INITIAL_AI_PROVIDER_SETTINGS: AIProviderSettings = {
-    selectedProvider: 'openai',
-    selectedModel: DEFAULT_PROVIDER_MODELS.openai,
-    apiKeys: {},
 };
 
 // --- Prompt Collections (Re-constructed from imports) ---

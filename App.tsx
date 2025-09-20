@@ -6,7 +6,6 @@ import { ProgressBar } from './components/ui/ProgressBar';
 import { Tabs } from './components/ui/Tabs';
 import { ReportModal } from './components/modals/ReportModal';
 import { ChatSettingsModal } from './components/modals/ChatSettingsModal';
-import { XCircleIcon } from './components/icons/XCircleIcon';
 import { useStarfield } from './hooks/useStarfield';
 import type { ProcessedOutput, ProgressUpdate, AppState, ProcessingError, Mode, RewriteLength, SummaryFormat, ReasoningSettings, ScaffolderSettings, RequestSplitterSettings, PromptEnhancerSettings, AgentDesignerSettings, ChatSettings, ChatMessage, SavedPrompt, AIProviderSettings } from './types';
 import { INITIAL_PROGRESS, INITIAL_REASONING_SETTINGS, INITIAL_SCAFFOLDER_SETTINGS, INITIAL_REQUEST_SPLITTER_SETTINGS, INITIAL_PROMPT_ENHANCER_SETTINGS, INITIAL_AGENT_DESIGNER_SETTINGS, INITIAL_CHAT_SETTINGS, INITIAL_AI_PROVIDER_SETTINGS, DEFAULT_PROVIDER_MODELS } from './constants';
@@ -21,7 +20,7 @@ import {
   downloadScaffoldArtifact,
   downloadRequestSplitterArtifact,
   downloadPromptEnhancerArtifact,
-  downloadAgentDesignerArtifact
+  downloadAgentDesignerArtifact,
 } from './utils/downloadUtils';
 
 // Import new modular components
@@ -36,15 +35,15 @@ const PROVIDER_SETTINGS_STORAGE_KEY = 'ai_content_suite_provider_settings';
 const CHAT_SETTINGS_STORAGE_KEY = 'ai_content_suite_chat_settings';
 
 const App: React.FC = () => {
-  // --- STATE MANAGEMENT ---
-  const [currentFiles, setCurrentFiles] = useState<File[] | null>(null);
-  const [appState, setAppState] = useState<AppState>('idle');
   const [activeMode, setActiveMode] = useState<Mode>('technical');
-  const [progress, setProgress] = useState<ProgressUpdate>(INITIAL_PROGRESS);
-  const [processedData, setProcessedData] = useState<ProcessedOutput | null>(null);
-  const [error, setError] = useState<ProcessingError | null>(null);
-  const [nextStepSuggestions, setNextStepSuggestions] = useState<string[] | null>(null);
-  const [suggestionsLoading, setSuggestionsLoading] = useState<boolean>(false);
+  const {
+    state: modeState,
+    setValue: setModeValue,
+    mergeState,
+    resetMode,
+    getStateForMode,
+  } = useWorkspaceState(activeMode);
+  const abortControllersRef = useRef<Partial<Record<Mode, AbortController>>>({});
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -76,8 +75,48 @@ const App: React.FC = () => {
   const [chatFiles, setChatFiles] = useState<File[] | null>(null);
   const [isChatSettingsModalOpen, setIsChatSettingsModalOpen] = useState(false);
 
+  const { chatSettings, setChatSettings } = usePersistentChatSettings();
+  const {
+    providerSettings: aiProviderSettings,
+    setProviderSettings: setAiProviderSettings,
+    activeProviderInfo,
+    activeProviderLabel,
+    activeModelName,
+    providerStatusText,
+    providerStatusTone,
+    providerSummaryText,
+  } = usePersistentProviderSettings();
+  const { savedPrompts, setSavedPrompts } = useSavedPrompts();
+  const {
+    isSidebarCollapsed,
+    toggleSidebar,
+    contentWidthPercent,
+    setContentWidthPercent,
+    appliedContentWidth,
+    contentWidthLabel,
+  } = useLayoutPreferences();
 
-  // --- HOOKS ---
+  const {
+    currentFiles,
+    appState,
+    progress,
+    processedData,
+    error,
+    nextStepSuggestions,
+    styleTarget,
+    summaryTextInput,
+    reasoningPrompt,
+    scaffolderPrompt,
+    scaffolderSettings,
+    requestSplitterSpec,
+    promptEnhancerSettings,
+    agentDesignerSettings,
+    chatHistory,
+    isStreamingResponse,
+    chatInput,
+    chatFiles,
+  } = modeState;
+
   useStarfield('space-background');
 
   // --- EFFECTS ---
@@ -192,7 +231,7 @@ const App: React.FC = () => {
   // --- MEMOS ---
   const canSubmit = useMemo(() => {
     const hasFiles = currentFiles && currentFiles.length > 0;
-    
+
     switch (activeMode) {
       case 'technical':
         return hasFiles || !!summaryTextInput.trim();
@@ -276,7 +315,7 @@ const App: React.FC = () => {
   const buttonText = useMemo(() => {
     return getButtonText(
       activeMode,
-      currentFiles?.length || 0,
+      currentFiles,
       summaryTextInput,
       reasoningPrompt,
       scaffolderPrompt,
@@ -330,24 +369,40 @@ const App: React.FC = () => {
   }, []);
 
   const handleSubmit = useCallback(() => {
-    abortControllerRef.current = new AbortController();
-    const { signal } = abortControllerRef.current;
+    const modeAtSubmission = activeMode;
+    const controller = new AbortController();
+    abortControllersRef.current[modeAtSubmission] = controller;
+    const { signal } = controller;
+
+    const stateForMode = getStateForMode(modeAtSubmission);
 
     handleSubmission({
-      activeMode,
-      currentFiles,
+      activeMode: modeAtSubmission,
+      currentFiles: stateForMode.currentFiles,
       settings: {
-        summaryTextInput, useHierarchical, summaryFormat,
-        styleTarget,
-        rewriteStyle, rewriteInstructions, rewriteLength,
-        reasoningPrompt, reasoningSettings,
-        scaffolderPrompt, scaffolderSettings,
-        requestSplitterSpec, requestSplitterSettings,
-        promptEnhancerSettings, agentDesignerSettings,
+        summaryTextInput: stateForMode.summaryTextInput,
+        useHierarchical: stateForMode.useHierarchical,
+        summaryFormat: stateForMode.summaryFormat,
+        styleTarget: stateForMode.styleTarget,
+        rewriteStyle: stateForMode.rewriteStyle,
+        rewriteInstructions: stateForMode.rewriteInstructions,
+        rewriteLength: stateForMode.rewriteLength,
+        reasoningPrompt: stateForMode.reasoningPrompt,
+        reasoningSettings: stateForMode.reasoningSettings,
+        scaffolderPrompt: stateForMode.scaffolderPrompt,
+        scaffolderSettings: stateForMode.scaffolderSettings,
+        requestSplitterSpec: stateForMode.requestSplitterSpec,
+        requestSplitterSettings: stateForMode.requestSplitterSettings,
+        promptEnhancerSettings: stateForMode.promptEnhancerSettings,
+        agentDesignerSettings: stateForMode.agentDesignerSettings,
         chatSettings,
       },
-      setAppState, setError, setProcessedData, setProgress,
-      setNextStepSuggestions, setSuggestionsLoading,
+      setAppState: value => setModeValue('appState', value, modeAtSubmission),
+      setError: value => setModeValue('error', value, modeAtSubmission),
+      setProcessedData: value => setModeValue('processedData', value, modeAtSubmission),
+      setProgress: value => setModeValue('progress', value, modeAtSubmission),
+      setNextStepSuggestions: value => setModeValue('nextStepSuggestions', value, modeAtSubmission),
+      setSuggestionsLoading: value => setModeValue('suggestionsLoading', value, modeAtSubmission),
       signal,
     });
   }, [
@@ -452,31 +507,106 @@ const App: React.FC = () => {
       });
     };
 
-    const handleDeletePromptPreset = (name: string) => {
-      setSavedPrompts(prev => prev.filter(p => p.name !== name));
+  const handleDeletePromptPreset = useCallback((name: string) => {
+    setSavedPrompts(prev => prev.filter(item => item.name !== name));
+  }, [setSavedPrompts]);
+
+  const handleFileSelect = useCallback(
+    (files: File[]) => {
+      if (files.length > 0) {
+        setModeValue('summaryTextInput', '', activeMode);
+      }
+      const nextFiles = files.length > 0 ? Array.from(files) : null;
+      mergeState(
+        {
+          currentFiles: nextFiles,
+          processedData: null,
+          error: null,
+          appState: 'fileSelected',
+          progress: deepClone(INITIAL_PROGRESS),
+          nextStepSuggestions: null,
+          suggestionsLoading: false,
+        },
+        activeMode,
+      );
+    },
+    [activeMode, mergeState, setModeValue],
+  );
+
+  const handleSummaryTextChange = useCallback(
+    (text: string) => {
+      setModeValue('summaryTextInput', text);
+      if (text.trim()) {
+        setModeValue('currentFiles', null);
+      }
+    },
+    [setModeValue],
+  );
+
+  const handleModeChange = useCallback(
+    (mode: Mode) => {
+      setActiveMode(prev => (prev === mode ? prev : mode));
+      setIsReportModalOpen(false);
+    },
+    [],
+  );
+
+  const handleWidthSliderChange = useCallback(
+    (percent: number) => {
+      setContentWidthPercent(percent);
+    },
+    [setContentWidthPercent],
+  );
+
+  const showMainForm = activeMode !== 'chat' && (appState === 'idle' || appState === 'fileSelected');
+  const showSubmitButton = activeMode !== 'chat' && canSubmit && appState !== 'completed' && appState !== 'error';
+  const showResults = appState === 'completed' && !!processedData;
+  const showError = appState === 'error' && !!error;
+
+  const mainFormProps = useMainFormProps({
+    activeMode,
+    state: modeState,
+    setModeValue,
+    onFileSelect: handleFileSelect,
+    onSummaryTextChange: handleSummaryTextChange,
+  });
+
+  const chatInterfaceProps = useMemo(() => ({
+    history: chatHistory,
+    isStreaming: isStreamingResponse,
+    chatInput,
+    onChatInputChange: (value: string) => setModeValue('chatInput', value),
+    chatFiles,
+    onChatFilesChange: (value: File[] | null) => setModeValue('chatFiles', value),
+    onSubmit: handleChatSubmit,
+    canSubmit,
+    onOpenSettings: () => setIsChatSettingsModalOpen(true),
+  }), [
+    chatHistory,
+    isStreamingResponse,
+    chatInput,
+    chatFiles,
+    setModeValue,
+    handleChatSubmit,
+    canSubmit,
+  ]);
+
+  const resultsViewerProps = useMemo(() => {
+    if (!processedData) return undefined;
+    return {
+      processedData,
+      activeMode,
+      scaffolderSettings,
+      onReset: () => handleReset(),
+      onOpenReportModal: () => setIsReportModalOpen(true),
+      onDownloadReasoning: (type: 'md' | 'json') => downloadReasoningArtifact(processedData, type),
+      onDownloadScaffold: (type: 'script' | 'plan') => downloadScaffoldArtifact(processedData, scaffolderSettings, type),
+      onDownloadRequestSplitter: (type: 'md' | 'json') => downloadRequestSplitterArtifact(processedData, type),
+      onDownloadPromptEnhancer: (type: 'md' | 'json') => downloadPromptEnhancerArtifact(processedData, type),
+      onDownloadAgentDesigner: (type: 'md' | 'json') => downloadAgentDesignerArtifact(processedData, type),
     };
+  }, [processedData, activeMode, scaffolderSettings, handleReset]);
 
-
-  const handleFileSelect = useCallback((files: File[]) => {
-    if (files.length > 0) {
-      setSummaryTextInput(''); 
-    }
-    setCurrentFiles(files);
-    setProcessedData(null);
-    setError(null);
-    setAppState('fileSelected');
-    setProgress(INITIAL_PROGRESS);
-    setNextStepSuggestions(null);
-    setSuggestionsLoading(false);
-  }, []);
-
-  const handleSummaryTextChange = useCallback((text: string) => {
-    setSummaryTextInput(text);
-    if (text.trim()) {
-      setCurrentFiles(null); 
-    }
-  }, []);
-  
   return (
     <>
       <div className="min-h-screen bg-transparent flex flex-col items-center justify-center p-4 sm:p-8 transition-all duration-300">
@@ -600,7 +730,14 @@ const App: React.FC = () => {
         </footer>
       </div>
 
-      <ReportModal isOpen={isReportModalOpen} onClose={() => setIsReportModalOpen(false)} output={processedData} mode={activeMode} styleTarget={activeMode === 'styleExtractor' ? styleTarget : undefined} nextStepSuggestions={nextStepSuggestions} />
+      <ReportModal
+        isOpen={isReportModalOpen}
+        onClose={() => setIsReportModalOpen(false)}
+        output={processedData}
+        mode={activeMode}
+        styleTarget={activeMode === 'styleExtractor' ? styleTarget : undefined}
+        nextStepSuggestions={nextStepSuggestions}
+      />
       <ChatSettingsModal
         isOpen={isChatSettingsModalOpen}
         onClose={() => setIsChatSettingsModalOpen(false)}

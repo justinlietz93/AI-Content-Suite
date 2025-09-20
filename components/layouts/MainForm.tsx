@@ -13,7 +13,7 @@ import { AgentDesignerControls } from '../views/controls/AgentDesignerControls';
 import { FileLoader } from '../ui/FileLoader';
 
 // A large props object, but necessary to delegate state from App.tsx
-interface MainFormProps {
+export interface MainFormProps {
     activeMode: Mode;
     currentFiles: File[] | null;
     // Technical Summarizer Props
