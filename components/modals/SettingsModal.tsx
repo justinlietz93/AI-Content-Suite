@@ -410,6 +410,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   }, [ensureScrollbarTheme]);
 
   useEffect(() => {
+
     if (!isOpen) {
       initialSizeAppliedRef.current = false;
       return;
