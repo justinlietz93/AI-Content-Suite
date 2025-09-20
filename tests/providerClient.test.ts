@@ -75,4 +75,61 @@ describe('providerClient', () => {
     expect(payload).not.toHaveProperty('reasoning');
     expect(payload).not.toHaveProperty('thinking');
   });
+
+  it('returns json text when the provider responds with a json_object string payload', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      createFetchResponse({
+        choices: [
+          {
+            message: {
+              content: [
+                {
+                  type: 'json_object',
+                  json: '{"suggestions":["alpha","beta"]}',
+                },
+              ],
+            },
+          },
+        ],
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await callProvider({
+      messages: [{ role: 'user', content: 'Provide options' }],
+      responseFormat: 'json',
+    });
+
+    expect(result.text).toBe('{"suggestions":["alpha","beta"]}');
+    expect(result.thinking).toEqual([]);
+  });
+
+  it('stringifies structured json payloads when the provider returns an object value', async () => {
+    const jsonPayload = { steps: ['draft', 'review', 'publish'] };
+    const fetchMock = vi.fn().mockResolvedValue(
+      createFetchResponse({
+        choices: [
+          {
+            message: {
+              content: [
+                {
+                  type: 'json_object',
+                  json: jsonPayload,
+                },
+              ],
+            },
+          },
+        ],
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await callProvider({
+      messages: [{ role: 'user', content: 'Outline the workflow' }],
+      responseFormat: 'json',
+    });
+
+    expect(result.text).toBe(JSON.stringify(jsonPayload));
+    expect(result.thinking).toEqual([]);
+  });
 });

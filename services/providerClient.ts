@@ -91,6 +91,7 @@ const isReasoningModelId = (modelId: string): boolean => {
 };
 
 const THINKING_HINT_KEYWORDS = ['reason', 'think', 'analysis', 'chain', 'deliberat', 'scratchpad', 'plan', 'inner', 'cot', 'reflect'];
+const JSON_HINT_KEYWORDS = ['json', 'schema', 'structured'];
 const THINKING_LABEL_ALIASES: Record<string, string> = {
   cot: 'Chain of Thought',
   'chain_of_thought': 'Chain of Thought',
@@ -118,6 +119,14 @@ const isThinkingHint = (value?: string): boolean => {
   if (!value) return false;
   const normalized = value.toLowerCase();
   return THINKING_HINT_KEYWORDS.some((keyword) => normalized.includes(keyword));
+};
+
+const isJsonHint = (value?: string): boolean => {
+  if (!value) {
+    return false;
+  }
+  const normalized = value.toLowerCase();
+  return JSON_HINT_KEYWORDS.some((keyword) => normalized.includes(keyword));
 };
 
 const formatThinkingLabel = (hint?: string): string => {
@@ -156,6 +165,26 @@ const pushThinking = (collector: NormalizedCollector, value: unknown, hint?: str
   });
 };
 
+const pushJsonLike = (collector: NormalizedCollector, value: unknown): boolean => {
+  if (value == null) {
+    return false;
+  }
+  if (typeof value === 'string') {
+    pushText(collector, value);
+    return true;
+  }
+  try {
+    const serialized = JSON.stringify(value);
+    if (typeof serialized !== 'string' || serialized.trim() === '') {
+      return false;
+    }
+    pushText(collector, serialized);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 const SKIP_OBJECT_KEYS = new Set([
   'id',
   'index',
@@ -191,6 +220,9 @@ const collectNormalizedParts = (value: unknown, collector: NormalizedCollector, 
   }
 
   if (Array.isArray(value)) {
+    if (isJsonHint(hint) && pushJsonLike(collector, value)) {
+      return;
+    }
     value.forEach((item) => collectNormalizedParts(item, collector, hint));
     return;
   }
@@ -198,6 +230,19 @@ const collectNormalizedParts = (value: unknown, collector: NormalizedCollector, 
   if (typeof value === 'object') {
     const objectValue = value as Record<string, unknown>;
     const typeHint = typeof objectValue.type === 'string' ? (objectValue.type as string) : hint;
+    const handledKeys = new Set<string>(['type']);
+
+    const hasStructuredPayload =
+      Object.prototype.hasOwnProperty.call(objectValue, 'json') ||
+      Object.prototype.hasOwnProperty.call(objectValue, 'parsed') ||
+      Object.prototype.hasOwnProperty.call(objectValue, 'response_json') ||
+      Object.prototype.hasOwnProperty.call(objectValue, 'arguments');
+
+    if (isJsonHint(typeHint) && !hasStructuredPayload) {
+      if (pushJsonLike(collector, objectValue)) {
+        return;
+      }
+    }
 
     if (typeof objectValue.text === 'string') {
       if (isThinkingHint(typeHint)) {
@@ -205,6 +250,7 @@ const collectNormalizedParts = (value: unknown, collector: NormalizedCollector, 
       } else {
         pushText(collector, objectValue.text);
       }
+      handledKeys.add('text');
     }
 
     if (typeof objectValue.output_text === 'string') {
@@ -213,6 +259,7 @@ const collectNormalizedParts = (value: unknown, collector: NormalizedCollector, 
       } else {
         pushText(collector, objectValue.output_text);
       }
+      handledKeys.add('output_text');
     }
 
     if (typeof objectValue.message === 'string') {
@@ -221,13 +268,35 @@ const collectNormalizedParts = (value: unknown, collector: NormalizedCollector, 
       } else {
         pushText(collector, objectValue.message);
       }
+      handledKeys.add('message');
+    }
+
+    if (Object.prototype.hasOwnProperty.call(objectValue, 'json')) {
+      if (pushJsonLike(collector, objectValue.json)) {
+        handledKeys.add('json');
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(objectValue, 'parsed')) {
+      if (pushJsonLike(collector, objectValue.parsed)) {
+        handledKeys.add('parsed');
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(objectValue, 'response_json')) {
+      if (pushJsonLike(collector, objectValue.response_json)) {
+        handledKeys.add('response_json');
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(objectValue, 'arguments')) {
+      if (pushJsonLike(collector, objectValue.arguments)) {
+        handledKeys.add('arguments');
+      }
     }
 
     Object.entries(objectValue).forEach(([key, nestedValue]) => {
-      if (key === 'type' || key === 'text' || key === 'output_text' || key === 'message') {
-        return;
-      }
-      if (SKIP_OBJECT_KEYS.has(key)) {
+      if (handledKeys.has(key) || SKIP_OBJECT_KEYS.has(key)) {
         return;
       }
       const nextHint = isThinkingHint(key) ? key : typeHint;
