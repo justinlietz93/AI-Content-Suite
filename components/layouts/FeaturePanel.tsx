@@ -33,9 +33,11 @@ type FeaturePanelStyle = CSSProperties & {
 /**
  * Establishes a shared, token-driven bounding box for feature tab content. The wrapper
  * consumes layout tokens defined on the workspace card to keep every tab aligned with
- * the LLM chat reference dimensions while delegating scrolling to the inner content
- * region. An optional footer channel is provided for mode-specific controls such as
- * submit buttons or progress indicators without affecting the panel height.
+ * the LLM chat reference dimensions while exposing a vertically scrollable content
+ * region. The scroll container can still be customized via `contentClassName` when a
+ * feature needs bespoke overflow behavior. An optional footer channel is provided for
+ * mode-specific controls such as submit buttons or progress indicators without
+ * affecting the panel height.
  */
 export const FeaturePanel: React.FC<FeaturePanelProps> = ({
   children,
@@ -59,9 +61,10 @@ export const FeaturePanel: React.FC<FeaturePanelProps> = ({
       style={panelStyle}
     >
       <div
-        className={`feature-panel__content flex min-h-0 flex-1 flex-col overflow-hidden ${
+        className={`feature-panel__content flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto ${
           contentClassName ?? ''
         }`.trim()}
+        data-testid="feature-panel-content"
       >
         {children}
       </div>

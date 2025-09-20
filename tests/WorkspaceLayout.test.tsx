@@ -245,4 +245,21 @@ describe('WorkspaceLayout', () => {
     expect(panel).toHaveTextContent('Processing Complete!');
     expect(screen.getByText('Processing Complete!')).toBeInTheDocument();
   });
+
+  it('keeps the feature panel content scrollable to avoid truncating results', () => {
+    render(
+      <WorkspaceLayout
+        {...baseProps}
+        showChat
+        chatProps={createChatProps()}
+      />,
+    );
+
+    const contentRegion = screen.getByTestId('feature-panel-content');
+    console.info(
+      'WorkspaceLayout: verifying the standardized feature panel exposes vertical scrolling so chat transcripts remain fully visible.',
+    );
+    expect(contentRegion).toHaveClass('overflow-y-auto');
+    expect(contentRegion).toHaveClass('overflow-x-hidden');
+  });
 });
