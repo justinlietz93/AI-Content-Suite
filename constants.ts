@@ -1,6 +1,17 @@
 
 
-import type { ProgressUpdate, ReasoningSettings, ScaffolderSettings, RequestSplitterSettings, PromptEnhancerSettings, AgentDesignerSettings, ChatSettings } from './types';
+import type {
+  ProgressUpdate,
+  ReasoningSettings,
+  ScaffolderSettings,
+  RequestSplitterSettings,
+  PromptEnhancerSettings,
+  AgentDesignerSettings,
+  ChatSettings,
+  AIProviderId,
+  EmbeddingProviderId,
+  AIProviderSettings,
+} from './types';
 
 // Import all summary prompts from the new modular structure
 import * as summaryPrompts from './prompts/summaries';
@@ -26,6 +37,12 @@ export const DEFAULT_PROVIDER_MODELS: Record<AIProviderId, string> = {
   deepseek: 'deepseek-chat',
   anthropic: 'claude-3-5-sonnet-latest',
   ollama: 'llama3.1:8b',
+};
+
+export const INITIAL_AI_PROVIDER_SETTINGS: AIProviderSettings = {
+  selectedProvider: 'openai',
+  selectedModel: DEFAULT_PROVIDER_MODELS.openai,
+  apiKeys: {},
 };
 
 export const DEFAULT_EMBEDDING_MODELS: Record<EmbeddingProviderId, string> = {
