@@ -1,12 +1,13 @@
 import { useCallback } from 'react';
 import type { FormEvent } from 'react';
-import type { Mode, ChatMessage, ChatSettings, AIProviderSettings, AIProviderId } from '../types';
+import type { Mode, ChatMessage, ChatSettings, AIProviderSettings } from '../types';
 import type { WorkspaceState } from './useWorkspaceState';
 import type { ProviderInfo } from '../services/providerRegistry';
 import { getProviderLabel, requiresApiKey } from '../services/providerRegistry';
 import type { SetModeValue } from './useMainFormProps';
 import { sendChatMessage } from '../services/geminiService';
 import { fileToGenerativePart } from '../utils/fileUtils';
+import { DEFAULT_PROVIDER_MODELS } from '../constants';
 
 interface UseChatSubmissionParams {
   activeMode: Mode;
@@ -31,19 +32,17 @@ export const useChatSubmission = ({
   getStateForMode,
   setModeValue,
 }: UseChatSubmissionParams) => {
-  const resolveProviderIdForMode = useCallback(
-    (mode: Mode): AIProviderId => {
-      const overrideProvider = aiProviderSettings.featureModelPreferences?.[mode]?.provider;
-      if (overrideProvider) {
-        return overrideProvider;
-      }
-      if (activeProviderInfo?.id) {
-        return activeProviderInfo.id;
-      }
-      return aiProviderSettings.selectedProvider;
-    },
-    [activeProviderInfo?.id, aiProviderSettings.featureModelPreferences, aiProviderSettings.selectedProvider],
-  );
+  const resolveChatProviderConfig = useCallback(() => {
+    const override = aiProviderSettings.featureModelPreferences?.chat;
+    const providerId = override?.provider ?? aiProviderSettings.selectedProvider;
+    const trimmedOverrideModel = override?.model?.trim();
+    const trimmedSelectedModel = aiProviderSettings.selectedModel?.trim();
+    const fallbackModel =
+      DEFAULT_PROVIDER_MODELS[providerId] ?? DEFAULT_PROVIDER_MODELS[aiProviderSettings.selectedProvider] ?? '';
+    const resolvedModel = trimmedOverrideModel || trimmedSelectedModel || fallbackModel;
+
+    return { providerId, model: resolvedModel };
+  }, [aiProviderSettings]);
 
   return useCallback(
     async (event?: FormEvent<HTMLFormElement>) => {
@@ -51,23 +50,19 @@ export const useChatSubmission = ({
       if (!canSubmit) return;
 
       const modeAtSubmit = activeMode;
-      const providerId = resolveProviderIdForMode(modeAtSubmit);
-      const providerInfo: ProviderInfo =
-        activeProviderInfo && activeProviderInfo.id === providerId
-          ? activeProviderInfo
-          : {
-              id: providerId,
-              label: getProviderLabel(providerId),
-              requiresApiKey: requiresApiKey(providerId),
-            };
+      const { providerId } = resolveChatProviderConfig();
+      const providerInfo: ProviderInfo | undefined =
+        activeProviderInfo && activeProviderInfo.id === providerId ? activeProviderInfo : undefined;
+      const providerLabel = providerInfo?.label ?? getProviderLabel(providerId);
+      const providerRequiresKey = providerInfo?.requiresApiKey ?? requiresApiKey(providerId);
 
-      if (providerInfo.requiresApiKey) {
-        const apiKeyForProvider = aiProviderSettings.apiKeys?.[providerId];
-        if (!apiKeyForProvider || apiKeyForProvider.trim() === '') {
+      if (providerRequiresKey) {
+        const apiKeyForProvider = aiProviderSettings.apiKeys?.[providerId]?.trim();
+        if (!apiKeyForProvider) {
           setModeValue(
             'error',
             {
-              message: `${providerInfo.label ?? 'The selected provider'} requires an API key. Please add it in settings before starting a chat.`,
+              message: `${providerLabel} requires an API key. Please add it in settings before starting a chat.`,
             },
             modeAtSubmit,
           );
@@ -149,7 +144,7 @@ export const useChatSubmission = ({
       chatInput,
       chatFiles,
       getStateForMode,
-      resolveProviderIdForMode,
+      resolveChatProviderConfig,
       setModeValue,
     ],
   );

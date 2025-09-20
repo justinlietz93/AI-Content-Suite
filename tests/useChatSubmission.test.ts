@@ -205,6 +205,32 @@ describe('useChatSubmission', () => {
     });
   });
 
+  it('uses provider defaults when override model is blank', async () => {
+    const state = createWorkspaceState();
+    const params = createParams(state, {
+      aiProviderSettings: {
+        selectedProvider: 'openai',
+        selectedModel: '   ',
+        apiKeys: { xai: 'xai-key' },
+        featureModelPreferences: {
+          chat: { provider: 'xai', model: '   ' },
+        },
+      },
+      activeProviderInfo: { id: 'xai', label: 'xAI (Grok)', requiresApiKey: true },
+      chatInput: 'Use fallback model',
+    });
+
+    sendChatMessageMock.mockResolvedValue({ text: 'fallback response', thinking: [] });
+
+    const { result } = renderHook(() => useChatSubmission(params));
+
+    await act(async () => {
+      await result.current();
+    });
+
+    expect(sendChatMessageMock).toHaveBeenCalled();
+  });
+
   it('returns early when no text or files are provided', async () => {
     const state = createWorkspaceState();
     const params = createParams(state, { chatInput: '   ', chatFiles: [] });

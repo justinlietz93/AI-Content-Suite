@@ -8,7 +8,16 @@ import { ReportModal } from './components/modals/ReportModal';
 import { SettingsModal } from './components/modals/SettingsModal';
 import { useStarfield } from './hooks/useStarfield';
 import type { ProcessedOutput, ProgressUpdate, AppState, ProcessingError, Mode, RewriteLength, SummaryFormat, ReasoningSettings, ScaffolderSettings, RequestSplitterSettings, PromptEnhancerSettings, AgentDesignerSettings, ChatSettings, ChatMessage, SavedPrompt, AIProviderSettings } from './types';
-import { INITIAL_PROGRESS, INITIAL_REASONING_SETTINGS, INITIAL_SCAFFOLDER_SETTINGS, INITIAL_REQUEST_SPLITTER_SETTINGS, INITIAL_PROMPT_ENHANCER_SETTINGS, INITIAL_AGENT_DESIGNER_SETTINGS, INITIAL_CHAT_SETTINGS } from './constants';
+import {
+  INITIAL_PROGRESS,
+  INITIAL_REASONING_SETTINGS,
+  INITIAL_SCAFFOLDER_SETTINGS,
+  INITIAL_REQUEST_SPLITTER_SETTINGS,
+  INITIAL_PROMPT_ENHANCER_SETTINGS,
+  INITIAL_AGENT_DESIGNER_SETTINGS,
+  INITIAL_CHAT_SETTINGS,
+  DEFAULT_PROVIDER_MODELS,
+} from './constants';
 import { TABS, DESCRIPTION_TEXT, getButtonText } from './constants/uiConstants';
 import { handleSubmission } from './services/submissionService';
 import { setActiveProviderConfig } from './services/geminiService';
@@ -108,13 +117,25 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const { providerId, model } = resolveProviderForMode(activeMode);
-    const apiKey = aiProviderSettings.apiKeys?.[providerId];
+    const providerIdFallback = aiProviderSettings.selectedProvider;
+    const modelFallback =
+      (aiProviderSettings.selectedModel && aiProviderSettings.selectedModel.trim()) ||
+      DEFAULT_PROVIDER_MODELS[providerIdFallback];
+
+    const resolvedProviderId = providerId ?? providerIdFallback;
+    const resolvedModel =
+      (model && model.trim()) ||
+      modelFallback ||
+      DEFAULT_PROVIDER_MODELS[resolvedProviderId];
+
+    const apiKey = aiProviderSettings.apiKeys?.[resolvedProviderId];
+
     setActiveProviderConfig({
-      providerId,
-      model,
+      providerId: resolvedProviderId,
+      model: resolvedModel,
       apiKey,
     });
-  }, [activeMode, aiProviderSettings.apiKeys, resolveProviderForMode]);
+  }, [activeMode, aiProviderSettings, resolveProviderForMode]);
 
   // Effect to handle state changes for cancellation
   // --- MEMOS ---
