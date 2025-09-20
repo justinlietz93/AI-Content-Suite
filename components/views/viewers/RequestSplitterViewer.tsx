@@ -1,6 +1,7 @@
 
 
 import React, { useState, useEffect, useRef, useLayoutEffect, useMemo } from 'react';
+import type { JSX } from 'react';
 import type { RequestSplitterOutput, SplitPlanPrompt } from '../../../types';
 import { enhanceCodeBlocks } from '../../../utils/uiUtils';
 
