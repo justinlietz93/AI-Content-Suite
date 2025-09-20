@@ -12,7 +12,7 @@ const Label: React.FC<{ htmlFor: string; children: React.ReactNode; className?: 
 );
 
 export const AgentDesignerControls: React.FC<AgentDesignerControlsProps> = ({ settings, onSettingsChange }) => {
-    
+
     const handleSettingChange = <K extends keyof AgentDesignerSettings>(key: K, value: AgentDesignerSettings[K]) => {
         onSettingsChange({ ...settings, [key]: value });
     };
@@ -23,6 +23,8 @@ export const AgentDesignerControls: React.FC<AgentDesignerControlsProps> = ({ se
             capabilities: { ...settings.capabilities, [key]: value }
         });
     };
+
+    type CapabilityKey = keyof AgentDesignerSettings['capabilities'];
 
     return (
         <div className="animate-fade-in-scale space-y-6">
@@ -87,19 +89,18 @@ export const AgentDesignerControls: React.FC<AgentDesignerControlsProps> = ({ se
             <fieldset>
                 <legend className="block text-xs font-medium text-text-secondary mb-2">Core Capabilities (Tools)</legend>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-2 bg-secondary p-3 rounded-lg">
-                    {Object.keys(settings.capabilities).map((key) => {
-                         const capKey = key as keyof typeof settings.capabilities;
-                         const label = key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+                    {(Object.entries(settings.capabilities) as [CapabilityKey, boolean][]).map(([capKey, enabled]) => {
+                         const label = capKey.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
                          return (
-                            <div key={key} className="flex items-center gap-2">
-                                <input 
-                                    type="checkbox" 
-                                    id={`cap-${key}`} 
-                                    checked={settings.capabilities[capKey]} 
-                                    onChange={e => handleCapabilityChange(capKey, e.target.checked)} 
-                                    className="h-4 w-4 rounded bg-input border-border-color text-primary focus:ring-2 focus:ring-ring" 
+                            <div key={capKey} className="flex items-center gap-2">
+                                <input
+                                    type="checkbox"
+                                    id={`cap-${capKey}`}
+                                    checked={enabled}
+                                    onChange={e => handleCapabilityChange(capKey, e.target.checked)}
+                                    className="h-4 w-4 rounded bg-input border-border-color text-primary focus:ring-2 focus:ring-ring"
                                 />
-                                <Label htmlFor={`cap-${key}`} className="mb-0 text-sm text-text-primary">{label}</Label>
+                                <Label htmlFor={`cap-${capKey}`} className="mb-0 text-sm text-text-primary">{label}</Label>
                             </div>
                          );
                     })}

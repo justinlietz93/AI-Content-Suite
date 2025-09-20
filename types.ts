@@ -308,6 +308,45 @@ export interface AgentDesignerOutput {
 }
 // --- End Agent Designer types ---
 
+// --- New types for Provider & Embedding settings ---
+export type AIProviderId = 'openai' | 'openrouter' | 'xai' | 'deepseek' | 'anthropic' | 'ollama';
+
+export interface AIProviderSettings {
+  selectedProvider: AIProviderId;
+  selectedModel: string;
+  apiKeys?: Partial<Record<AIProviderId, string>>;
+}
+
+export interface ModelOption {
+  id: string;
+  label: string;
+  description?: string;
+}
+
+export type EmbeddingProviderId = 'openai' | 'openrouter' | 'deepseek' | 'ollama' | 'custom';
+
+export interface EmbeddingSettings {
+  provider: EmbeddingProviderId;
+  model: string;
+  apiKey?: string;
+  baseUrl?: string;
+}
+
+export interface VectorStoreSettings {
+  enabled: boolean;
+  url?: string;
+  apiKey?: string;
+  collection?: string;
+  topK?: number;
+  embedding: EmbeddingSettings;
+}
+
+export interface VectorStoreMatch {
+  text: string;
+  score?: number;
+  metadata?: Record<string, unknown>;
+}
+
 // --- New types for LLM Chat ---
 export interface SavedPrompt {
   name: string;
