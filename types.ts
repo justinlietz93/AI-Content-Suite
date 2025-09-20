@@ -314,6 +314,21 @@ export interface SavedPrompt {
   prompt: string;
 }
 
+export type AIProviderId = 'xai' | 'openrouter' | 'openai' | 'deepseek' | 'anthropic' | 'ollama';
+
+export interface ModelOption {
+  id: string;
+  label: string;
+}
+
+export type ProviderApiKeys = Partial<Record<AIProviderId, string>>;
+
+export interface AIProviderSettings {
+  selectedProvider: AIProviderId;
+  selectedModel: string;
+  apiKeys: ProviderApiKeys;
+}
+
 export interface ChatSettings {
   systemInstruction: string;
 }

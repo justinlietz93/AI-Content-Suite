@@ -2,20 +2,19 @@
 
 
 import React, { useState, useCallback, useMemo, useEffect, FormEvent, useRef } from 'react';
-import type { Chat } from "@google/genai";
-import { HarmCategory, HarmBlockThreshold } from "@google/genai";
 import { ProgressBar } from './components/ui/ProgressBar';
 import { Tabs } from './components/ui/Tabs';
 import { ReportModal } from './components/modals/ReportModal';
 import { ChatSettingsModal } from './components/modals/ChatSettingsModal';
 import { XCircleIcon } from './components/icons/XCircleIcon';
 import { useStarfield } from './hooks/useStarfield';
-import type { ProcessedOutput, ProgressUpdate, AppState, ProcessingError, Mode, RewriteLength, SummaryFormat, ReasoningSettings, ScaffolderSettings, RequestSplitterSettings, PromptEnhancerSettings, AgentDesignerSettings, ChatSettings, ChatMessage, SavedPrompt } from './types';
-import { INITIAL_PROGRESS, INITIAL_REASONING_SETTINGS, INITIAL_SCAFFOLDER_SETTINGS, INITIAL_REQUEST_SPLITTER_SETTINGS, INITIAL_PROMPT_ENHANCER_SETTINGS, INITIAL_AGENT_DESIGNER_SETTINGS, INITIAL_CHAT_SETTINGS } from './constants';
+import type { ProcessedOutput, ProgressUpdate, AppState, ProcessingError, Mode, RewriteLength, SummaryFormat, ReasoningSettings, ScaffolderSettings, RequestSplitterSettings, PromptEnhancerSettings, AgentDesignerSettings, ChatSettings, ChatMessage, SavedPrompt, AIProviderSettings } from './types';
+import { INITIAL_PROGRESS, INITIAL_REASONING_SETTINGS, INITIAL_SCAFFOLDER_SETTINGS, INITIAL_REQUEST_SPLITTER_SETTINGS, INITIAL_PROMPT_ENHANCER_SETTINGS, INITIAL_AGENT_DESIGNER_SETTINGS, INITIAL_CHAT_SETTINGS, INITIAL_AI_PROVIDER_SETTINGS, DEFAULT_PROVIDER_MODELS } from './constants';
 import { SUMMARY_FORMAT_OPTIONS } from './data/summaryFormats';
 import { TABS, DESCRIPTION_TEXT, getButtonText } from './constants/uiConstants';
 import { handleSubmission } from './services/submissionService';
-import { ai } from './services/geminiService';
+import { setActiveProviderConfig, sendChatMessage } from './services/geminiService';
+import { AI_PROVIDERS, fetchModelsForProvider, getProviderLabel } from './services/providerRegistry';
 import { fileToGenerativePart } from './utils/fileUtils';
 import {
   downloadReasoningArtifact,
@@ -33,12 +32,7 @@ import { StopButton } from './components/ui/StopButton';
 import { ResultsViewer } from './components/layouts/ResultsViewer';
 
 
-const safetySettings = [
-    { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-    { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
-    { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
-    { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-];
+const PROVIDER_SETTINGS_STORAGE_KEY = 'ai_content_suite_provider_settings';
 
 const App: React.FC = () => {
   // --- STATE MANAGEMENT ---
@@ -70,12 +64,12 @@ const App: React.FC = () => {
   const [requestSplitterSettings, setRequestSplitterSettings] = useState<RequestSplitterSettings>(INITIAL_REQUEST_SPLITTER_SETTINGS);
   const [promptEnhancerSettings, setPromptEnhancerSettings] = useState<PromptEnhancerSettings>(INITIAL_PROMPT_ENHANCER_SETTINGS);
   const [agentDesignerSettings, setAgentDesignerSettings] = useState<AgentDesignerSettings>(INITIAL_AGENT_DESIGNER_SETTINGS);
-  
+
   // --- CHAT-SPECIFIC STATE ---
   const [chatSettings, setChatSettings] = useState<ChatSettings>(INITIAL_CHAT_SETTINGS);
+  const [aiProviderSettings, setAiProviderSettings] = useState<AIProviderSettings>(INITIAL_AI_PROVIDER_SETTINGS);
   const [savedPrompts, setSavedPrompts] = useState<SavedPrompt[]>([]);
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
-  const [chatSession, setChatSession] = useState<Chat | null>(null);
   const [isStreamingResponse, setIsStreamingResponse] = useState(false);
   const [chatInput, setChatInput] = useState('');
   const [chatFiles, setChatFiles] = useState<File[] | null>(null);
@@ -84,8 +78,49 @@ const App: React.FC = () => {
 
   // --- HOOKS ---
   useStarfield('space-background');
-  
+
   // --- EFFECTS ---
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(PROVIDER_SETTINGS_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        const availableProviders = new Set(AI_PROVIDERS.map(provider => provider.id));
+        const providerId = (availableProviders.has(parsed.selectedProvider)
+          ? parsed.selectedProvider
+          : INITIAL_AI_PROVIDER_SETTINGS.selectedProvider) as AIProviderSettings['selectedProvider'];
+        const fallbackModel = DEFAULT_PROVIDER_MODELS[providerId] ?? DEFAULT_PROVIDER_MODELS[INITIAL_AI_PROVIDER_SETTINGS.selectedProvider];
+        const selectedModel = typeof parsed.selectedModel === 'string' && parsed.selectedModel.trim() !== ''
+          ? parsed.selectedModel
+          : fallbackModel;
+        const apiKeys = parsed.apiKeys && typeof parsed.apiKeys === 'object' && parsed.apiKeys !== null ? parsed.apiKeys : {};
+        setAiProviderSettings({ selectedProvider: providerId, selectedModel, apiKeys });
+      }
+    } catch (e) {
+      console.error('Failed to load provider settings from local storage:', e);
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(PROVIDER_SETTINGS_STORAGE_KEY, JSON.stringify(aiProviderSettings));
+    } catch (e) {
+      console.error('Failed to save provider settings to local storage:', e);
+    }
+  }, [aiProviderSettings]);
+
+  useEffect(() => {
+    const apiKey = aiProviderSettings.apiKeys?.[aiProviderSettings.selectedProvider];
+    const model = aiProviderSettings.selectedModel && aiProviderSettings.selectedModel.trim() !== ''
+      ? aiProviderSettings.selectedModel
+      : DEFAULT_PROVIDER_MODELS[aiProviderSettings.selectedProvider];
+    setActiveProviderConfig({
+      providerId: aiProviderSettings.selectedProvider,
+      model,
+      apiKey,
+    });
+  }, [aiProviderSettings]);
+
   // Load saved prompts from local storage on mount
   useEffect(() => {
     try {
@@ -107,13 +142,6 @@ const App: React.FC = () => {
     }
   }, [savedPrompts]);
 
-  // Effect to reset chat session when system prompt changes
-  useEffect(() => {
-    if (activeMode === 'chat') {
-        setChatSession(null); // Force re-initialization on next message
-    }
-  }, [chatSettings.systemInstruction, activeMode]);
-  
   // Effect to handle state changes for cancellation
   useEffect(() => {
     if (appState === 'cancelled') {
@@ -161,6 +189,50 @@ const App: React.FC = () => {
     isStreamingResponse,
   ]);
 
+  const activeProviderLabel = useMemo(
+    () => getProviderLabel(aiProviderSettings.selectedProvider),
+    [aiProviderSettings.selectedProvider],
+  );
+
+  const activeProviderInfo = useMemo(
+    () => AI_PROVIDERS.find(provider => provider.id === aiProviderSettings.selectedProvider),
+    [aiProviderSettings.selectedProvider],
+  );
+
+  const activeModelName = useMemo(() => {
+    const trimmed = aiProviderSettings.selectedModel?.trim();
+    if (trimmed && trimmed.length > 0) {
+      return trimmed;
+    }
+    return DEFAULT_PROVIDER_MODELS[aiProviderSettings.selectedProvider] ?? '';
+  }, [aiProviderSettings]);
+
+  const isApiKeyConfigured = useMemo(() => {
+    const key = aiProviderSettings.apiKeys?.[aiProviderSettings.selectedProvider];
+    return typeof key === 'string' && key.trim() !== '';
+  }, [aiProviderSettings]);
+
+  const providerStatusText = useMemo(() => {
+    if (!activeProviderInfo) return 'Provider status unavailable';
+    if (activeProviderInfo.requiresApiKey) {
+      return isApiKeyConfigured ? 'API key saved' : 'API key required';
+    }
+    return 'API key optional';
+  }, [activeProviderInfo, isApiKeyConfigured]);
+
+  const providerStatusTone = useMemo(() => {
+    if (!activeProviderInfo) return 'text-destructive';
+    if (activeProviderInfo.requiresApiKey) {
+      return isApiKeyConfigured ? 'text-emerald-400' : 'text-destructive';
+    }
+    return 'text-text-secondary';
+  }, [activeProviderInfo, isApiKeyConfigured]);
+
+  const providerSummaryText = useMemo(
+    () => (activeModelName ? `${activeProviderLabel} • ${activeModelName}` : activeProviderLabel),
+    [activeProviderLabel, activeModelName],
+  );
+
   const buttonText = useMemo(() => {
     return getButtonText(
       activeMode,
@@ -205,7 +277,6 @@ const App: React.FC = () => {
     setAgentDesignerSettings(INITIAL_AGENT_DESIGNER_SETTINGS);
     setChatSettings(INITIAL_CHAT_SETTINGS);
     setChatHistory([]);
-    setChatSession(null);
     setIsStreamingResponse(false);
     setChatInput('');
     setChatFiles(null);
@@ -249,65 +320,69 @@ const App: React.FC = () => {
 
   const handleChatSubmit = useCallback(async (e?: FormEvent<HTMLFormElement>) => {
     e?.preventDefault();
-    if (!ai || !canSubmit) return;
+    if (!canSubmit) return;
 
-    setIsStreamingResponse(true);
-    setError(null);
-
-    let currentChatSession = chatSession;
-    if (!currentChatSession) {
-        // Fix: Moved `safetySettings` into the `config` object as it's not a top-level parameter for `ai.chats.create`.
-        const newChat: Chat = ai.chats.create({
-            model: 'gemini-2.5-flash',
-            history: chatHistory,
-            config: {
-                systemInstruction: chatSettings.systemInstruction,
-                safetySettings: safetySettings,
-            },
-        });
-        setChatSession(newChat);
-        currentChatSession = newChat;
+    const providerInfo = AI_PROVIDERS.find(provider => provider.id === aiProviderSettings.selectedProvider);
+    const apiKeyForProvider = aiProviderSettings.apiKeys?.[aiProviderSettings.selectedProvider];
+    if (providerInfo?.requiresApiKey && (!apiKeyForProvider || apiKeyForProvider.trim() === '')) {
+      setError({ message: `${providerInfo.label} requires an API key. Please add it in settings before starting a chat.` });
+      return;
     }
+
+    const historyBeforeMessage = chatHistory;
+    const trimmedInput = chatInput.trim();
 
     try {
-        const fileParts = chatFiles ? await Promise.all(chatFiles.map(fileToGenerativePart)) : [];
-        const textPart = chatInput.trim() ? [{ text: chatInput }] : [];
-        const userMessageParts = [...fileParts, ...textPart];
+      const fileParts = chatFiles ? await Promise.all(chatFiles.map(fileToGenerativePart)) : [];
+      const textParts = trimmedInput ? [{ text: trimmedInput }] : [];
+      const userMessageParts = [...fileParts, ...textParts];
 
-        if (userMessageParts.length === 0) {
-            setIsStreamingResponse(false);
-            return;
+      if (userMessageParts.length === 0) {
+        return;
+      }
+
+      const userMessage: ChatMessage = { role: 'user', parts: userMessageParts };
+
+      setChatHistory(prev => [...prev, userMessage, { role: 'model', parts: [{ text: '' }] }]);
+      setChatInput('');
+      setChatFiles(null);
+      setIsStreamingResponse(true);
+      setError(null);
+
+      const responseText = await sendChatMessage({
+        history: historyBeforeMessage,
+        userMessage: userMessageParts,
+        systemInstruction: chatSettings.systemInstruction,
+      });
+
+      setChatHistory(prev => {
+        if (prev.length === 0) return prev;
+        const updatedHistory = [...prev];
+        const lastIndex = updatedHistory.length - 1;
+        const lastMessage = updatedHistory[lastIndex];
+        if (lastMessage && lastMessage.role === 'model') {
+          const firstPart = lastMessage.parts[0];
+          if (firstPart && 'text' in firstPart) {
+            firstPart.text = responseText;
+          } else {
+            updatedHistory[lastIndex] = { role: 'model', parts: [{ text: responseText }] };
+          }
         }
-
-        setChatHistory(prev => [...prev, { role: 'user', parts: userMessageParts }]);
-        setChatInput('');
-        setChatFiles(null);
-        
-        setChatHistory(prev => [...prev, { role: 'model', parts: [{ text: '' }] }]);
-
-        const stream = await currentChatSession.sendMessageStream({ message: userMessageParts });
-
-        for await (const chunk of stream) {
-            if (chunk.text) {
-                setChatHistory(prev => {
-                    const newHistory = [...prev];
-                    const lastMessage = newHistory[newHistory.length - 1];
-                    if (lastMessage && lastMessage.role === 'model' && lastMessage.parts[0] && 'text' in lastMessage.parts[0]) {
-                        lastMessage.parts[0].text += chunk.text;
-                    }
-                    return newHistory;
-                });
-            }
-        }
+        return updatedHistory;
+      });
     } catch (err) {
-        console.error("Chat error:", err);
-        const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
-        setError({ message: `Chat failed: ${errorMessage}` });
-        setChatHistory(prev => prev.slice(0, prev.length -1));
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        setChatHistory(prev => (prev.length > 0 ? prev.slice(0, prev.length - 1) : prev));
+        return;
+      }
+      console.error('Chat error:', err);
+      const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+      setError({ message: `Chat failed: ${errorMessage}` });
+      setChatHistory(prev => (prev.length > 0 ? prev.slice(0, prev.length - 1) : prev));
     } finally {
-        setIsStreamingResponse(false);
+      setIsStreamingResponse(false);
     }
-  }, [ai, canSubmit, chatSession, chatHistory, chatSettings, chatInput, chatFiles]);
+  }, [aiProviderSettings, canSubmit, chatFiles, chatHistory, chatInput, chatSettings.systemInstruction]);
   
     const handleSavePromptPreset = (name: string, prompt: string) => {
       setSavedPrompts(prev => {
@@ -367,6 +442,30 @@ const App: React.FC = () => {
               setActiveMode(id as Mode);
               handleReset();
             }} />
+          </div>
+
+          <div className="mb-6 bg-secondary/60 border border-border-color rounded-lg px-4 py-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between text-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 text-text-secondary">
+              <div>
+                <span className="text-text-primary font-semibold">Active AI Provider:</span>{' '}
+                <span className="font-medium text-text-primary">{activeProviderLabel}</span>
+              </div>
+              <span className="hidden sm:inline text-text-secondary">•</span>
+              <div>
+                <span>Model: </span>
+                <span className="font-medium text-text-primary">{activeModelName || 'Select a model'}</span>
+              </div>
+            </div>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 text-xs sm:text-sm">
+              <span className={`font-medium ${providerStatusTone}`}>{providerStatusText}</span>
+              <button
+                type="button"
+                onClick={() => setIsChatSettingsModalOpen(true)}
+                className="px-4 py-2 bg-primary text-primary-foreground font-semibold rounded-lg hover:bg-primary-hover transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-secondary"
+              >
+                Manage AI Settings
+              </button>
+            </div>
           </div>
 
           {activeMode === 'chat' ? (
@@ -444,7 +543,7 @@ const App: React.FC = () => {
           </div>}
         </div>
         <footer className="text-center mt-8 text-text-secondary text-xs">
-          <p>&copy; {new Date().getFullYear()} AI Content Suite. Powered by Gemini.</p>
+          <p>&copy; {new Date().getFullYear()} AI Content Suite. Powered by {providerSummaryText}.</p>
         </footer>
       </div>
 
@@ -453,10 +552,14 @@ const App: React.FC = () => {
         isOpen={isChatSettingsModalOpen}
         onClose={() => setIsChatSettingsModalOpen(false)}
         currentSettings={chatSettings}
-        onSave={(newSettings) => {
+        providerSettings={aiProviderSettings}
+        providers={AI_PROVIDERS}
+        onSave={(newSettings, newProviderSettings) => {
           setChatSettings(newSettings);
+          setAiProviderSettings(newProviderSettings);
           setIsChatSettingsModalOpen(false);
         }}
+        onFetchModels={fetchModelsForProvider}
         savedPrompts={savedPrompts}
         onSavePreset={handleSavePromptPreset}
         onDeletePreset={handleDeletePromptPreset}

@@ -1,6 +1,6 @@
 
 
-import type { ProgressUpdate, ReasoningSettings, ScaffolderSettings, RequestSplitterSettings, PromptEnhancerSettings, AgentDesignerSettings, ChatSettings } from './types';
+import type { ProgressUpdate, ReasoningSettings, ScaffolderSettings, RequestSplitterSettings, PromptEnhancerSettings, AgentDesignerSettings, ChatSettings, AIProviderSettings, AIProviderId } from './types';
 
 // Import all summary prompts from the new modular structure
 import * as summaryPrompts from './prompts/summaries';
@@ -19,9 +19,14 @@ import { REQUEST_SPLITTER_PLANNING_PROMPT_TEMPLATE, REQUEST_SPLITTER_GENERATION_
 import { PROMPT_ENHANCER_PROMPT_TEMPLATE } from './prompts/promptEnhancer/index';
 // FIX: Corrected import path for agent designer template
 import { AGENT_DESIGNER_PROMPT_TEMPLATE } from './prompts/agentDesigner/index';
-
-
-export const GEMINI_FLASH_MODEL = 'gemini-2.5-flash';
+export const DEFAULT_PROVIDER_MODELS: Record<AIProviderId, string> = {
+  openai: 'gpt-4o-mini',
+  openrouter: 'openrouter/auto',
+  xai: 'grok-beta',
+  deepseek: 'deepseek-chat',
+  anthropic: 'claude-3-5-sonnet-latest',
+  ollama: 'llama3.1:8b',
+};
 
 // Approximate token estimation: 1 token ~ 4 characters.
 // Target chunk size for LLM processing. Drastically increased to maximize model's context window.
@@ -103,6 +108,12 @@ export const INITIAL_AGENT_DESIGNER_SETTINGS: AgentDesignerSettings = {
 
 export const INITIAL_CHAT_SETTINGS: ChatSettings = {
     systemInstruction: 'You are a helpful and friendly AI assistant. Answer the user\'s questions clearly and concisely.',
+};
+
+export const INITIAL_AI_PROVIDER_SETTINGS: AIProviderSettings = {
+    selectedProvider: 'openai',
+    selectedModel: DEFAULT_PROVIDER_MODELS.openai,
+    apiKeys: {},
 };
 
 // --- Prompt Collections (Re-constructed from imports) ---
