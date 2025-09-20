@@ -1,4 +1,7 @@
-import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
+
+
+
+import { GoogleGenAI, GenerateContentResponse, HarmCategory, HarmBlockThreshold } from "@google/genai";
 import type { Highlight, Mode } from '../types';
 import { 
   GEMINI_FLASH_MODEL, 
@@ -6,35 +9,14 @@ import {
   NEXT_STEPS_TECHNICAL_SUMMARY_PROMPT_TEMPLATE,
   NEXT_STEPS_STYLE_MODEL_PROMPT_TEMPLATE
 } from '../constants';
+import { cleanAndParseJson } from "../utils";
 
-/**
- * Cleans and parses a JSON string from an AI response, handling markdown fences.
- * @param rawText The raw string response from the AI.
- * @returns The parsed JSON object.
- * @throws An error with a `details` property containing the raw text if parsing fails.
- */
-export const cleanAndParseJson = <T>(rawText: string): T => {
-    let jsonStr = rawText.trim();
-    
-    // Regex to find content within ```json ... ``` or ``` ... ```
-    // This is more robust and doesn't require the fence to be the only thing in the string.
-    const fenceRegex = /```(?:json)?\s*([\s\S]*?)\s*```/;
-    const match = jsonStr.match(fenceRegex);
-
-    if (match && match[1]) {
-        jsonStr = match[1].trim();
-    }
-
-    try {
-        return JSON.parse(jsonStr) as T;
-    } catch (e) {
-        // Throw a new error that includes the ORIGINAL raw text for debugging
-        const parseError = new Error(`Failed to parse JSON. Error: ${e instanceof Error ? e.message : String(e)}`);
-        (parseError as any).details = rawText; // Attach the original, unmodified text
-        throw parseError;
-    }
-};
-
+const safetySettings = [
+    { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+    { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+    { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+    { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+];
 
 // --- Retry Logic for API calls ---
 const MAX_RETRIES = 5;
@@ -49,13 +31,18 @@ const isRateLimitError = (error: any): boolean => {
 /**
  * Wraps a Gemini API call with retry logic for rate limiting errors.
  * @param apiCall The function that makes the Gemini API call.
+ * @param signal An AbortSignal to cancel the operation.
  * @returns The result of the API call.
  */
-const callGeminiWithRetry = async <T>(apiCall: () => Promise<T>): Promise<T> => {
+const callGeminiWithRetry = async <T>(apiCall: () => Promise<T>, signal?: AbortSignal): Promise<T> => {
     let retries = 0;
     let backoffMs = INITIAL_BACKOFF_MS;
 
     while (true) {
+        if (signal?.aborted) {
+            throw new DOMException('Aborted by user', 'AbortError');
+        }
+
         try {
             return await apiCall();
         } catch (error) {
@@ -101,53 +88,76 @@ try {
 
 export const ai = aiInstance;
 
-export const generateText = async (prompt: string): Promise<string> => {
+export const generateText = async (
+  prompt: string,
+  config?: { maxOutputTokens?: number, thinkingConfig?: { thinkingBudget: number } },
+  signal?: AbortSignal
+): Promise<string> => {
   if (!ai) throw new Error("Gemini AI SDK not initialized. API Key might be missing.");
   try {
-    const response: GenerateContentResponse = await callGeminiWithRetry(() => 
+    const response = await callGeminiWithRetry<GenerateContentResponse>(() => 
       ai!.models.generateContent({
         model: GEMINI_FLASH_MODEL,
         contents: prompt,
-      })
+        config: {
+          ...config,
+          safetySettings,
+          // FIX: The AbortSignal must be passed inside the 'config' object.
+          signal,
+        },
+      }),
+      signal
     );
-    return response.text;
+    return response.text ?? '';
   } catch (error) {
     console.error('Error generating text from Gemini:', error);
+    if ((error as any).name === 'AbortError') throw error;
     throw new Error(`Gemini API error: ${error instanceof Error ? error.message : String(error)}`);
   }
 };
 
-export const generateMultiModalContent = async (parts: any[]): Promise<string> => {
+export const generateMultiModalContent = async (parts: any[], signal?: AbortSignal): Promise<string> => {
     if (!ai) throw new Error("Gemini AI SDK not initialized. API Key might be missing.");
     try {
-        const response: GenerateContentResponse = await callGeminiWithRetry(() =>
+        const response = await callGeminiWithRetry<GenerateContentResponse>(() =>
           ai!.models.generateContent({
             model: GEMINI_FLASH_MODEL,
             contents: { parts },
-          })
+            config: {
+                safetySettings,
+                // FIX: The AbortSignal must be passed inside the 'config' object.
+                signal,
+            },
+          }),
+          signal
         );
-        return response.text;
+        return response.text ?? '';
     } catch (error) {
         console.error('Error generating multimodal content from Gemini:', error);
+        if ((error as any).name === 'AbortError') throw error;
         throw new Error(`Gemini API error: ${error instanceof Error ? error.message : String(error)}`);
     }
 };
 
-export const extractHighlightsFromJson = async (summaryText: string): Promise<Highlight[]> => {
+export const extractHighlightsFromJson = async (summaryText: string, signal?: AbortSignal): Promise<Highlight[]> => {
   if (!ai) throw new Error("Gemini AI SDK not initialized. API Key might be missing.");
   const prompt = HIGHLIGHT_EXTRACTION_PROMPT_TEMPLATE(summaryText);
   let rawResponseText = '';
   try {
-    const response = await callGeminiWithRetry(() =>
+    const response = await callGeminiWithRetry<GenerateContentResponse>(() =>
       ai!.models.generateContent({
         model: GEMINI_FLASH_MODEL,
         contents: prompt,
         config: {
           responseMimeType: "application/json",
-        }
-      })
+          safetySettings,
+          // FIX: The AbortSignal must be passed inside the 'config' object.
+          signal,
+        },
+      }),
+      signal
     );
-    rawResponseText = response.text;
+    rawResponseText = response.text ?? '';
 
     const parsedData = cleanAndParseJson<any>(rawResponseText);
 
@@ -160,6 +170,7 @@ export const extractHighlightsFromJson = async (summaryText: string): Promise<Hi
     return [];
 
   } catch (error) {
+    if ((error as any).name === 'AbortError') throw error;
     // Non-critical failure: Log the detailed error to the console and return a fallback,
     // so the main summary is still displayed.
     const rawOutput = (error as any).details || rawResponseText;
@@ -185,7 +196,8 @@ export const extractHighlightsFromJson = async (summaryText: string): Promise<Hi
 export const generateSuggestions = async (
   mode: Mode,
   processedContent: string,
-  styleTargetText?: string 
+  styleTargetText?: string,
+  signal?: AbortSignal
 ): Promise<string[] | null> => {
   if (!ai) {
     console.warn("Gemini AI SDK not initialized. Cannot generate suggestions.");
@@ -207,16 +219,20 @@ export const generateSuggestions = async (
 
   let rawResponseText: string | undefined;
   try {
-    const response = await callGeminiWithRetry(() =>
+    const response = await callGeminiWithRetry<GenerateContentResponse>(() =>
       ai!.models.generateContent({
         model: GEMINI_FLASH_MODEL,
         contents: prompt,
         config: {
           responseMimeType: "application/json",
-        }
-      })
+          safetySettings,
+          // FIX: The AbortSignal must be passed inside the 'config' object.
+          signal,
+        },
+      }),
+      signal
     );
-    rawResponseText = response.text;
+    rawResponseText = response.text ?? '';
 
     const parsedData = cleanAndParseJson<string[]>(rawResponseText);
     
@@ -227,6 +243,7 @@ export const generateSuggestions = async (
     console.warn("Parsed JSON for suggestions is not an array of strings or is empty:", parsedData);
     return null;
   } catch (error) {
+    if ((error as any).name === 'AbortError') throw error;
     const rawOutput = (error as any).details || rawResponseText || 'Raw response not available.';
     console.error('Error generating/parsing next step suggestions from Gemini. Raw output logged below.', error);
     console.error('--- RAW SUGGESTIONS OUTPUT ---\n', rawOutput);

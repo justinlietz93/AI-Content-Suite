@@ -4,7 +4,7 @@ export interface Highlight {
   relevance?: number; // Optional, depends on LLM output
 }
 
-export type SummaryFormat = 'default' | 'sessionHandoff' | 'readme' | 'solutionFinder' | 'timeline' | 'decisionMatrix' | 'pitchGenerator' | 'causeEffectChain' | 'swotAnalysis' | 'checklist' | 'dialogCondensation' | 'graphTreeOutline' | 'entityRelationshipDigest' | 'rulesDistiller' | 'metricsDashboard' | 'qaPairs' | 'processFlow' | 'raciSnapshot' | 'riskRegister' | 'milestoneTracker' | 'glossaryTermMap' | 'hierarchyOfNeeds' | 'stakeholderMap' | 'constraintList' | 'prosConsTable' | 'priorityRanking' | 'agentSystemInstructions' | 'reverseEngineering';
+export type SummaryFormat = 'default' | 'sessionHandoff' | 'readme' | 'solutionFinder' | 'timeline' | 'decisionMatrix' | 'pitchGenerator' | 'causeEffectChain' | 'swotAnalysis' | 'checklist' | 'dialogCondensation' | 'graphTreeOutline' | 'entityRelationshipDigest' | 'rulesDistiller' | 'metricsDashboard' | 'qaPairs' | 'processFlow' | 'raciSnapshot' | 'riskRegister' | 'milestoneTracker' | 'glossaryTermMap' | 'hierarchyOfNeeds' | 'stakeholderMap' | 'constraintList' | 'prosConsTable' | 'priorityRanking' | 'agentSystemInstructions' | 'reverseEngineering' | 'systemWalkthrough';
 
 export interface SummaryOutput {
   finalSummary: string;
@@ -343,7 +343,7 @@ export interface ProgressUpdate {
   thinkingHint?: string; // Short insight into current/next processing step
 }
 
-export type AppState = 'idle' | 'fileSelected' | 'processing' | 'completed' | 'error';
+export type AppState = 'idle' | 'fileSelected' | 'processing' | 'completed' | 'error' | 'cancelled';
 export type Mode = 'technical' | 'styleExtractor' | 'rewriter' | 'mathFormatter' | 'reasoningStudio' | 'scaffolder' | 'requestSplitter' | 'promptEnhancer' | 'agentDesigner' | 'chat';
 export type RewriteLength = 'short' | 'medium' | 'long';
 

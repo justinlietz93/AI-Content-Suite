@@ -7,7 +7,8 @@ export const processRewrite = async (
   style: string,
   instructions: string,
   length: RewriteLength,
-  onProgress: (update: ProgressUpdate) => void
+  onProgress: (update: ProgressUpdate) => void,
+  signal?: AbortSignal
 ): Promise<RewriterOutput> => {
   if (!fileParts || fileParts.length === 0) {
     throw new Error("No content provided for rewriting.");
@@ -31,7 +32,7 @@ export const processRewrite = async (
     thinkingHint: 'This may take a few moments depending on the amount of content provided.'
   });
 
-  const rewrittenContent = await generateMultiModalContent(allParts);
+  const rewrittenContent = await generateMultiModalContent(allParts, signal);
 
   onProgress({
     stage: 'Finalizing Document',

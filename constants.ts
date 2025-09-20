@@ -1,20 +1,24 @@
 
+
 import type { ProgressUpdate, ReasoningSettings, ScaffolderSettings, RequestSplitterSettings, PromptEnhancerSettings, AgentDesignerSettings, ChatSettings } from './types';
 
 // Import all summary prompts from the new modular structure
 import * as summaryPrompts from './prompts/summaries';
 
-// Import other specific prompts
-import { HIGHLIGHT_EXTRACTION_PROMPT_TEMPLATE } from './prompts/highlightExtraction';
-import { NEXT_STEPS_TECHNICAL_SUMMARY_PROMPT_TEMPLATE, NEXT_STEPS_STYLE_MODEL_PROMPT_TEMPLATE } from './prompts/nextSteps';
-import { SINGLE_TEXT_STYLE_EXTRACTION_PROMPT_TEMPLATE, CHUNK_STYLE_ANALYSIS_PROMPT_TEMPLATE, REDUCE_STYLE_ANALYSES_PROMPT_TEMPLATE } from './prompts/styleExtraction';
-import { REWRITER_PROMPT_TEMPLATE } from './prompts/rewriter';
-import { CHUNK_MATH_FORMAT_PROMPT_TEMPLATE } from './prompts/mathFormatting';
-import { GENERATE_MERMAID_FROM_DIGEST_PROMPT, GENERATE_SIMPLIFIED_MERMAID_PROMPT, GENERATE_REVERSE_ENGINEERING_MERMAID_PROMPT } from './prompts/mermaid';
-import { SCAFFOLDER_PROMPT_TEMPLATE } from './prompts/scaffolder';
-import { REQUEST_SPLITTER_PLANNING_PROMPT_TEMPLATE, REQUEST_SPLITTER_GENERATION_PROMPT_TEMPLATE } from './prompts/requestSplitter';
-import { PROMPT_ENHANCER_PROMPT_TEMPLATE } from './prompts/promptEnhancer';
-import { AGENT_DESIGNER_PROMPT_TEMPLATE } from './prompts/agentDesigner';
+// Import other specific prompts from their new, organized locations
+import { HIGHLIGHT_EXTRACTION_PROMPT_TEMPLATE } from './prompts/shared/highlightExtraction';
+import { NEXT_STEPS_TECHNICAL_SUMMARY_PROMPT_TEMPLATE, NEXT_STEPS_STYLE_MODEL_PROMPT_TEMPLATE } from './prompts/shared/nextSteps';
+import { SINGLE_TEXT_STYLE_EXTRACTION_PROMPT_TEMPLATE, CHUNK_STYLE_ANALYSIS_PROMPT_TEMPLATE, REDUCE_STYLE_ANALYSES_PROMPT_TEMPLATE } from './prompts/styleExtractor';
+// FIX: Corrected import path for rewriter template
+import { REWRITER_PROMPT_TEMPLATE } from './prompts/rewriter/index';
+import { CHUNK_MATH_FORMAT_PROMPT_TEMPLATE } from './prompts/mathFormatter';
+import { GENERATE_MERMAID_FROM_DIGEST_PROMPT, GENERATE_SIMPLIFIED_MERMAID_PROMPT, GENERATE_REVERSE_ENGINEERING_MERMAID_PROMPT } from './prompts/shared/mermaid';
+// FIX: Corrected import path for request splitter templates
+import { REQUEST_SPLITTER_PLANNING_PROMPT_TEMPLATE, REQUEST_SPLITTER_GENERATION_PROMPT_TEMPLATE } from './prompts/requestSplitter/index';
+// FIX: Corrected import path for prompt enhancer template
+import { PROMPT_ENHANCER_PROMPT_TEMPLATE } from './prompts/promptEnhancer/index';
+// FIX: Corrected import path for agent designer template
+import { AGENT_DESIGNER_PROMPT_TEMPLATE } from './prompts/agentDesigner/index';
 
 
 export const GEMINI_FLASH_MODEL = 'gemini-2.5-flash';
@@ -25,6 +29,10 @@ export const GEMINI_FLASH_MODEL = 'gemini-2.5-flash';
 export const TARGET_CHUNK_CHAR_SIZE = 450000; 
 // Overlap characters to maintain context between chunks, adjusted for new chunk size (10%).
 export const CHUNK_OVERLAP_CHAR_SIZE = 45000; 
+// Maximum character size for a single prompt's user-provided content before summarization is triggered.
+// gemini-2.5-flash has a 1M token limit. 1 token ~ 4 chars.
+// Set a safe limit of ~800k tokens for user content, allowing space for the prompt template.
+export const MAX_CONTENT_CHAR_SIZE = 3200000;
 
 export const MAX_REDUCTION_INPUT_SUMMARIES = 5; // Number of summaries/analyses to combine in one reduction step
 
@@ -121,13 +129,13 @@ export const CHUNK_SUMMARY_PROMPTS = {
   milestoneTracker: summaryPrompts.CHUNK_SUMMARY_PROMPT_TEMPLATE_MILESTONE_TRACKER,
   glossaryTermMap: summaryPrompts.CHUNK_SUMMARY_PROMPT_TEMPLATE_GLOSSARY_TERM_MAP,
   hierarchyOfNeeds: summaryPrompts.CHUNK_SUMMARY_PROMPT_TEMPLATE_HIERARCHY_OF_NEEDS,
-  // FIX: Corrected typo from STAKEHOLDERS_MAP to STAKEHOLDER_MAP
   stakeholderMap: summaryPrompts.CHUNK_SUMMARY_PROMPT_TEMPLATE_STAKEHOLDER_MAP,
   constraintList: summaryPrompts.CHUNK_SUMMARY_PROMPT_TEMPLATE_CONSTRAINT_LIST,
   prosConsTable: summaryPrompts.CHUNK_SUMMARY_PROMPT_TEMPLATE_PROS_CONS_TABLE,
   priorityRanking: summaryPrompts.CHUNK_SUMMARY_PROMPT_TEMPLATE_PRIORITY_RANKING,
   agentSystemInstructions: summaryPrompts.CHUNK_SUMMARY_PROMPT_TEMPLATE_AGENT_SYSTEM_INSTRUCTIONS,
-  reverseEngineering: summaryPrompts.CHUNK_SUMMARY_PROMPT_TEMPLATE_REVERSE_ENGINEERING
+  reverseEngineering: summaryPrompts.CHUNK_SUMMARY_PROMPT_TEMPLATE_REVERSE_ENGINEERING,
+  systemWalkthrough: summaryPrompts.CHUNK_SUMMARY_PROMPT_TEMPLATE_SYSTEM_WALKTHROUGH
 };
 
 export const REDUCE_SUMMARIES_PROMPTS = {
@@ -138,6 +146,7 @@ export const REDUCE_SUMMARIES_PROMPTS = {
   timeline: summaryPrompts.REDUCE_SUMMARIES_PROMPT_TEMPLATE_TIMELINE,
   decisionMatrix: summaryPrompts.REDUCE_SUMMARIES_PROMPT_TEMPLATE_DECISION_MATRIX,
   pitchGenerator: summaryPrompts.REDUCE_SUMMARIES_PROMPT_TEMPLATE_PITCH_GENERATOR,
+  // FIX: Corrected typo from REDUce to REDUCE
   causeEffectChain: summaryPrompts.REDUCE_SUMMARIES_PROMPT_TEMPLATE_CAUSE_EFFECT_CHAIN,
   swotAnalysis: summaryPrompts.REDUCE_SUMMARIES_PROMPT_TEMPLATE_SWOT_ANALYSIS,
   checklist: summaryPrompts.REDUCE_SUMMARIES_PROMPT_TEMPLATE_CHECKLIST,
@@ -158,7 +167,8 @@ export const REDUCE_SUMMARIES_PROMPTS = {
   prosConsTable: summaryPrompts.REDUCE_SUMMARIES_PROMPT_TEMPLATE_PROS_CONS_TABLE,
   priorityRanking: summaryPrompts.REDUCE_SUMMARIES_PROMPT_TEMPLATE_PRIORITY_RANKING,
   agentSystemInstructions: summaryPrompts.REDUCE_SUMMARIES_PROMPT_TEMPLATE_AGENT_SYSTEM_INSTRUCTIONS,
-  reverseEngineering: summaryPrompts.REDUCE_SUMMARIES_PROMPT_TEMPLATE_REVERSE_ENGINEERING
+  reverseEngineering: summaryPrompts.REDUCE_SUMMARIES_PROMPT_TEMPLATE_REVERSE_ENGINEERING,
+  systemWalkthrough: summaryPrompts.REDUCE_SUMMARIES_PROMPT_TEMPLATE_SYSTEM_WALKTHROUGH
 };
 
 // Re-export other prompts so other files don't need to change their imports
@@ -174,7 +184,6 @@ export {
     REDUCE_STYLE_ANALYSES_PROMPT_TEMPLATE,
     REWRITER_PROMPT_TEMPLATE,
     CHUNK_MATH_FORMAT_PROMPT_TEMPLATE,
-    SCAFFOLDER_PROMPT_TEMPLATE,
     REQUEST_SPLITTER_PLANNING_PROMPT_TEMPLATE,
     REQUEST_SPLITTER_GENERATION_PROMPT_TEMPLATE,
     PROMPT_ENHANCER_PROMPT_TEMPLATE,

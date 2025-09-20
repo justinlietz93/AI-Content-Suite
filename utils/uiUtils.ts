@@ -39,3 +39,31 @@ export const enhanceCodeBlocks = (containerElement: HTMLElement | null) => {
         preEl.appendChild(button);
     });
 };
+
+/**
+ * Calculates the estimated time remaining for a process.
+ * @param timingsMs An array of millisecond timings for completed items.
+ * @param totalItems The total number of items to process.
+ * @param completedItems The number of items already processed.
+ * @returns The estimated time remaining in seconds, or undefined if not calculable.
+ */
+export const calculateEtr = (timingsMs: number[], totalItems: number, completedItems: number): number | undefined => {
+    if (timingsMs.length === 0 || completedItems >= totalItems) return undefined;
+    const totalTimeMs = timingsMs.reduce((sum, time) => sum + time, 0);
+    const avgTimePerItemMs = totalTimeMs / timingsMs.length;
+    const remainingItems = totalItems - completedItems;
+    return Math.round((avgTimePerItemMs * remainingItems) / 1000);
+};
+
+/**
+ * Provides a hint about the content of the next chunk being processed.
+ * @param chunks An array of text chunks.
+ * @param nextIndex The index of the next chunk to be processed.
+ * @returns A string hint, or undefined if not applicable.
+ */
+export const getNextChunkHint = (chunks: string[], nextIndex: number): string | undefined => {
+    if (nextIndex >= chunks.length) return undefined;
+    const nextChunkText = chunks[nextIndex];
+    const hintWords = nextChunkText.substring(0, 75).split(' ').slice(0, 7).join(' ');
+    return `Analyzing content starting with "${hintWords}..."`;
+};

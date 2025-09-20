@@ -1,35 +1,19 @@
 
+
+
 import React, { useState, useCallback, useMemo, useEffect, FormEvent, useRef } from 'react';
-import { GoogleGenAI, Chat } from "@google/genai";
-import { FileLoader } from './components/FileLoader';
-import { ProgressBar } from './components/ProgressBar';
-import { SummaryViewer } from './components/SummaryViewer';
-import { ReasoningViewer } from './components/ReasoningViewer';
-import { ScaffolderViewer } from './components/ScaffolderViewer';
-import { RequestSplitterViewer } from './components/RequestSplitterViewer';
-import { PromptEnhancerViewer } from './components/PromptEnhancerViewer';
-import { AgentDesignerViewer } from './components/AgentDesignerViewer';
-import { ChatViewer } from './components/ChatViewer';
-import { Tabs } from './components/Tabs';
-import { ReportModal } from './components/ReportModal';
-import { ChatSettingsModal } from './components/ChatSettingsModal';
-import { ReasoningControls } from './components/ReasoningControls';
-import { ScaffolderControls } from './components/ScaffolderControls';
-import { RequestSplitterControls } from './components/RequestSplitterControls';
-import { PromptEnhancerControls } from './components/PromptEnhancerControls';
-import { AgentDesignerControls } from './components/AgentDesignerControls';
-import { HierarchicalToggle } from './components/HierarchicalToggle';
-import { CheckCircleIcon } from './components/icons/CheckCircleIcon';
+import type { Chat } from "@google/genai";
+import { HarmCategory, HarmBlockThreshold } from "@google/genai";
+import { ProgressBar } from './components/ui/ProgressBar';
+import { Tabs } from './components/ui/Tabs';
+import { ReportModal } from './components/modals/ReportModal';
+import { ChatSettingsModal } from './components/modals/ChatSettingsModal';
 import { XCircleIcon } from './components/icons/XCircleIcon';
-import { DownloadIcon } from './components/icons/DownloadIcon';
-import { SendIcon } from './components/icons/SendIcon';
-import { PaperclipIcon } from './components/icons/PaperclipIcon';
-import { CogIcon } from './components/icons/CogIcon';
 import { useStarfield } from './hooks/useStarfield';
-import type { ProcessedOutput, ProgressUpdate, AppState, ProcessingError, Mode, RewriteLength, SummaryFormat, ReasoningSettings, ScaffolderSettings, RequestSplitterSettings, PromptEnhancerSettings, AgentDesignerSettings, ChatSettings, ChatMessage, ChatMessagePart, SavedPrompt } from './types';
+import type { ProcessedOutput, ProgressUpdate, AppState, ProcessingError, Mode, RewriteLength, SummaryFormat, ReasoningSettings, ScaffolderSettings, RequestSplitterSettings, PromptEnhancerSettings, AgentDesignerSettings, ChatSettings, ChatMessage, SavedPrompt } from './types';
 import { INITIAL_PROGRESS, INITIAL_REASONING_SETTINGS, INITIAL_SCAFFOLDER_SETTINGS, INITIAL_REQUEST_SPLITTER_SETTINGS, INITIAL_PROMPT_ENHANCER_SETTINGS, INITIAL_AGENT_DESIGNER_SETTINGS, INITIAL_CHAT_SETTINGS } from './constants';
 import { SUMMARY_FORMAT_OPTIONS } from './data/summaryFormats';
-import { TABS, DESCRIPTION_TEXT, getButtonText, RESET_BUTTON_TEXT } from './constants/uiConstants';
+import { TABS, DESCRIPTION_TEXT, getButtonText } from './constants/uiConstants';
 import { handleSubmission } from './services/submissionService';
 import { ai } from './services/geminiService';
 import { fileToGenerativePart } from './utils/fileUtils';
@@ -41,6 +25,20 @@ import {
   downloadAgentDesignerArtifact
 } from './utils/downloadUtils';
 
+// Import new modular components
+import { ChatInterface } from './components/layouts/ChatInterface';
+import { MainForm } from './components/layouts/MainForm';
+import { SubmitButton } from './components/ui/SubmitButton';
+import { StopButton } from './components/ui/StopButton';
+import { ResultsViewer } from './components/layouts/ResultsViewer';
+
+
+const safetySettings = [
+    { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+    { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+    { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+    { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+];
 
 const App: React.FC = () => {
   // --- STATE MANAGEMENT ---
@@ -53,6 +51,7 @@ const App: React.FC = () => {
   const [nextStepSuggestions, setNextStepSuggestions] = useState<string[] | null>(null);
   const [suggestionsLoading, setSuggestionsLoading] = useState<boolean>(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // --- MODE-SPECIFIC SETTINGS ---
   const [styleTarget, setStyleTarget] = useState<string>('');
@@ -80,13 +79,11 @@ const App: React.FC = () => {
   const [isStreamingResponse, setIsStreamingResponse] = useState(false);
   const [chatInput, setChatInput] = useState('');
   const [chatFiles, setChatFiles] = useState<File[] | null>(null);
-  const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [isChatSettingsModalOpen, setIsChatSettingsModalOpen] = useState(false);
 
 
   // --- HOOKS ---
   useStarfield('space-background');
-  const fileInputRef = useRef<HTMLInputElement>(null);
   
   // --- EFFECTS ---
   // Load saved prompts from local storage on mount
@@ -116,23 +113,15 @@ const App: React.FC = () => {
         setChatSession(null); // Force re-initialization on next message
     }
   }, [chatSettings.systemInstruction, activeMode]);
+  
+  // Effect to handle state changes for cancellation
+  useEffect(() => {
+    if (appState === 'cancelled') {
+      handleReset();
+    }
+  }, [appState]);
 
   // --- MEMOS ---
-  const filteredSummaryFormats = useMemo(() => {
-    if (!summarySearchTerm.trim()) {
-      return SUMMARY_FORMAT_OPTIONS;
-    }
-    const lowercasedTerm = summarySearchTerm.toLowerCase();
-    return SUMMARY_FORMAT_OPTIONS.filter(format =>
-      format.label.toLowerCase().includes(lowercasedTerm) ||
-      format.tags.some(tag => tag.toLowerCase().includes(lowercasedTerm))
-    );
-  }, [summarySearchTerm]);
-
-  const selectedFormatDescription = useMemo(() => {
-    return SUMMARY_FORMAT_OPTIONS.find(f => f.value === summaryFormat)?.description || '';
-  }, [summaryFormat]);
-  
   const canSubmit = useMemo(() => {
     const hasFiles = currentFiles && currentFiles.length > 0;
     
@@ -185,11 +174,12 @@ const App: React.FC = () => {
     );
   }, [activeMode, currentFiles, summaryTextInput, reasoningPrompt, scaffolderPrompt, requestSplitterSpec, promptEnhancerSettings.rawPrompt, agentDesignerSettings.goal]);
   
-  const downloadButtonClass = "w-full px-4 py-2 bg-secondary text-text-primary font-semibold rounded-lg hover:bg-muted transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-surface flex items-center justify-center gap-2 text-sm";
-  const primaryActionButtonClass = "w-full px-6 py-3 bg-secondary text-text-primary font-semibold rounded-lg hover:bg-muted transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-surface flex items-center justify-center gap-2";
-
   // --- EVENT HANDLERS ---
   const handleReset = useCallback(() => {
+    if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+    }
     setCurrentFiles(null);
     setProcessedData(null);
     setError(null);
@@ -220,8 +210,18 @@ const App: React.FC = () => {
     setChatInput('');
     setChatFiles(null);
   }, []);
+  
+  const handleStop = useCallback(() => {
+    if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+    }
+    setAppState('cancelled');
+  }, []);
 
   const handleSubmit = useCallback(() => {
+    abortControllerRef.current = new AbortController();
+    const { signal } = abortControllerRef.current;
+
     handleSubmission({
       activeMode,
       currentFiles,
@@ -236,7 +236,8 @@ const App: React.FC = () => {
         chatSettings,
       },
       setAppState, setError, setProcessedData, setProgress,
-      setNextStepSuggestions, setSuggestionsLoading
+      setNextStepSuggestions, setSuggestionsLoading,
+      signal,
     });
   }, [
     activeMode, currentFiles, summaryTextInput, useHierarchical, summaryFormat,
@@ -255,11 +256,13 @@ const App: React.FC = () => {
 
     let currentChatSession = chatSession;
     if (!currentChatSession) {
-        const newChat = ai.chats.create({
+        // Fix: Moved `safetySettings` into the `config` object as it's not a top-level parameter for `ai.chats.create`.
+        const newChat: Chat = ai.chats.create({
             model: 'gemini-2.5-flash',
             history: chatHistory,
             config: {
                 systemInstruction: chatSettings.systemInstruction,
+                safetySettings: safetySettings,
             },
         });
         setChatSession(newChat);
@@ -269,7 +272,7 @@ const App: React.FC = () => {
     try {
         const fileParts = chatFiles ? await Promise.all(chatFiles.map(fileToGenerativePart)) : [];
         const textPart = chatInput.trim() ? [{ text: chatInput }] : [];
-        const userMessageParts: ChatMessagePart[] = [...fileParts, ...textPart];
+        const userMessageParts = [...fileParts, ...textPart];
 
         if (userMessageParts.length === 0) {
             setIsStreamingResponse(false);
@@ -306,33 +309,6 @@ const App: React.FC = () => {
     }
   }, [ai, canSubmit, chatSession, chatHistory, chatSettings, chatInput, chatFiles]);
   
-    // --- CHAT FILE HANDLING ---
-    const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
-        e.preventDefault(); e.stopPropagation(); setIsDraggingOver(true);
-    };
-    const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
-        e.preventDefault(); e.stopPropagation(); setIsDraggingOver(false);
-    };
-    const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-        e.preventDefault(); e.stopPropagation(); // Necessary to allow drop
-    };
-    const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
-        e.preventDefault(); e.stopPropagation(); setIsDraggingOver(false);
-        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-            setChatFiles(prev => [...(prev || []), ...Array.from(e.dataTransfer.files)]);
-        }
-    };
-    const handlePaperclipClick = () => { fileInputRef.current?.click(); };
-    const handleFileInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-        if (event.target.files && event.target.files.length > 0) {
-            setChatFiles(prev => [...(prev || []), ...Array.from(event.target.files!)]);
-        }
-        if(fileInputRef.current) fileInputRef.current.value = '';
-    };
-    const handleRemoveChatFile = (fileToRemove: File) => {
-        setChatFiles(prev => prev ? prev.filter(file => file !== fileToRemove) : null);
-    };
-
     const handleSavePromptPreset = (name: string, prompt: string) => {
       setSavedPrompts(prev => {
         const existingIndex = prev.findIndex(p => p.name === name);
@@ -373,27 +349,6 @@ const App: React.FC = () => {
     }
   }, []);
   
-  const handleRequestSplitterSpecChange = useCallback((spec: string) => {
-    setRequestSplitterSpec(spec);
-  }, []);
-
-  const handlePromptEnhancerSettingsChange = useCallback((settings: PromptEnhancerSettings) => {
-    setPromptEnhancerSettings(settings);
-  }, []);
-
-  const handleReasoningPromptChange = useCallback((prompt: string) => {
-    setReasoningPrompt(prompt);
-  }, []);
-
-  const handleScaffolderPromptChange = useCallback((prompt: string) => {
-    setScaffolderPrompt(prompt);
-  }, []);
-
-  const handleAgentDesignerSettingsChange = useCallback((settings: AgentDesignerSettings) => {
-    setAgentDesignerSettings(settings);
-  }, []);
-
-
   return (
     <>
       <div className="min-h-screen bg-transparent flex flex-col items-center justify-center p-4 sm:p-8 transition-all duration-300">
@@ -414,231 +369,73 @@ const App: React.FC = () => {
             }} />
           </div>
 
-          {/* RENDER CONTROLS & UI */}
           {activeMode === 'chat' ? (
-              <div 
-                className={`relative animate-fade-in-scale flex flex-col h-[75vh] transition-all duration-300 rounded-lg ${isDraggingOver ? 'ring-4 ring-primary ring-offset-4 ring-offset-surface' : ''}`}
-                onDragEnter={handleDragEnter} onDragLeave={handleDragLeave} onDragOver={handleDragOver} onDrop={handleDrop}
-              >
-                {isDraggingOver && (
-                    <div className="absolute inset-0 bg-primary/20 rounded-lg pointer-events-none flex items-center justify-center z-10">
-                        <div className="text-center text-primary font-bold text-2xl p-8 bg-surface/80 rounded-lg">
-                            Drop files to attach
-                        </div>
-                    </div>
-                )}
-                
-                <ChatViewer history={chatHistory} isStreaming={isStreamingResponse} />
-                
-                {chatFiles && chatFiles.length > 0 && (
-                    <div className="mt-2 px-1 flex items-center gap-2 overflow-x-auto pb-2">
-                        {chatFiles.map((file, index) => (
-                            <div key={`${file.name}-${index}`} className="flex-shrink-0 flex items-center gap-2 bg-muted text-xs text-text-primary rounded-full py-1 pl-3 pr-2">
-                                <span className="truncate max-w-xs">{file.name}</span>
-                                <button onClick={() => handleRemoveChatFile(file)} className="text-muted-foreground hover:text-text-primary" aria-label={`Remove ${file.name}`}>
-                                    <XCircleIcon className="w-4 h-4" />
-                                </button>
-                            </div>
-                        ))}
-                    </div>
-                )}
-
-                <form onSubmit={handleChatSubmit} className="mt-2 flex items-center gap-2">
-                    <input type="file" ref={fileInputRef} onChange={handleFileInputChange} className="hidden" multiple accept=".txt,.md,text/plain,text/markdown,image/png,image/jpeg,image/webp,application/pdf,.js,.ts,.jsx,.tsx,.py,.html,.css,.json,.xml,.yaml,.yml" />
-                    <button type="button" onClick={handlePaperclipClick} aria-label="Attach files" className="p-2.5 bg-secondary text-text-secondary hover:text-text-primary rounded-lg transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-surface h-full">
-                        <PaperclipIcon className="w-5 h-5" />
-                    </button>
-                    <button type="button" onClick={() => setIsChatSettingsModalOpen(true)} aria-label="Chat settings" className="p-2.5 bg-secondary text-text-secondary hover:text-text-primary rounded-lg transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-surface h-full">
-                        <CogIcon className="w-5 h-5" />
-                    </button>
-                    <textarea
-                        value={chatInput}
-                        onChange={(e) => setChatInput(e.target.value)}
-                        onKeyDown={(e) => {
-                            if (e.key === 'Enter' && !e.shiftKey) {
-                                e.preventDefault();
-                                handleChatSubmit();
-                            }
-                        }}
-                        placeholder="Type your message or drop files here..."
-                        className="flex-grow w-full px-3 py-2 bg-input border border-border-color rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-ring text-text-primary placeholder-text-secondary text-sm resize-none"
-                        rows={1}
-                        disabled={isStreamingResponse}
-                    />
-                    <button type="submit" disabled={!canSubmit} className="px-4 py-2 bg-primary text-primary-foreground font-semibold rounded-lg hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-surface h-full">
-                        <SendIcon className="w-4 h-4" />
-                    </button>
-                </form>
-              </div>
+              <ChatInterface
+                history={chatHistory}
+                isStreaming={isStreamingResponse}
+                chatInput={chatInput}
+                onChatInputChange={setChatInput}
+                chatFiles={chatFiles}
+                onChatFilesChange={setChatFiles}
+                onSubmit={handleChatSubmit}
+                canSubmit={canSubmit}
+                onOpenSettings={() => setIsChatSettingsModalOpen(true)}
+              />
           ) : (appState === 'idle' || appState === 'fileSelected') && (
-            <div className="animate-fade-in-scale">
-              {activeMode === 'technical' && (
-                <>
-                  <div className="my-4 px-4 sm:px-0">
-                    <label htmlFor="summaryFormatSelect" className="block text-sm font-medium text-text-secondary mb-1">
-                      Summary Format:
-                    </label>
-                    <input
-                      type="search"
-                      placeholder="Search formats by name or tag (e.g., table, project)..."
-                      value={summarySearchTerm}
-                      onChange={(e) => setSummarySearchTerm(e.target.value)}
-                      className="w-full px-3 py-2 bg-input border border-border-color rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-ring text-text-primary placeholder-text-secondary text-sm mb-2"
-                      aria-controls="summaryFormatSelect"
-                    />
-                    <select
-                      id="summaryFormatSelect"
-                      value={summaryFormat}
-                      onChange={(e) => setSummaryFormat(e.target.value as SummaryFormat)}
-                      className="w-full px-3 py-2 bg-input border border-border-color rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-ring text-text-primary placeholder-text-secondary text-sm"
-                    >
-                      {filteredSummaryFormats.length > 0 ? (
-                        filteredSummaryFormats.map(format => (
-                          <option key={format.value} value={format.value}>{format.label}</option>
-                        ))
-                      ) : (
-                        <option disabled>No formats found for "{summarySearchTerm}"</option>
-                      )}
-                    </select>
-                    <p className="mt-1 text-xs text-text-secondary">
-                      {selectedFormatDescription}
-                    </p>
-                  </div>
-                  <div className="my-4 px-4 sm:px-0">
-                    <label htmlFor="summaryTextInput" className="block text-sm font-medium text-text-secondary mb-1">
-                      Or Paste Text to Summarize:
-                    </label>
-                    <textarea
-                      id="summaryTextInput"
-                      rows={8}
-                      value={summaryTextInput}
-                      onChange={(e) => handleSummaryTextChange(e.target.value)}
-                      placeholder="Paste your transcript or document content here..."
-                      className="w-full px-3 py-2 bg-input border border-border-color rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-ring text-text-primary placeholder-text-secondary text-sm"
-                    />
-                  </div>
-                  <HierarchicalToggle enabled={useHierarchical} onChange={setUseHierarchical} />
-                </>
-              )}
-              {activeMode === 'reasoningStudio' && <ReasoningControls prompt={reasoningPrompt} onPromptChange={handleReasoningPromptChange} settings={reasoningSettings} onSettingsChange={setReasoningSettings} />}
-              {activeMode === 'scaffolder' && <ScaffolderControls prompt={scaffolderPrompt} onPromptChange={handleScaffolderPromptChange} settings={scaffolderSettings} onSettingsChange={setScaffolderSettings} />}
-              {activeMode === 'requestSplitter' && <RequestSplitterControls spec={requestSplitterSpec} onSpecChange={handleRequestSplitterSpecChange} settings={requestSplitterSettings} onSettingsChange={setRequestSplitterSettings} />}
-              {activeMode === 'promptEnhancer' && <PromptEnhancerControls settings={promptEnhancerSettings} onSettingsChange={handlePromptEnhancerSettingsChange} />}
-              {activeMode === 'agentDesigner' && <AgentDesignerControls settings={agentDesignerSettings} onSettingsChange={handleAgentDesignerSettingsChange} />}
-              {activeMode === 'styleExtractor' && (
-                <div className="my-4 px-4 sm:px-0">
-                  <label htmlFor="styleTargetInput" className="block text-sm font-medium text-text-secondary mb-1">
-                    Specify Person/Character for Style Analysis (optional):
-                  </label>
-                  <input
-                    type="text"
-                    id="styleTargetInput"
-                    value={styleTarget}
-                    onChange={(e) => setStyleTarget(e.target.value)}
-                    placeholder='e.g., Narrator, "John Doe", or leave blank for overall style'
-                    className="w-full px-3 py-2 bg-input border border-border-color rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-ring text-text-primary placeholder-text-secondary text-sm"
-                    aria-describedby="styleTargetDescription"
-                  />
-                  <p id="styleTargetDescription" className="mt-1 text-xs text-text-secondary">
-                    If left blank or "all", the overall style of the text will be analyzed.
-                  </p>
-                </div>
-              )}
-              {activeMode === 'rewriter' && (
-                <div className="my-4 px-4 sm:px-0 space-y-4">
-                  <div>
-                    <label htmlFor="rewriteStyleInput" className="block text-sm font-medium text-text-secondary mb-1">
-                      Desired Writing Style:
-                    </label>
-                    <textarea id="rewriteStyleInput" rows={2} value={rewriteStyle} onChange={(e) => setRewriteStyle(e.target.value)} placeholder="e.g., A witty, informal blog post; a formal, academic paper; a thrilling short story..." className="w-full px-3 py-2 bg-input border border-border-color rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-ring text-text-primary placeholder-text-secondary text-sm" />
-                  </div>
-                  <div>
-                    <label htmlFor="rewriteInstructionsInput" className="block text-sm font-medium text-text-secondary mb-1">
-                      Other Instructions (optional):
-                    </label>
-                    <textarea id="rewriteInstructionsInput" rows={2} value={rewriteInstructions} onChange={(e) => setRewriteInstructions(e.target.value)} placeholder="e.g., The target audience is children. Focus on the emotional journey. End with a surprising twist." className="w-full px-3 py-2 bg-input border border-border-color rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-ring text-text-primary placeholder-text-secondary text-sm" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-text-secondary mb-2">Desired Length:</label>
-                    <div className="flex items-center space-x-2 bg-secondary rounded-lg p-1" role="radiogroup">
-                      {(['short', 'medium', 'long'] as RewriteLength[]).map(len => (
-                        <button key={len} onClick={() => setRewriteLength(len)} role="radio" aria-checked={rewriteLength === len} className={`flex-1 py-1.5 text-sm rounded-md transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-secondary ${rewriteLength === len ? 'bg-primary text-primary-foreground font-semibold shadow' : 'text-text-secondary hover:bg-muted'}`}>
-                          {len.charAt(0).toUpperCase() + len.slice(1)}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-              <FileLoader onFileSelect={handleFileSelect} selectedFiles={currentFiles} mode={activeMode} />
-            </div>
+            <MainForm 
+              activeMode={activeMode}
+              currentFiles={currentFiles}
+              summaryFormat={summaryFormat} onSummaryFormatChange={setSummaryFormat}
+              summarySearchTerm={summarySearchTerm} onSummarySearchTermChange={setSummarySearchTerm}
+              summaryTextInput={summaryTextInput} onSummaryTextChange={handleSummaryTextChange}
+              useHierarchical={useHierarchical} onUseHierarchicalChange={setUseHierarchical}
+              styleTarget={styleTarget} onStyleTargetChange={setStyleTarget}
+              rewriteStyle={rewriteStyle} onRewriteStyleChange={setRewriteStyle}
+              rewriteInstructions={rewriteInstructions} onRewriteInstructionsChange={setRewriteInstructions}
+              rewriteLength={rewriteLength} onRewriteLengthChange={setRewriteLength}
+              reasoningPrompt={reasoningPrompt} onReasoningPromptChange={setReasoningPrompt}
+              reasoningSettings={reasoningSettings} onReasoningSettingsChange={setReasoningSettings}
+              scaffolderPrompt={scaffolderPrompt} onScaffolderPromptChange={setScaffolderPrompt}
+              scaffolderSettings={scaffolderSettings} onScaffolderSettingsChange={setScaffolderSettings}
+              requestSplitterSpec={requestSplitterSpec} onRequestSplitterSpecChange={setRequestSplitterSpec}
+              requestSplitterSettings={requestSplitterSettings} onRequestSplitterSettingsChange={setRequestSplitterSettings}
+              promptEnhancerSettings={promptEnhancerSettings} onPromptEnhancerSettingsChange={setPromptEnhancerSettings}
+              agentDesignerSettings={agentDesignerSettings} onAgentDesignerSettingsChange={setAgentDesignerSettings}
+              onFileSelect={handleFileSelect}
+            />
           )}
 
-          {/* SUBMIT BUTTON */}
           {activeMode !== 'chat' && canSubmit && appState !== 'completed' && appState !== 'error' && (
-            <div className="mt-6 text-center">
-              <button
-                onClick={handleSubmit}
-                disabled={appState === 'processing'}
-                className="px-8 py-3 bg-primary text-primary-foreground font-semibold rounded-lg hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-surface text-lg"
-                aria-live="polite"
-              >
-                {appState === 'processing' ? 'Processing...' : buttonText}
-              </button>
-            </div>
+            <SubmitButton 
+              onClick={handleSubmit}
+              disabled={appState === 'processing'}
+              appState={appState}
+              buttonText={buttonText}
+            />
           )}
 
-          {/* PROGRESS & RESULTS */}
-          {appState === 'processing' && <div className="mt-8"><ProgressBar progress={progress} /></div>}
-          {appState === 'completed' && processedData && <div className="mt-8 animate-fade-in-scale">
-            <div className="flex items-center justify-center text-green-400 mb-4"><CheckCircleIcon className="w-8 h-8 mr-2" aria-hidden="true" /><p className="text-xl font-semibold">Processing Complete!</p></div>
-            {activeMode === 'reasoningStudio' ? <ReasoningViewer output={processedData as any} />
-              : activeMode === 'scaffolder' ? <ScaffolderViewer output={processedData as any} />
-              : activeMode === 'requestSplitter' ? <RequestSplitterViewer output={processedData as any} />
-              : activeMode === 'promptEnhancer' ? <PromptEnhancerViewer output={processedData as any} />
-              : activeMode === 'agentDesigner' ? <AgentDesignerViewer output={processedData as any} />
-              : <SummaryViewer output={processedData} mode={activeMode} />}
-
-            {/* Suggestions Section */}
-            {/* ... same logic ... */}
-
-            {/* Reset/Download Buttons */}
-            <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <button onClick={handleReset} className={primaryActionButtonClass}>
-                {RESET_BUTTON_TEXT[activeMode]}
-              </button>
-              {activeMode === 'reasoningStudio' ? (
-                <div className="grid grid-cols-2 gap-2">
-                  <button onClick={() => downloadReasoningArtifact(processedData, 'md')} className={downloadButtonClass}><DownloadIcon className="w-5 h-5" />Final (.md)</button>
-                  <button onClick={() => downloadReasoningArtifact(processedData, 'json')} className={downloadButtonClass}><DownloadIcon className="w-5 h-5" />Trace (.json)</button>
-                </div>
-              ) : activeMode === 'scaffolder' ? (
-                <div className="grid grid-cols-2 gap-2">
-                  <button onClick={() => downloadScaffoldArtifact(processedData, scaffolderSettings, 'script')} className={downloadButtonClass}><DownloadIcon className="w-5 h-5" />Script</button>
-                  <button onClick={() => downloadScaffoldArtifact(processedData, scaffolderSettings, 'plan')} className={downloadButtonClass}><DownloadIcon className="w-5 h-5" />Plan (.json)</button>
-                </div>
-              ) : activeMode === 'requestSplitter' ? (
-                 <div className="grid grid-cols-2 gap-2">
-                    <button onClick={() => downloadRequestSplitterArtifact(processedData, 'md')} className={downloadButtonClass}><DownloadIcon className="w-5 h-5" />Prompts (.md)</button>
-                    <button onClick={() => downloadRequestSplitterArtifact(processedData, 'json')} className={downloadButtonClass}><DownloadIcon className="w-5 h-5" />Plan (.json)</button>
-                 </div>
-              ) : activeMode === 'promptEnhancer' ? (
-                 <div className="grid grid-cols-2 gap-2">
-                    <button onClick={() => downloadPromptEnhancerArtifact(processedData, 'md')} className={downloadButtonClass}><DownloadIcon className="w-5 h-5" />Prompt (.md)</button>
-                    <button onClick={() => downloadPromptEnhancerArtifact(processedData, 'json')} className={downloadButtonClass}><DownloadIcon className="w-5 h-5" />Data (.json)</button>
-                 </div>
-              ) : activeMode === 'agentDesigner' ? (
-                 <div className="grid grid-cols-2 gap-2">
-                    <button onClick={() => downloadAgentDesignerArtifact(processedData, 'md')} className={downloadButtonClass}><DownloadIcon className="w-5 h-5" />Design (.md)</button>
-                    <button onClick={() => downloadAgentDesignerArtifact(processedData, 'json')} className={downloadButtonClass}><DownloadIcon className="w-5 h-5" />Plan (.json)</button>
-                 </div>
-              ) : activeMode !== 'chat' ? (
-                <button onClick={() => setIsReportModalOpen(true)} className={primaryActionButtonClass}><DownloadIcon className="w-5 h-5" />Download Report</button>
-              ) : null}
+          {appState === 'processing' && (
+            <div className="mt-8">
+              <ProgressBar progress={progress} />
+              <StopButton onClick={handleStop} />
             </div>
-          </div>}
+          )}
+          
+          {appState === 'completed' && processedData && (
+            <ResultsViewer 
+              processedData={processedData}
+              activeMode={activeMode}
+              scaffolderSettings={scaffolderSettings}
+              onReset={handleReset}
+              onOpenReportModal={() => setIsReportModalOpen(true)}
+              onDownloadReasoning={(type) => downloadReasoningArtifact(processedData, type)}
+              onDownloadScaffold={(type) => downloadScaffoldArtifact(processedData, scaffolderSettings, type)}
+              onDownloadRequestSplitter={(type) => downloadRequestSplitterArtifact(processedData, type)}
+              onDownloadPromptEnhancer={(type) => downloadPromptEnhancerArtifact(processedData, type)}
+              onDownloadAgentDesigner={(type) => downloadAgentDesignerArtifact(processedData, type)}
+            />
+          )}
 
-          {/* Error State */}
           {appState === 'error' && error && <div className="mt-8 p-4 bg-red-900 border border-red-700 rounded-lg text-red-100 animate-fade-in-scale" role="alert">
             <div className="flex items-center mb-2"><XCircleIcon className="w-6 h-6 mr-2" aria-hidden="true" /><h3 className="text-lg font-semibold">Error</h3></div>
             <p className="text-sm">{error.message}</p>

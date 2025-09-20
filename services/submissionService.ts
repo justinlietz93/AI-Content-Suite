@@ -34,6 +34,7 @@ interface SubmissionArgs {
     setProgress: React.Dispatch<React.SetStateAction<ProgressUpdate>>;
     setNextStepSuggestions: React.Dispatch<React.SetStateAction<string[] | null>>;
     setSuggestionsLoading: React.Dispatch<React.SetStateAction<boolean>>;
+    signal: AbortSignal;
 }
 
 export const handleSubmission = async ({
@@ -46,6 +47,7 @@ export const handleSubmission = async ({
     setProgress,
     setNextStepSuggestions,
     setSuggestionsLoading,
+    signal,
 }: SubmissionArgs) => {
 
     const hasFiles = currentFiles && currentFiles.length > 0;
@@ -96,9 +98,14 @@ export const handleSubmission = async ({
       
       const processedParts: any[] = [];
       const processedTexts: string[] = [];
+      
+      const checkForCancellation = () => {
+        if (signal.aborted) throw new DOMException('Aborted by user', 'AbortError');
+      };
 
       if(currentFiles && currentFiles.length > 0) {
         for (let i = 0; i < currentFiles.length; i++) {
+          checkForCancellation();
           const file = currentFiles[i];
           const basePercentage = 2;
           const range = 8;
@@ -107,6 +114,7 @@ export const handleSubmission = async ({
 
           if (file.type === 'application/pdf') {
             const ocrText = await ocrPdf(file, (ocrUpdate) => {
+              checkForCancellation();
               const overallFileProgress = fileProgressStart + (fileProgressEnd - fileProgressStart) * ocrUpdate.progress;
               setProgress({
                 stage: 'Processing PDF...',
@@ -134,6 +142,8 @@ export const handleSubmission = async ({
           }
         }
       }
+      
+      checkForCancellation();
 
       if (activeMode === 'technical' && settings.summaryTextInput.trim()) {
           setProgress({ stage: 'Content Loaded', percentage: 10, message: `Text content loaded.` });
@@ -147,43 +157,45 @@ export const handleSubmission = async ({
       
       switch(activeMode) {
         case 'rewriter':
-            result = await processRewrite(processedParts, settings.rewriteStyle, settings.rewriteInstructions, settings.rewriteLength, setProgress);
+            result = await processRewrite(processedParts, settings.rewriteStyle, settings.rewriteInstructions, settings.rewriteLength, setProgress, signal);
             break;
         case 'reasoningStudio':
-            result = await processReasoningRequest(settings.reasoningPrompt, settings.reasoningSettings, processedParts, setProgress);
+            result = await processReasoningRequest(settings.reasoningPrompt, settings.reasoningSettings, processedParts, setProgress, signal);
             break;
         case 'scaffolder':
-            result = await processScaffoldingRequest(settings.scaffolderPrompt, settings.scaffolderSettings, processedParts, setProgress);
+            result = await processScaffoldingRequest(settings.scaffolderPrompt, settings.scaffolderSettings, processedParts, setProgress, signal);
             break;
         case 'requestSplitter':
-            result = await processRequestSplitting(settings.requestSplitterSpec, settings.requestSplitterSettings, processedParts, setProgress);
+            result = await processRequestSplitting(settings.requestSplitterSpec, settings.requestSplitterSettings, processedParts, setProgress, signal);
             break;
         case 'promptEnhancer':
-            result = await processPromptEnhancement(settings.promptEnhancerSettings, processedParts, setProgress);
+            result = await processPromptEnhancement(settings.promptEnhancerSettings, processedParts, setProgress, signal);
             break;
         case 'agentDesigner':
-            result = await processAgentDesign(settings.agentDesignerSettings, processedParts, setProgress);
+            result = await processAgentDesign(settings.agentDesignerSettings, processedParts, setProgress, signal);
             break;
         case 'technical': {
             const combinedText = processedTexts.join('\n\n--- DOCUMENT BREAK ---\n\n');
             const textToProcess = settings.summaryTextInput.trim() || combinedText;
             if (!textToProcess) throw new Error("No content provided to summarize.");
-            result = await processTranscript(textToProcess, setProgress, settings.useHierarchical, settings.summaryFormat);
+            result = await processTranscript(textToProcess, setProgress, settings.useHierarchical, settings.summaryFormat, signal);
             break;
         }
         case 'styleExtractor': {
             const combinedText = processedTexts.join('\n\n--- DOCUMENT BREAK ---\n\n');
-            result = await processStyleExtraction(combinedText, settings.styleTarget, setProgress);
+            result = await processStyleExtraction(combinedText, settings.styleTarget, setProgress, signal);
             break;
         }
         case 'mathFormatter': {
             const combinedText = processedTexts.join('\n\n--- DOCUMENT BREAK ---\n\n');
-            result = await processMathFormatting(combinedText, setProgress);
+            result = await processMathFormatting(combinedText, setProgress, signal);
             break;
         }
         default:
             throw new Error(`Unknown processing mode: ${activeMode}`);
       }
+      
+      checkForCancellation();
 
       const endTime = Date.now();
       const durationSeconds = Math.round((endTime - (startTime ?? endTime)) / 1000);
@@ -207,13 +219,16 @@ export const handleSubmission = async ({
           const targetForSuggestions = activeMode === 'styleExtractor' ? settings.styleTarget : undefined;
 
           if (contentToSuggestOn && contentToSuggestOn.trim() !== "") {
-            const suggestions = await generateSuggestions(activeMode, contentToSuggestOn, targetForSuggestions);
+            const suggestions = await generateSuggestions(activeMode, contentToSuggestOn, targetForSuggestions, signal);
             setNextStepSuggestions(suggestions);
           } else {
             setNextStepSuggestions(null);
           }
         } catch (suggestionError) {
-          console.error("Failed to generate next step suggestions:", suggestionError);
+          // Don't show suggestion errors if the main process was just cancelled
+          if ((suggestionError as any).name !== 'AbortError') {
+             console.error("Failed to generate next step suggestions:", suggestionError);
+          }
           setNextStepSuggestions(null);
         } finally {
           setSuggestionsLoading(false);
@@ -221,6 +236,12 @@ export const handleSubmission = async ({
       })();
 
     } catch (err) {
+      if ((err as any).name === 'AbortError') {
+        console.log("Processing was cancelled by the user.");
+        setAppState('cancelled'); // Let App.tsx handle the reset via this state
+        return;
+      }
+
       console.error(`Error during ${activeMode} processing:`, err);
       const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
       const errorDetails = err instanceof Error ? ((err as any).details || err.stack) : undefined;

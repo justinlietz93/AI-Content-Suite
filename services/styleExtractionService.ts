@@ -10,33 +10,24 @@ import {
   REDUCE_STYLE_ANALYSES_PROMPT_TEMPLATE,
   SINGLE_TEXT_STYLE_EXTRACTION_PROMPT_TEMPLATE // For small texts
 } from '../constants';
-
-/**
- * Chunks a large text into smaller pieces with overlap.
- */
-const chunkText = (text: string, chunkSize: number, overlapSize: number): string[] => {
-  const chunks: string[] = [];
-  if (!text) return chunks;
-  let startIndex = 0;
-  while (startIndex < text.length) {
-    const endIndex = Math.min(startIndex + chunkSize, text.length);
-    chunks.push(text.substring(startIndex, endIndex));
-    if (endIndex === text.length) break;
-    startIndex += (chunkSize - overlapSize);
-    if (startIndex >= text.length) break;
-  }
-  return chunks;
-};
+import { chunkText } from '../utils';
 
 export const processStyleExtraction = async (
   inputText: string,
   styleTarget: string,
-  onProgress: (update: ProgressUpdate) => void
+  onProgress: (update: ProgressUpdate) => void,
+  signal?: AbortSignal
 ): Promise<StyleModelOutput> => {
 
   if (!inputText) {
     throw new Error("Input text is empty or could not be read.");
   }
+
+  const checkForCancellation = () => {
+    if (signal?.aborted) {
+        throw new DOMException('Aborted by user', 'AbortError');
+    }
+  };
   
   const analysisTargetMsgPart = (styleTarget && styleTarget.trim().toLowerCase() !== 'all' && styleTarget.trim() !== '')
     ? ` for "${styleTarget}"`
@@ -46,10 +37,12 @@ export const processStyleExtraction = async (
   if (inputText.length < TARGET_CHUNK_CHAR_SIZE) {
     onProgress({ stage: 'Analyzing Small Text', percentage: 20, message: `Text is small, analyzing style directly${analysisTargetMsgPart}...`, thinkingHint: `Direct style analysis${analysisTargetMsgPart}...` });
     const directStylePrompt = SINGLE_TEXT_STYLE_EXTRACTION_PROMPT_TEMPLATE(inputText, styleTarget);
-    const styleDescription = await generateText(directStylePrompt);
+    const styleDescription = await generateText(directStylePrompt, undefined, signal);
     onProgress({ stage: 'Completed', percentage: 100, message: 'Style extraction complete.' });
     return { styleDescription };
   }
+  
+  checkForCancellation();
 
   // 2. Chunk Text
   onProgress({ stage: 'Chunking Text', percentage: 15, message: 'Dividing text into manageable segments...' });
@@ -73,15 +66,17 @@ export const processStyleExtraction = async (
 
 
   for (let i = 0; i < totalChunks; i += CONCURRENT_CHUNK_REQUEST_LIMIT) {
+    checkForCancellation();
     const batchChunksToProcess = chunks.slice(i, i + CONCURRENT_CHUNK_REQUEST_LIMIT);
 
     const batchStartTime = Date.now();
     const batchPromises = batchChunksToProcess.map((chunk, batchIndex) => {
       const originalIndex = i + batchIndex;
       const analysisPrompt = CHUNK_STYLE_ANALYSIS_PROMPT_TEMPLATE(chunk, styleTarget);
-      return generateText(analysisPrompt)
+      return generateText(analysisPrompt, undefined, signal)
         .then(analysis => ({ analysis, originalIndex }))
         .catch(error => {
+          if (error.name === 'AbortError') throw error;
           console.warn(`Failed to analyze style for chunk ${originalIndex + 1} of ${totalChunks}: ${error instanceof Error ? error.message : String(error)}. Skipping.`);
           return { analysis: `[Style analysis for segment ${originalIndex + 1} failed or was skipped.]`, originalIndex };
         });
@@ -167,6 +162,7 @@ export const processStyleExtraction = async (
 
 
   while (currentAnalyses.length > 1) {
+    checkForCancellation();
     const nextLevelAnalyses: string[] = [];
     const numGroups = Math.ceil(currentAnalyses.length / MAX_REDUCTION_INPUT_SUMMARIES);
     
@@ -185,6 +181,7 @@ export const processStyleExtraction = async (
     });
     
     for (let j = 0; j < numGroups; j++) {
+      checkForCancellation();
       const groupStartIndex = j * MAX_REDUCTION_INPUT_SUMMARIES;
       const groupEndIndex = Math.min(groupStartIndex + MAX_REDUCTION_INPUT_SUMMARIES, currentAnalyses.length);
       const analysesToCombine = currentAnalyses.slice(groupStartIndex, groupEndIndex);
@@ -201,9 +198,10 @@ export const processStyleExtraction = async (
       const reducePrompt = REDUCE_STYLE_ANALYSES_PROMPT_TEMPLATE(combinedTextForPrompt, styleTarget);
       
       try {
-        const reducedAnalysis = await generateText(reducePrompt);
+        const reducedAnalysis = await generateText(reducePrompt, undefined, signal);
         nextLevelAnalyses.push(reducedAnalysis);
       } catch (error) {
+         if ((error as any).name === 'AbortError') throw error;
          console.warn(`Failed to reduce style analysis group ${j + 1} at level ${reductionLevel}: ${error instanceof Error ? error.message : String(error)}. Using combined inputs as fallback.`);
          nextLevelAnalyses.push(`[Reduction Failed for Style Group] Original Analyses Combined:\n${analysesToCombine.join("\n---\n")}`);
       }

@@ -1,7 +1,11 @@
 
+
 import type { ProgressUpdate, ReasoningOutput, ReasoningSettings, ReasoningNode, ReasoningNodeType, ReasoningTree } from '../types';
 import { generateText } from './geminiService';
-import * as Prompts from '../prompts/reasoning';
+// FIX: Corrected import path for reasoning prompts
+import * as Prompts from '../prompts/reasoning/index';
+import { processTranscript } from './summarizationService';
+import { MAX_CONTENT_CHAR_SIZE } from '../constants';
 
 /**
  * Implements an iterative, multi-step reasoning process to solve a complex goal.
@@ -12,17 +16,56 @@ export const processReasoningRequest = async (
     prompt: string,
     settings: ReasoningSettings,
     fileParts: any[],
-    onProgress: (update: ProgressUpdate) => void
+    onProgress: (update: ProgressUpdate) => void,
+    signal?: AbortSignal,
 ): Promise<ReasoningOutput> => {
     
+    const checkForCancellation = () => {
+        if (signal?.aborted) {
+            throw new DOMException('Aborted by user', 'AbortError');
+        }
+    };
+
     // 1. Initialization
-    const fileContent = fileParts.map(p => p.text || '').join('\n\n');
-    const initialGoal = [prompt, fileContent].join('\n\n').trim();
+    const fileContent = (fileParts || []).map(p => p.text || '').join('\n\n');
+    let initialGoal = [prompt, fileContent].join('\n\n').trim();
     if (!initialGoal) {
         throw new Error("Reasoning prompt is empty.");
     }
+    
+    checkForCancellation();
 
-    onProgress({ stage: 'Initializing', percentage: 5, message: 'Starting reasoning engine...' });
+    if (initialGoal.length > MAX_CONTENT_CHAR_SIZE) {
+        onProgress({
+            stage: 'Preprocessing Input',
+            percentage: 2,
+            message: 'Input content is very large. Summarizing to fit within model context window...',
+            thinkingHint: 'This may take some time...'
+        });
+        
+        const summaryOutput = await processTranscript(
+            initialGoal,
+            (summaryProgress) => {
+                const remappedPercentage = 2 + (summaryProgress.percentage * 0.08); // Remap to 2-10% range
+                onProgress({ ...summaryProgress, stage: 'Preprocessing Input', percentage: remappedPercentage });
+            },
+            true, 
+            'default',
+            signal
+        );
+        
+        initialGoal = `
+        The user provided a very large context, which has been summarized below.
+        Base your reasoning primarily on this summary to achieve the user's original goal.
+
+        --- SUMMARY OF USER CONTEXT ---
+        ${summaryOutput.finalSummary}
+        --- END SUMMARY ---
+        `;
+    }
+
+    checkForCancellation();
+    onProgress({ stage: 'Initializing', percentage: 10, message: 'Starting reasoning engine...' });
 
     let nodeCounter = 0;
     const nodes: ReasoningNode[] = [];
@@ -46,6 +89,7 @@ export const processReasoningRequest = async (
 
     // 2. Main Loop (Depth)
     for (let d = 0; d < settings.depth; d++) {
+        checkForCancellation();
         const progress = 10 + (d / settings.depth) * 70;
         onProgress({ stage: 'Reasoning', percentage: progress, message: `Processing Depth ${d + 1}/${settings.depth}`, current: d + 1, total: settings.depth });
         
@@ -54,6 +98,7 @@ export const processReasoningRequest = async (
         const refinedContents: string[] = [];
         // 3. Breadth Loop (now sequential to avoid rate limiting)
         for (let b = 0; b < settings.breadth; b++) {
+            checkForCancellation();
             const breadthProgress = progress + ((b / settings.breadth) * (50 / settings.depth));
             onProgress({
                 stage: 'Reasoning',
@@ -63,13 +108,14 @@ export const processReasoningRequest = async (
             });
 
             const expandPrompt = Prompts.generateExpandStepPrompt(initialGoal, previousStepNode.content, settings);
-            let currentContent = await generateText(expandPrompt);
+            let currentContent = await generateText(expandPrompt, undefined, signal);
             
             const altNode = createNode('step', `Alternative ${b + 1}`, currentContent, taskNode.id);
             let parentForCritique = altNode.id;
 
             // 4. Critic & Refine Loop (sequential within the breadth loop)
             for (let c = 0; c < settings.criticRounds; c++) {
+                checkForCancellation();
                 onProgress({
                     stage: 'Reasoning',
                     percentage: breadthProgress,
@@ -78,10 +124,11 @@ export const processReasoningRequest = async (
                 });
 
                 const critiquePrompt = Prompts.generateCritiquePrompt(initialGoal, currentContent, settings);
-                const critiqueContent = await generateText(critiquePrompt);
+                const critiqueContent = await generateText(critiquePrompt, undefined, signal);
                 const critiqueNode = createNode('validate', `Critique ${c + 1}`, critiqueContent, parentForCritique);
                 critiqueNode.result = { status: 'fail', confidence: 0.5 }; // Mark as a critique for visualization
-
+                
+                checkForCancellation();
                 onProgress({
                     stage: 'Reasoning',
                     percentage: breadthProgress,
@@ -90,7 +137,7 @@ export const processReasoningRequest = async (
                 });
 
                 const refinePrompt = Prompts.generateRefinePrompt(initialGoal, currentContent, critiqueContent, settings);
-                const refinedContent = await generateText(refinePrompt);
+                const refinedContent = await generateText(refinePrompt, undefined, signal);
                 const correctionNode = createNode('correction', `Refinement ${c + 1}`, refinedContent, critiqueNode.id);
                 
                 currentContent = refinedContent;
@@ -100,22 +147,24 @@ export const processReasoningRequest = async (
         }
 
         // 5. Synthesis
+        checkForCancellation();
         onProgress({ stage: 'Reasoning', percentage: progress + (50 / settings.depth), message: `Depth ${d + 1}: Synthesizing ${refinedContents.length} alternatives...` });
         
         const synthesizeNode = createNode('task', `Task ${d + 1}: Synthesize`, `Combining ${refinedContents.length} refined alternatives into a single path forward.`, mainPhaseNode.id);
 
         const synthesizePrompt = Prompts.generateSynthesizePrompt(initialGoal, refinedContents, settings);
-        const synthesizedContent = await generateText(synthesizePrompt);
+        const synthesizedContent = await generateText(synthesizePrompt, undefined, signal);
 
         const synthesizedStepNode = createNode('step', `Synthesized Step ${d + 1}`, synthesizedContent, synthesizeNode.id);
         previousStepNode = synthesizedStepNode; // Update for the next depth iteration
     }
 
     // 6. Final Report Generation
+    checkForCancellation();
     onProgress({ stage: 'Generating Report', percentage: 90, message: 'Generating final markdown report...' });
     const fullTraceForReport = nodes.map(n => `[Node: ${n.id} | Type: ${n.type} | Title: ${n.title}]\n${n.content}`).join('\n\n---\n\n');
     const finalReportPrompt = Prompts.generateFinalReportPrompt(initialGoal, fullTraceForReport, settings);
-    const finalResponseMd = await generateText(finalReportPrompt);
+    const finalResponseMd = await generateText(finalReportPrompt, { maxOutputTokens: 16384 }, signal);
 
     // 7. Assemble Final Tree
     const reasoningTreeJson: ReasoningTree = {

@@ -106,6 +106,12 @@ export const SUMMARY_FORMAT_OPTIONS: SummaryFormatOption[] = [
     tags: ['code', 'technical', 'architecture', 'analysis', 'reverse engineering', 'project']
   },
   {
+    value: 'systemWalkthrough',
+    label: 'System Walkthrough',
+    description: 'Explains how a system works with design rationale and an example operational loop. Ideal for codebases or technical docs.',
+    tags: ['code', 'technical', 'architecture', 'explanation', 'documentation', 'walkthrough']
+  },
+  {
     value: 'metricsDashboard',
     label: 'Metrics Dashboard Snapshot',
     description: "Distills raw data into a numeric baseline table of key indicators (KPIs) and their values like current, min, max, and average.",

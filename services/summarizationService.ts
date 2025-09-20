@@ -1,4 +1,5 @@
 
+
 import type { ProgressUpdate, SummaryOutput, SummaryFormat } from '../types';
 import { generateText, extractHighlightsFromJson } from './geminiService';
 import { 
@@ -16,47 +17,9 @@ import {
 } from '../constants';
 import { validateMermaidSyntax } from './validationService';
 import * as MermaidDocs from '../mermaid-docs-ts';
-import { CORRECT_MERMAID_SYNTAX_PROMPT } from '../prompts/mermaid';
+import { CORRECT_MERMAID_SYNTAX_PROMPT } from '../prompts/shared/mermaid';
+import { chunkText, calculateEtr, getNextChunkHint } from '../utils';
 
-
-/**
- * Chunks a large text into smaller pieces with overlap.
- * @param text The full text to chunk.
- * @param chunkSize Target size of each chunk in characters.
- * @param overlapSize Overlap size in characters.
- * @returns An array of text chunks.
- */
-const chunkTranscript = (text: string, chunkSize: number, overlapSize: number): string[] => {
-  const chunks: string[] = [];
-  if (!text) return chunks;
-
-  let startIndex = 0;
-  while (startIndex < text.length) {
-    const endIndex = Math.min(startIndex + chunkSize, text.length);
-    chunks.push(text.substring(startIndex, endIndex));
-    if (endIndex === text.length) break;
-    startIndex += (chunkSize - overlapSize);
-    if (startIndex >= text.length) break; 
-  }
-  return chunks;
-};
-
-// Helper function to estimate remaining time
-const calculateEtr = (timingsMs: number[], totalItems: number, completedItems: number): number | undefined => {
-    if (timingsMs.length === 0 || completedItems >= totalItems) return undefined;
-    const totalTimeMs = timingsMs.reduce((sum, time) => sum + time, 0);
-    const avgTimePerItemMs = totalTimeMs / timingsMs.length;
-    const remainingItems = totalItems - completedItems;
-    return Math.round((avgTimePerItemMs * remainingItems) / 1000);
-};
-
-// Helper to provide a hint about what's being processed next
-const getNextChunkHint = (chunks: string[], nextIndex: number): string | undefined => {
-    if (nextIndex >= chunks.length) return undefined;
-    const nextChunkText = chunks[nextIndex];
-    const hintWords = nextChunkText.substring(0, 75).split(' ').slice(0, 7).join(' ');
-    return `Analyzing content starting with "${hintWords}..."`;
-};
 
 /**
  * Selects the most relevant documentation based on a Mermaid syntax error message.
@@ -86,15 +49,16 @@ const getRelevantMermaidDocs = (errorMessage: string): string => {
  * Generates Mermaid code, validates it, and attempts to correct it if necessary.
  * @param generationPrompt The initial prompt to generate the diagram.
  * @param onProgress Progress update callback.
- * @param progressMessage The message to display during generation.
+ * @param signal An AbortSignal to cancel the operation.
  * @returns A promise that resolves to the validated Mermaid code string.
  */
 const generateAndValidateMermaid = async (
     generationPrompt: string,
     onProgress: (update: ProgressUpdate) => void,
-    progressMessage: string,
+    signal?: AbortSignal,
 ): Promise<string> => {
-    const rawDiagramResult = await generateText(generationPrompt);
+    if (signal?.aborted) throw new DOMException('Aborted by user', 'AbortError');
+    const rawDiagramResult = await generateText(generationPrompt, undefined, signal);
 
     // Extract code from markdown fence
     const mermaidBlockRegex = /```mermaid\s*([\s\S]+?)\s*```/;
@@ -109,6 +73,7 @@ const generateAndValidateMermaid = async (
     }
     
     // Validation failed, begin correction loop
+    if (signal?.aborted) throw new DOMException('Aborted by user', 'AbortError');
     console.warn("Initial Mermaid generation failed validation. Attempting self-correction.", validationResult.error);
     onProgress({ 
         stage: 'Correcting Diagram', 
@@ -120,7 +85,7 @@ const generateAndValidateMermaid = async (
     const relevantDocs = getRelevantMermaidDocs(validationResult.error?.message || '');
     const correctionPrompt = CORRECT_MERMAID_SYNTAX_PROMPT(initialCode, validationResult.error?.message || 'Unknown error', relevantDocs);
     
-    const correctedResultText = await generateText(correctionPrompt);
+    const correctedResultText = await generateText(correctionPrompt, undefined, signal);
     const correctedMatch = correctedResultText.match(mermaidBlockRegex);
     let correctedCode = correctedMatch && correctedMatch[1] ? correctedMatch[1].trim() : correctedResultText.trim();
 
@@ -142,7 +107,8 @@ export const processTranscript = async (
   transcriptText: string,
   onProgress: (update: ProgressUpdate) => void,
   useHierarchical: boolean,
-  summaryFormat: SummaryFormat
+  summaryFormat: SummaryFormat,
+  signal?: AbortSignal,
 ): Promise<SummaryOutput> => {
   if (!transcriptText) {
     return { finalSummary: "No summary could be generated because the input was empty.", highlights: [] };
@@ -154,6 +120,12 @@ export const processTranscript = async (
   if (!chunkPromptFn || !reducePromptFn) {
       throw new Error(`Invalid summary format provided: '${summaryFormat}'. No matching prompt function found.`);
   }
+  
+  const checkForCancellation = () => {
+    if (signal?.aborted) {
+        throw new DOMException('Aborted by user', 'AbortError');
+    }
+  };
 
   // This function will perform the core summarization logic (chunking, mapping, reducing)
   const generateFinalSummaryText = async (): Promise<string> => {
@@ -167,15 +139,17 @@ export const processTranscript = async (
     const concurrencyLimit = isHierarchical 
       ? HIERARCHICAL_CONCURRENT_CHUNK_REQUEST_LIMIT 
       : CONCURRENT_CHUNK_REQUEST_LIMIT;
+    
+    checkForCancellation();
 
     if (transcriptText.length < TARGET_CHUNK_CHAR_SIZE) {
         onProgress({ stage: 'Processing Small Transcript', percentage: 20, message: 'Transcript is small, summarizing directly...' });
         const directSummaryPrompt = chunkPromptFn(transcriptText);
-        return await generateText(directSummaryPrompt);
+        return await generateText(directSummaryPrompt, undefined, signal);
     }
   
     onProgress({ stage: 'Chunking Transcript', percentage: 15, message: 'Dividing transcript into manageable chunks...' });
-    const chunks = chunkTranscript(transcriptText, chunkSize, overlapSize);
+    const chunks = chunkText(transcriptText, chunkSize, overlapSize);
     if (chunks.length === 0) { 
       return "No summary could be generated because no content chunks were created.";
     }
@@ -198,13 +172,15 @@ export const processTranscript = async (
         chunkSummaries = new Array(totalGroups).fill(null);
 
         for (let i = 0; i < totalGroups; i += concurrencyLimit) {
+            checkForCancellation();
             const batchGroupsToProcess = chunkGroups.slice(i, i + concurrencyLimit);
             const batchPromises = batchGroupsToProcess.map((group, batchIndex) => {
                 const originalIndex = i + batchIndex;
                 const combinedText = group.join('\n\n--- CONSECUTIVE SEGMENT BREAK ---\n\n');
-                return generateText(chunkPromptFn(combinedText))
+                return generateText(chunkPromptFn(combinedText), undefined, signal)
                     .then(summary => ({ summary, originalIndex }))
                     .catch(error => {
+                      if (error.name === 'AbortError') throw error;
                       console.error(`Error summarizing group ${originalIndex + 1}:`, error);
                       return { summary: `[Summary for group ${originalIndex + 1} failed.]`, originalIndex };
                     });
@@ -230,13 +206,15 @@ export const processTranscript = async (
         chunkSummaries = new Array(totalChunks).fill(null);
 
         for (let i = 0; i < totalChunks; i += concurrencyLimit) {
+            checkForCancellation();
             const batchChunksToProcess = chunks.slice(i, i + concurrencyLimit);
             const batchStartTime = Date.now();
             const batchPromises = batchChunksToProcess.map((chunk, batchIndex) => {
                 const originalIndex = i + batchIndex;
-                return generateText(chunkPromptFn(chunk))
+                return generateText(chunkPromptFn(chunk), undefined, signal)
                     .then(summary => ({ summary, originalIndex }))
                     .catch(error => {
+                      if (error.name === 'AbortError') throw error;
                       console.error(`Error summarizing segment ${originalIndex + 1}:`, error);
                       return { summary: `[Summary for segment ${originalIndex + 1} failed.]`, originalIndex };
                     });
@@ -276,18 +254,20 @@ export const processTranscript = async (
     let currentSummaries = validChunkSummaries;
 
     while (currentSummaries.length > 1) {
+        checkForCancellation();
         const nextLevelSummaries: string[] = [];
         const numGroups = Math.ceil(currentSummaries.length / MAX_REDUCTION_INPUT_SUMMARIES);
         onProgress({ stage: 'Synthesizing Summaries', percentage: reducePhaseStartProgress, message: `Combining ${currentSummaries.length} summaries into ~${numGroups}...`});
         
         for (let j = 0; j < numGroups; j++) {
+            checkForCancellation();
             const group = currentSummaries.slice(j * MAX_REDUCTION_INPUT_SUMMARIES, (j + 1) * MAX_REDUCTION_INPUT_SUMMARIES);
             if (group.length === 1) {
                 nextLevelSummaries.push(group[0]);
                 continue;
             }
             const combinedText = group.join('\n\n---\n\n');
-            const reducedSummary = await generateText(reducePromptFn(combinedText));
+            const reducedSummary = await generateText(reducePromptFn(combinedText), undefined, signal);
             nextLevelSummaries.push(reducedSummary);
         }
         currentSummaries = nextLevelSummaries;
@@ -318,8 +298,9 @@ export const processTranscript = async (
 
       try {
           const diagramPrompt = GENERATE_MERMAID_FROM_DIGEST_PROMPT(finalSummaryText);
-          mermaidDiagram = await generateAndValidateMermaid(diagramPrompt, onProgress, 'Generating detailed diagram...');
+          mermaidDiagram = await generateAndValidateMermaid(diagramPrompt, onProgress, signal);
       } catch (e) {
+          if ((e as any).name === 'AbortError') throw e;
           console.error("Failed to generate and validate detailed Mermaid diagram:", e);
           mermaidDiagram = "Error: Detailed diagram could not be generated.";
       }
@@ -332,8 +313,9 @@ export const processTranscript = async (
       });
       try {
           const simpleDiagramPrompt = GENERATE_SIMPLIFIED_MERMAID_PROMPT(finalSummaryText);
-          mermaidDiagramSimple = await generateAndValidateMermaid(simpleDiagramPrompt, onProgress, 'Generating simplified diagram...');
+          mermaidDiagramSimple = await generateAndValidateMermaid(simpleDiagramPrompt, onProgress, signal);
       } catch(e) {
+          if ((e as any).name === 'AbortError') throw e;
           console.error("Failed to generate and validate simplified Mermaid diagram:", e);
       }
   } else if (summaryFormat === 'reverseEngineering') {
@@ -345,14 +327,16 @@ export const processTranscript = async (
       });
       try {
           const diagramPrompt = GENERATE_REVERSE_ENGINEERING_MERMAID_PROMPT(finalSummaryText);
-          mermaidDiagram = await generateAndValidateMermaid(diagramPrompt, onProgress, 'Generating architecture diagram...');
+          mermaidDiagram = await generateAndValidateMermaid(diagramPrompt, onProgress, signal);
       } catch (e) {
+          if ((e as any).name === 'AbortError') throw e;
           console.error("Failed to generate and validate reverse engineering Mermaid diagram:", e);
           mermaidDiagram = "Error: Architecture diagram could not be generated.";
       }
       mermaidDiagramSimple = undefined;
   }
-
+  
+  checkForCancellation();
 
   const highlightStartPercentage = 90;
   onProgress({ 
@@ -361,7 +345,7 @@ export const processTranscript = async (
       message: 'Extracting key highlights...', 
       thinkingHint: 'Analyzing final summary for highlights.' 
   });
-  const highlights = await extractHighlightsFromJson(finalSummaryText);
+  const highlights = await extractHighlightsFromJson(finalSummaryText, signal);
   onProgress({ stage: 'Completed', percentage: 100, message: 'Processing complete.' });
   
   return { finalSummary: finalSummaryText, highlights, summaryFormat, mermaidDiagram, mermaidDiagramSimple };

@@ -27,4 +27,5 @@ export * from './sessionHandoff';
 export * from './solutionFinder';
 export * from './stakeholderMap';
 export * from './swotAnalysis';
+export * from './systemWalkthrough';
 export * from './timeline';
