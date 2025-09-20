@@ -1,17 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { UI_STORAGE_KEYS, UI_DIMENSIONS } from '../config/uiConfig';
 
-const SIDEBAR_STATE_STORAGE_KEY = 'ai_content_suite_sidebar_state';
-const LAYOUT_WIDTH_STORAGE_KEY = 'ai_content_suite_layout_width';
-const MIN_CONTENT_WIDTH = 640;
-const MAX_CONTENT_WIDTH = 1440;
-const DEFAULT_LAYOUT_PERCENT = 70;
+const MIN_CONTENT_WIDTH = UI_DIMENSIONS.workspace.minContentWidth;
+const MAX_CONTENT_WIDTH = UI_DIMENSIONS.workspace.maxContentWidth;
+const DEFAULT_LAYOUT_PERCENT = UI_DIMENSIONS.workspace.defaultContentWidthPercent;
 
 export const useLayoutPreferences = () => {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
     if (typeof window === 'undefined') {
       return false;
     }
-    const saved = localStorage.getItem(SIDEBAR_STATE_STORAGE_KEY);
+    const saved = localStorage.getItem(UI_STORAGE_KEYS.sidebarState);
     return saved === 'collapsed';
   });
 
@@ -19,7 +18,7 @@ export const useLayoutPreferences = () => {
     if (typeof window === 'undefined') {
       return DEFAULT_LAYOUT_PERCENT;
     }
-    const saved = Number(localStorage.getItem(LAYOUT_WIDTH_STORAGE_KEY));
+    const saved = Number(localStorage.getItem(UI_STORAGE_KEYS.layoutWidth));
     return Number.isFinite(saved) && saved >= 0 && saved <= 100 ? saved : DEFAULT_LAYOUT_PERCENT;
   });
 
@@ -27,14 +26,14 @@ export const useLayoutPreferences = () => {
     if (typeof window === 'undefined') {
       return;
     }
-    localStorage.setItem(SIDEBAR_STATE_STORAGE_KEY, isSidebarCollapsed ? 'collapsed' : 'expanded');
+    localStorage.setItem(UI_STORAGE_KEYS.sidebarState, isSidebarCollapsed ? 'collapsed' : 'expanded');
   }, [isSidebarCollapsed]);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
       return;
     }
-    localStorage.setItem(LAYOUT_WIDTH_STORAGE_KEY, String(contentWidthPercent));
+    localStorage.setItem(UI_STORAGE_KEYS.layoutWidth, String(contentWidthPercent));
   }, [contentWidthPercent]);
 
   const toggleSidebar = useCallback(() => {
