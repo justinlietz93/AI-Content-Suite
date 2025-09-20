@@ -1,169 +1,227 @@
-import type { AIProviderId, ModelOption, EmbeddingProviderId } from '../types';
-import { DEFAULT_PROVIDER_MODELS } from '../constants';
+import type { AIProviderId, EmbeddingProviderId, ModelOption } from '../types';
+import type { ProviderMetadata, EmbeddingProviderMetadata } from '../config/providerConfig';
+import {
+  PROVIDER_METADATA_LIST,
+  EMBEDDING_PROVIDER_METADATA_LIST,
+  DEFAULT_PROVIDER_MODELS,
+  PROVIDER_FALLBACK_MODELS,
+  PROVIDER_MODEL_ENDPOINTS,
+  ANTHROPIC_API_VERSION,
+} from '../config/providerConfig';
 
-export interface ProviderInfo {
-  id: AIProviderId;
-  label: string;
-  requiresApiKey: boolean;
-  docsUrl?: string;
-}
+export type ProviderInfo = ProviderMetadata;
+export type EmbeddingProviderInfo = EmbeddingProviderMetadata;
 
-export interface EmbeddingProviderInfo {
-  id: EmbeddingProviderId;
-  label: string;
-  requiresApiKey: boolean;
-  docsUrl?: string;
-  defaultEndpoint?: string;
-}
+const providerMetadataMap = new Map<AIProviderId, ProviderMetadata>();
+PROVIDER_METADATA_LIST.forEach(metadata => providerMetadataMap.set(metadata.id, metadata));
 
-export const ANTHROPIC_API_VERSION = '2023-06-01';
+const embeddingMetadataMap = new Map<EmbeddingProviderId, EmbeddingProviderMetadata>();
+EMBEDDING_PROVIDER_METADATA_LIST.forEach(metadata => embeddingMetadataMap.set(metadata.id, metadata));
 
-export const AI_PROVIDERS: ProviderInfo[] = [
-  {
-    id: 'openai',
-    label: 'OpenAI',
-    requiresApiKey: true,
-    docsUrl: 'https://platform.openai.com/docs/api-reference',
-  },
-  {
-    id: 'openrouter',
-    label: 'OpenRouter',
-    requiresApiKey: true,
-    docsUrl: 'https://openrouter.ai/docs',
-  },
-  {
-    id: 'xai',
-    label: 'xAI (Grok)',
-    requiresApiKey: true,
-    docsUrl: 'https://docs.x.ai/',
-  },
-  {
-    id: 'deepseek',
-    label: 'DeepSeek',
-    requiresApiKey: true,
-    docsUrl: 'https://platform.deepseek.com/docs',
-  },
-  {
-    id: 'anthropic',
-    label: 'Anthropic Claude',
-    requiresApiKey: true,
-    docsUrl: 'https://docs.anthropic.com/claude',
-  },
-  {
-    id: 'ollama',
-    label: 'Ollama (Local)',
-    requiresApiKey: false,
-    docsUrl: 'https://github.com/ollama/ollama',
-  },
-];
+export const AI_PROVIDERS: ProviderInfo[] = PROVIDER_METADATA_LIST.map(metadata => ({ ...metadata }));
+export const EMBEDDING_PROVIDERS: EmbeddingProviderInfo[] = EMBEDDING_PROVIDER_METADATA_LIST.map(
+  metadata => ({ ...metadata }),
+);
 
-export const EMBEDDING_PROVIDERS: EmbeddingProviderInfo[] = [
-  {
-    id: 'openai',
-    label: 'OpenAI',
-    requiresApiKey: true,
-    docsUrl: 'https://platform.openai.com/docs/guides/embeddings',
-    defaultEndpoint: 'https://api.openai.com/v1/embeddings',
-  },
-  {
-    id: 'openrouter',
-    label: 'OpenRouter',
-    requiresApiKey: true,
-    docsUrl: 'https://openrouter.ai/docs',
-    defaultEndpoint: 'https://openrouter.ai/api/v1/embeddings',
-  },
-  {
-    id: 'deepseek',
-    label: 'DeepSeek',
-    requiresApiKey: true,
-    docsUrl: 'https://platform.deepseek.com/docs',
-    defaultEndpoint: 'https://api.deepseek.com/v1/embeddings',
-  },
-  {
-    id: 'ollama',
-    label: 'Ollama (Local)',
-    requiresApiKey: false,
-    docsUrl: 'https://github.com/ollama/ollama',
-    defaultEndpoint: 'http://localhost:11434/api/embeddings',
-  },
-  {
-    id: 'custom',
-    label: 'Custom Endpoint',
-    requiresApiKey: false,
-  },
-];
-
-const DEFAULT_MODEL_OPTIONS: Record<AIProviderId, ModelOption[]> = {
-  openai: [
-    { id: 'gpt-4o', label: 'gpt-4o', description: 'Flagship general-purpose model' },
-    { id: 'gpt-4o-mini', label: 'gpt-4o-mini', description: 'Fast and cost-effective 4o variant' },
-    { id: 'o1-mini', label: 'o1-mini', description: 'Reasoning-optimised model' },
-  ],
-  openrouter: [
-    { id: 'openrouter/auto', label: 'openrouter/auto', description: 'Smart router that picks the best model' },
-    { id: 'anthropic/claude-3.5-sonnet', label: 'anthropic/claude-3.5-sonnet', description: 'Anthropic Claude via OpenRouter' },
-    { id: 'google/gemini-pro', label: 'google/gemini-pro', description: 'Gemini Pro via OpenRouter' },
-  ],
-  xai: [
-    { id: 'grok-beta', label: 'grok-beta', description: 'General purpose Grok model' },
-    { id: 'grok-vision-beta', label: 'grok-vision-beta', description: 'Multimodal Grok variant with vision' },
-  ],
-  deepseek: [
-    { id: 'deepseek-chat', label: 'deepseek-chat', description: 'DeepSeek general chat model' },
-    { id: 'deepseek-coder', label: 'deepseek-coder', description: 'DeepSeek code-focused model' },
-  ],
-  anthropic: [
-    { id: 'claude-3-5-sonnet-latest', label: 'claude-3.5-sonnet-latest', description: 'Latest Claude 3.5 Sonnet release' },
-    { id: 'claude-3-opus-latest', label: 'claude-3-opus-latest', description: 'Claude 3 Opus for high quality outputs' },
-  ],
-  ollama: [
-    { id: 'llama3.1:8b', label: 'llama3.1:8b', description: 'Meta Llama 3.1 8B local model' },
-    { id: 'llama3.1:70b', label: 'llama3.1:70b', description: 'Meta Llama 3.1 70B local model' },
-    { id: 'qwen2.5:14b', label: 'qwen2.5:14b', description: 'Qwen 2.5 local model' },
-  ],
+/**
+ * Normalizes and deduplicates provider model definitions ensuring downstream selectors receive
+ * stable identifiers and human-friendly labels.
+ *
+ * @param models - Raw model metadata supplied by a provider SDK or HTTP response.
+ * @returns A sorted collection of unique model options ready for presentation.
+ */
+const sanitizeModelOptions = (models: ModelOption[]): ModelOption[] => {
+  const deduped = new Map<string, ModelOption>();
+  models.forEach(model => {
+    if (!model || typeof model.id !== 'string') {
+      return;
+    }
+    const trimmedId = model.id.trim();
+    if (!trimmedId) {
+      return;
+    }
+    const trimmedLabel = typeof model.label === 'string' && model.label.trim().length > 0
+      ? model.label.trim()
+      : trimmedId;
+    const trimmedDescription = typeof model.description === 'string' && model.description.trim().length > 0
+      ? model.description.trim()
+      : undefined;
+    if (!deduped.has(trimmedId)) {
+      deduped.set(trimmedId, trimmedDescription ? { id: trimmedId, label: trimmedLabel, description: trimmedDescription } : {
+        id: trimmedId,
+        label: trimmedLabel,
+      });
+    }
+  });
+  return Array.from(deduped.values()).sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }));
 };
 
-const providerModelOptions: Record<AIProviderId, ModelOption[]> = Object.fromEntries(
-  (Object.entries(DEFAULT_MODEL_OPTIONS) as Array<[AIProviderId, ModelOption[]]>).map(([providerId, models]) => [
-    providerId,
-    [...models],
-  ]),
-) as Record<AIProviderId, ModelOption[]>;
+/**
+ * Produces defensive copies of model entries to prevent accidental mutations in consuming code.
+ *
+ * @param models - Model option entries to duplicate.
+ * @returns Cloned model entries preserving the original ordering.
+ */
+const cloneModels = (models: ModelOption[]): ModelOption[] => models.map(model => ({ ...model }));
 
+const providerModelOptions: Record<AIProviderId, ModelOption[]> = {} as Record<AIProviderId, ModelOption[]>;
+
+AI_PROVIDERS.forEach(provider => {
+  const fallbackModels = PROVIDER_FALLBACK_MODELS[provider.id];
+  const sanitizedFallback = fallbackModels ? sanitizeModelOptions(fallbackModels) : [];
+  providerModelOptions[provider.id] = sanitizedFallback;
+});
+
+/**
+ * Registers an explicit model listing for a provider, overriding the default fallback values.
+ *
+ * @param providerId - Target provider identifier.
+ * @param models - Model definitions supplied by the caller.
+ */
 export const registerProviderModels = (providerId: AIProviderId, models: ModelOption[]): void => {
-  providerModelOptions[providerId] = models.map(model => ({ ...model }));
+  providerModelOptions[providerId] = sanitizeModelOptions(models);
 };
 
+/**
+ * Resolves the friendly display name associated with a provider identifier.
+ *
+ * @param providerId - Provider identifier to describe.
+ * @returns A human-readable provider label.
+ */
 export const getProviderLabel = (providerId: AIProviderId): string => {
-  return AI_PROVIDERS.find(provider => provider.id === providerId)?.label ?? providerId;
+  return providerMetadataMap.get(providerId)?.label ?? providerId;
 };
 
+/**
+ * Determines whether a provider requires an API key for text generation operations.
+ *
+ * @param providerId - Provider identifier to evaluate.
+ * @returns True when an API key is required, otherwise false.
+ */
 export const requiresApiKey = (providerId: AIProviderId): boolean => {
-  return AI_PROVIDERS.find(provider => provider.id === providerId)?.requiresApiKey ?? true;
+  return providerMetadataMap.get(providerId)?.requiresApiKey ?? true;
 };
 
+/**
+ * Determines whether an embedding provider requires an API key for vector generation.
+ *
+ * @param providerId - Embedding provider identifier to evaluate.
+ * @returns True when the embedding provider requires an API key.
+ */
 export const requiresEmbeddingApiKey = (providerId: EmbeddingProviderId): boolean => {
-  return EMBEDDING_PROVIDERS.find(provider => provider.id === providerId)?.requiresApiKey ?? false;
+  return embeddingMetadataMap.get(providerId)?.requiresApiKey ?? false;
 };
 
+/**
+ * Retrieves the default embedding API endpoint for a provider when one is known.
+ *
+ * @param providerId - Embedding provider identifier to look up.
+ * @returns A default endpoint URL or undefined when no default exists.
+ */
 export const getEmbeddingProviderDefaultEndpoint = (
   providerId: EmbeddingProviderId,
 ): string | undefined => {
-  return EMBEDDING_PROVIDERS.find(provider => provider.id === providerId)?.defaultEndpoint;
+  return embeddingMetadataMap.get(providerId)?.defaultEndpoint;
 };
+
+/**
+ * Attempts to retrieve a live model listing from a provider using its configured endpoint.
+ *
+ * @param providerId - Provider whose models should be fetched.
+ * @param apiKey - Optional API key to authorize the request.
+ * @param signal - Optional abort signal to cancel the request.
+ * @returns Sanitized model options when successful; otherwise null.
+ */
+const attemptDynamicModelFetch = async (
+  providerId: AIProviderId,
+  apiKey: string | undefined,
+  signal?: AbortSignal,
+): Promise<ModelOption[] | null> => {
+  const endpoint = PROVIDER_MODEL_ENDPOINTS[providerId];
+  if (!endpoint || typeof fetch !== 'function') {
+    return null;
+  }
+
+  const trimmedKey = apiKey?.trim();
+  if (endpoint.requiresApiKey && (!trimmedKey || trimmedKey.length === 0)) {
+    return null;
+  }
+
+  const requestInit = endpoint.buildRequestInit({ apiKey: trimmedKey });
+  if (!requestInit) {
+    return null;
+  }
+
+  try {
+    const response = await fetch(endpoint.url, { ...requestInit, signal });
+    if (!response.ok) {
+      return null;
+    }
+    const payload = await response.json();
+    const sanitized = sanitizeModelOptions(endpoint.parse(payload));
+    if (sanitized.length === 0) {
+      return null;
+    }
+    providerModelOptions[providerId] = sanitized;
+    return cloneModels(sanitized);
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw error;
+    }
+    console.warn(`Failed to load models for provider "${providerId}":`, error);
+    return null;
+  }
+};
+
+/**
+ * Retrieves model options for the requested provider, prioritizing registered or dynamically
+ * fetched listings before falling back to configuration defaults.
+ *
+ * @param providerId - Provider whose models should be returned.
+ * @param apiKey - Optional API key enabling dynamic discovery.
+ * @param signal - Optional abort signal for cancellation.
+ * @returns A list of models suitable for UI selection components.
+ */
+export interface FetchModelsOptions {
+  signal?: AbortSignal;
+  forceRefresh?: boolean;
+}
 
 export const fetchModelsForProvider = async (
   providerId: AIProviderId,
   apiKey?: string,
+  options?: FetchModelsOptions,
 ): Promise<ModelOption[]> => {
-  void apiKey; // Currently unused but retained for future dynamic fetching support
-  const models = providerModelOptions[providerId];
-  if (models && models.length > 0) {
-    return models.map(model => ({ ...model }));
+  const trimmedKey = apiKey?.trim();
+  const providerRequiresKey = requiresApiKey(providerId);
+  const signal = options?.signal;
+  const forceRefresh = options?.forceRefresh ?? false;
+
+  if (forceRefresh || (trimmedKey && trimmedKey.length > 0)) {
+    const dynamicModels = await attemptDynamicModelFetch(providerId, trimmedKey, signal);
+    if (dynamicModels && dynamicModels.length > 0) {
+      return dynamicModels;
+    }
   }
-  const fallback = DEFAULT_PROVIDER_MODELS[providerId];
-  if (fallback) {
-    return [{ id: fallback, label: fallback }];
+
+  const registeredModels = providerModelOptions[providerId];
+  if (registeredModels && registeredModels.length > 0) {
+    return cloneModels(registeredModels);
   }
+
+  const fallbackModels = PROVIDER_FALLBACK_MODELS[providerId];
+  if (fallbackModels && fallbackModels.length > 0) {
+    const sanitizedFallback = sanitizeModelOptions(fallbackModels);
+    providerModelOptions[providerId] = sanitizedFallback;
+    return cloneModels(sanitizedFallback);
+  }
+
+  const fallbackModelId = DEFAULT_PROVIDER_MODELS[providerId];
+  if (fallbackModelId) {
+    return [{ id: fallbackModelId, label: fallbackModelId }];
+  }
+
   return [];
 };
+
+export { ANTHROPIC_API_VERSION };

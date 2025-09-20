@@ -12,6 +12,7 @@ import type {
   EmbeddingProviderId,
   AIProviderSettings,
 } from './types';
+import { DEFAULT_PROVIDER_MODELS, DEFAULT_EMBEDDING_MODELS } from './config/providerConfig';
 
 // Import all summary prompts from the new modular structure
 import * as summaryPrompts from './prompts/summaries';
@@ -30,14 +31,7 @@ import { REQUEST_SPLITTER_PLANNING_PROMPT_TEMPLATE, REQUEST_SPLITTER_GENERATION_
 import { PROMPT_ENHANCER_PROMPT_TEMPLATE } from './prompts/promptEnhancer/index';
 // FIX: Corrected import path for agent designer template
 import { AGENT_DESIGNER_PROMPT_TEMPLATE } from './prompts/agentDesigner/index';
-export const DEFAULT_PROVIDER_MODELS: Record<AIProviderId, string> = {
-  openai: 'gpt-4o-mini',
-  openrouter: 'openrouter/auto',
-  xai: 'grok-beta',
-  deepseek: 'deepseek-chat',
-  anthropic: 'claude-3-5-sonnet-latest',
-  ollama: 'llama3.1:8b',
-};
+export { DEFAULT_PROVIDER_MODELS, DEFAULT_EMBEDDING_MODELS };
 
 export const INITIAL_AI_PROVIDER_SETTINGS: AIProviderSettings = {
   selectedProvider: 'openai',
@@ -46,13 +40,6 @@ export const INITIAL_AI_PROVIDER_SETTINGS: AIProviderSettings = {
   featureModelPreferences: undefined,
 };
 
-export const DEFAULT_EMBEDDING_MODELS: Record<EmbeddingProviderId, string> = {
-  openai: 'text-embedding-3-small',
-  openrouter: 'text-embedding-3-small',
-  deepseek: 'deepseek-embedding',
-  ollama: 'nomic-embed-text',
-  custom: '',
-};
 
 // Approximate token estimation: 1 token ~ 4 characters.
 // Target chunk size for LLM processing. Drastically increased to maximize model's context window.

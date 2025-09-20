@@ -9,6 +9,7 @@ import { CheckCircleIcon } from '../../icons/CheckCircleIcon';
 import { ChevronRightIcon } from '../../icons/ChevronRightIcon';
 import { ProcessingIcon } from '../../icons/ProcessingIcon';
 import { enhanceCodeBlocks } from '../../../utils/uiUtils';
+import { CHAT_VIEWER_MAX_HEIGHT } from '../../../config/uiConfig';
 
 
 declare var marked: any;
@@ -147,7 +148,11 @@ export const ChatViewer: React.FC<ChatViewerProps> = ({ history, isStreaming }) 
 
 
     return (
-        <div ref={chatContainerRef} className="flex-grow h-full max-h-[65vh] overflow-y-auto p-4 space-y-4 rounded-lg">
+        <div
+            ref={chatContainerRef}
+            className="flex-grow h-full overflow-y-auto p-4 space-y-4 rounded-lg"
+            style={{ maxHeight: CHAT_VIEWER_MAX_HEIGHT }}
+        >
             {history.map((message, index) => {
                 const isLastMessage = index === history.length - 1;
                 const modelContent = message.role === 'model'
