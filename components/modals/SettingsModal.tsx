@@ -30,6 +30,10 @@ import {
   featurePreferenceCount,
   sanitizeVectorStoreSettings,
 } from './settings/helpers';
+import type { SettingsCategoryId } from './settings/categories';
+import { SETTINGS_CATEGORIES } from './settings/categories';
+import { SettingsCategoryTabs } from './settings/SettingsCategoryTabs';
+import { SettingsCategorySidebar } from './settings/SettingsCategorySidebar';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -62,6 +66,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [modelsLoading, setModelsLoading] = useState(false);
   const [modelsError, setModelsError] = useState<string | null>(null);
   const [selectedPreset, setSelectedPreset] = useState<string>('');
+  const [activeCategory, setActiveCategory] = useState<SettingsCategoryId>('global');
   const loadRequestIdRef = useRef(0);
 
   const updateVectorStore = useCallback((updater: (prev: VectorStoreSettings) => VectorStoreSettings) => {
@@ -167,6 +172,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       setModelsError(null);
       setModelsLoading(false);
       setSelectedPreset('');
+      setActiveCategory('global');
     }
   }, [isOpen, currentSettings, providerSettings]);
 
@@ -350,21 +356,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const embeddingRequiresApiKey = requiresEmbeddingApiKey(embeddingSettings.provider);
   const featurePreferences = editedProviderSettings.featureModelPreferences ?? {};
   const globalModelName = editedProviderSettings.selectedModel?.trim() || DEFAULT_PROVIDER_MODELS[editedProviderSettings.selectedProvider] || '';
+  const activeCategoryConfig = SETTINGS_CATEGORIES.find(category => category.id === activeCategory);
 
-  if (!isOpen) return null;
-
-  return (
-    <div
-      className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 z-50 transition-opacity duration-300 animate-fade-in-scale"
-      onClick={handleOverlayClick}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="workspace-settings-modal"
-    >
-      <div className="bg-surface rounded-xl shadow-2xl w-full max-w-4xl transform transition-all duration-300">
-        <SettingsModalHeader onClose={onClose} />
-
-        <div className="p-6 sm:p-8 space-y-8 max-h-[80vh] overflow-y-auto">
+  const renderCategoryContent = () => {
+    switch (activeCategory) {
+      case 'global':
+        return (
           <GlobalProviderSection
             providers={providers}
             selectedProviderId={editedProviderSettings.selectedProvider}
@@ -378,7 +375,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             onModelChange={handleModelInputChange}
             onRefreshModels={() => loadModels(editedProviderSettings.selectedProvider, selectedApiKey)}
           />
-
+        );
+      case 'feature-overrides':
+        return (
           <FeatureOverridesSection
             providers={providers}
             featurePreferences={featurePreferences}
@@ -388,7 +387,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             onToggleOverride={enableFeatureOverride}
             onUpdatePreference={updateFeaturePreference}
           />
-
+        );
+      case 'vector-store':
+        return (
           <VectorStoreSection
             vectorStoreSettings={vectorStoreSettings}
             embeddingEndpointPlaceholder={embeddingEndpointPlaceholder}
@@ -404,7 +405,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             onEmbeddingApiKeyChange={handleEmbeddingApiKeyChange}
             onEmbeddingBaseUrlChange={handleEmbeddingBaseUrlChange}
           />
-
+        );
+      case 'chat-presets':
+        return (
           <ChatPresetsSection
             savedPrompts={savedPrompts}
             selectedPreset={selectedPreset}
@@ -416,6 +419,51 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               if (selectedPreset) setSelectedPreset('');
             }}
           />
+        );
+      default:
+        return null;
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div
+      className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-3 sm:p-6 z-50 transition-opacity duration-300 animate-fade-in-scale"
+      onClick={handleOverlayClick}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="workspace-settings-modal"
+    >
+      <div className="bg-surface rounded-2xl shadow-2xl w-full h-full sm:h-auto sm:max-h-[90vh] max-w-6xl transform transition-all duration-300 overflow-hidden flex flex-col">
+        <SettingsModalHeader onClose={onClose} />
+        <SettingsCategoryTabs
+          categories={SETTINGS_CATEGORIES}
+          activeCategory={activeCategory}
+          onSelect={categoryId => setActiveCategory(categoryId)}
+        />
+
+        <div className="flex flex-1 overflow-hidden">
+          <SettingsCategorySidebar
+            categories={SETTINGS_CATEGORIES}
+            activeCategory={activeCategory}
+            onSelect={categoryId => setActiveCategory(categoryId)}
+          />
+
+          <div
+            className="flex-1 overflow-y-auto p-5 sm:p-8"
+            role="tabpanel"
+            id={`settings-panel-${activeCategory}`}
+            aria-labelledby={`settings-tab-${activeCategory}`}
+          >
+            {activeCategoryConfig && (
+              <div className="mb-6 hidden sm:block">
+                <h3 className="text-lg font-semibold text-text-primary">{activeCategoryConfig.label}</h3>
+                <p className="mt-1 text-sm text-text-secondary">{activeCategoryConfig.description}</p>
+              </div>
+            )}
+            {renderCategoryContent()}
+          </div>
         </div>
 
         <SettingsModalFooter onClose={onClose} onSave={handleSave} onSaveAsPreset={handleSaveAsPreset} />
