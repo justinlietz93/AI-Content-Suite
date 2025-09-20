@@ -35,6 +35,20 @@ import { SETTINGS_CATEGORIES } from './settings/categories';
 import { SettingsCategoryTabs } from './settings/SettingsCategoryTabs';
 import { SettingsCategorySidebar } from './settings/SettingsCategorySidebar';
 
+const DEFAULT_MODAL_WIDTH = 1040;
+const DEFAULT_MODAL_HEIGHT = 640;
+const MIN_MODAL_WIDTH = 720;
+const MIN_MODAL_HEIGHT = 540;
+const MAX_MODAL_WIDTH = 1200;
+const MAX_MODAL_HEIGHT = 840;
+const VIEWPORT_MARGIN_X = 48;
+const VIEWPORT_MARGIN_Y = 64;
+
+interface ModalSize {
+  width: number;
+  height: number;
+}
+
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -48,6 +62,12 @@ interface SettingsModalProps {
   onDeletePreset: (name: string) => void;
 }
 
+/**
+ * Presents the workspace settings experience inside a full-featured, resizable modal window.
+ *
+ * @param props - Collection of event handlers and the current workspace configuration state.
+ * @returns A rendered modal tree bound to the provided state values.
+ */
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   isOpen,
   onClose,
@@ -67,7 +87,157 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [modelsError, setModelsError] = useState<string | null>(null);
   const [selectedPreset, setSelectedPreset] = useState<string>('');
   const [activeCategory, setActiveCategory] = useState<SettingsCategoryId>('global');
+  const [modalSize, setModalSize] = useState<ModalSize>({
+    width: DEFAULT_MODAL_WIDTH,
+    height: DEFAULT_MODAL_HEIGHT,
+  });
+  const [isResizing, setIsResizing] = useState(false);
   const loadRequestIdRef = useRef(0);
+  const initialSizeAppliedRef = useRef(false);
+  const resizeStateRef = useRef<{
+    startX: number;
+    startY: number;
+    startWidth: number;
+    startHeight: number;
+  } | null>(null);
+  const resizeHandlersRef = useRef<{
+    move: (event: PointerEvent) => void;
+    end: (event: PointerEvent) => void;
+  } | null>(null);
+  const previousBodyStylesRef = useRef<{ cursor: string; userSelect: string } | null>(null);
+
+  /**
+   * Constrains the requested modal dimensions so the window remains within the viewport bounds
+   * while respecting the design minimum and maximum breakpoints.
+   *
+   * @param width - Proposed modal width in pixels.
+   * @param height - Proposed modal height in pixels.
+   * @returns A sanitized pair of width and height values that fit the viewport.
+   */
+  const clampModalSize = useCallback(
+    (width: number, height: number): ModalSize => {
+      if (typeof window === 'undefined') {
+        return { width, height };
+      }
+
+      const availableWidth = Math.max(
+        window.innerWidth - VIEWPORT_MARGIN_X,
+        Math.min(window.innerWidth, 320),
+      );
+      const availableHeight = Math.max(
+        window.innerHeight - VIEWPORT_MARGIN_Y,
+        Math.min(window.innerHeight, 360),
+      );
+      const minWidth = Math.min(MIN_MODAL_WIDTH, availableWidth);
+      const minHeight = Math.min(MIN_MODAL_HEIGHT, availableHeight);
+      const maxWidth = Math.min(MAX_MODAL_WIDTH, availableWidth);
+      const maxHeight = Math.min(MAX_MODAL_HEIGHT, availableHeight);
+
+      const clampedWidth = Math.min(Math.max(width, minWidth), maxWidth);
+      const clampedHeight = Math.min(Math.max(height, minHeight), maxHeight);
+
+      return { width: clampedWidth, height: clampedHeight };
+    },
+    [],
+  );
+
+  /**
+   * Cleans up any active resize gesture by removing event listeners and restoring the document
+   * cursor and selection styles.
+   */
+  const endResize = useCallback(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const handlers = resizeHandlersRef.current;
+    if (handlers) {
+      window.removeEventListener('pointermove', handlers.move);
+      window.removeEventListener('pointerup', handlers.end);
+      window.removeEventListener('pointercancel', handlers.end);
+      resizeHandlersRef.current = null;
+    }
+
+    resizeStateRef.current = null;
+    setIsResizing(false);
+
+    if (previousBodyStylesRef.current) {
+      document.body.style.cursor = previousBodyStylesRef.current.cursor;
+      document.body.style.userSelect = previousBodyStylesRef.current.userSelect;
+      previousBodyStylesRef.current = null;
+    }
+  }, []);
+
+  /**
+   * Begins a resize gesture when the resize affordance is activated, tracking pointer movement
+   * to update the modal dimensions in real time.
+   *
+   * @param event - Pointer event emitted from the resize affordance.
+   */
+  const handleResizePointerDown = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (typeof window === 'undefined') {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      resizeStateRef.current = {
+        startX: event.clientX,
+        startY: event.clientY,
+        startWidth: modalSize.width,
+        startHeight: modalSize.height,
+      };
+
+      setIsResizing(true);
+
+      if (!previousBodyStylesRef.current) {
+        previousBodyStylesRef.current = {
+          cursor: document.body.style.cursor,
+          userSelect: document.body.style.userSelect,
+        };
+      }
+
+      document.body.style.cursor = 'nwse-resize';
+      document.body.style.userSelect = 'none';
+
+      const handlePointerMove = (moveEvent: PointerEvent) => {
+        const resizeState = resizeStateRef.current;
+        if (!resizeState) {
+          return;
+        }
+
+        const nextWidth = resizeState.startWidth + (moveEvent.clientX - resizeState.startX);
+        const nextHeight = resizeState.startHeight + (moveEvent.clientY - resizeState.startY);
+
+        setModalSize(prevSize => {
+          const constrainedSize = clampModalSize(nextWidth, nextHeight);
+          if (
+            constrainedSize.width === prevSize.width &&
+            constrainedSize.height === prevSize.height
+          ) {
+            return prevSize;
+          }
+          return constrainedSize;
+        });
+      };
+
+      const handlePointerEnd = () => {
+        endResize();
+      };
+
+      resizeHandlersRef.current = {
+        move: handlePointerMove,
+        end: handlePointerEnd,
+      };
+
+      window.addEventListener('pointermove', handlePointerMove);
+      window.addEventListener('pointerup', handlePointerEnd);
+      window.addEventListener('pointercancel', handlePointerEnd);
+    },
+    [clampModalSize, endResize, modalSize.height, modalSize.width],
+  );
 
   const updateVectorStore = useCallback((updater: (prev: VectorStoreSettings) => VectorStoreSettings) => {
     setEditedSettings(prev => {
@@ -165,16 +335,74 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   }, [onFetchModels, providers]);
 
   useEffect(() => {
-    if (isOpen) {
-      setEditedSettings(withDefaults(currentSettings));
-      setEditedProviderSettings(providerSettings);
-      setModelOptions([]);
-      setModelsError(null);
-      setModelsLoading(false);
-      setSelectedPreset('');
-      setActiveCategory('global');
+    if (!isOpen) {
+      initialSizeAppliedRef.current = false;
+      return;
     }
-  }, [isOpen, currentSettings, providerSettings]);
+
+    if (!initialSizeAppliedRef.current) {
+      const defaultSize = clampModalSize(DEFAULT_MODAL_WIDTH, DEFAULT_MODAL_HEIGHT);
+      setModalSize(prevSize => {
+        if (prevSize.width === defaultSize.width && prevSize.height === defaultSize.height) {
+          return prevSize;
+        }
+        return defaultSize;
+      });
+      initialSizeAppliedRef.current = true;
+    } else {
+      setModalSize(prevSize => {
+        const constrainedSize = clampModalSize(prevSize.width, prevSize.height);
+        if (
+          constrainedSize.width === prevSize.width &&
+          constrainedSize.height === prevSize.height
+        ) {
+          return prevSize;
+        }
+        return constrainedSize;
+      });
+    }
+
+    setEditedSettings(withDefaults(currentSettings));
+    setEditedProviderSettings(providerSettings);
+    setModelOptions([]);
+    setModelsError(null);
+    setModelsLoading(false);
+    setSelectedPreset('');
+    setActiveCategory('global');
+  }, [
+    isOpen,
+    currentSettings,
+    providerSettings,
+    clampModalSize,
+  ]);
+
+  useEffect(() => {
+    if (!isOpen || typeof window === 'undefined') {
+      return;
+    }
+
+    const handleWindowResize = () => {
+      setModalSize(prevSize => {
+        const constrainedSize = clampModalSize(prevSize.width, prevSize.height);
+        if (
+          constrainedSize.width === prevSize.width &&
+          constrainedSize.height === prevSize.height
+        ) {
+          return prevSize;
+        }
+        return constrainedSize;
+      });
+    };
+
+    window.addEventListener('resize', handleWindowResize);
+    return () => {
+      window.removeEventListener('resize', handleWindowResize);
+    };
+  }, [isOpen, clampModalSize]);
+
+  useEffect(() => () => {
+    endResize();
+  }, [endResize]);
 
   useEffect(() => {
     if (isOpen) {
@@ -429,13 +657,26 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-3 sm:p-6 z-50 transition-opacity duration-300 animate-fade-in-scale"
+      className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 sm:p-8 z-50 transition-opacity duration-300 animate-fade-in-scale"
       onClick={handleOverlayClick}
       role="dialog"
       aria-modal="true"
       aria-labelledby="workspace-settings-modal"
     >
-      <div className="bg-surface rounded-2xl shadow-2xl w-full h-full sm:h-auto sm:max-h-[90vh] max-w-6xl transform transition-all duration-300 overflow-hidden flex flex-col">
+      <div
+        className={`relative bg-surface/95 border border-border-strong rounded-lg shadow-2xl flex flex-col overflow-hidden ${
+          isResizing ? 'select-none' : ''
+        }`}
+        style={{
+          width: modalSize.width,
+          height: modalSize.height,
+          minWidth: 'min(720px, calc(100vw - 3rem))',
+          minHeight: 'min(540px, calc(100vh - 4rem))',
+          maxWidth: 'min(1200px, calc(100vw - 2rem))',
+          maxHeight: 'min(840px, calc(100vh - 2rem))',
+          transition: isResizing ? 'none' : 'width 160ms ease-out, height 160ms ease-out',
+        }}
+      >
         <SettingsModalHeader onClose={onClose} />
         <SettingsCategoryTabs
           categories={SETTINGS_CATEGORIES}
@@ -451,22 +692,39 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           />
 
           <div
-            className="flex-1 overflow-y-auto p-5 sm:p-8"
+            className="relative flex-1"
             role="tabpanel"
             id={`settings-panel-${activeCategory}`}
             aria-labelledby={`settings-tab-${activeCategory}`}
           >
-            {activeCategoryConfig && (
-              <div className="mb-6 hidden sm:block">
-                <h3 className="text-lg font-semibold text-text-primary">{activeCategoryConfig.label}</h3>
-                <p className="mt-1 text-sm text-text-secondary">{activeCategoryConfig.description}</p>
-              </div>
-            )}
-            {renderCategoryContent()}
+            <div
+              key={activeCategory}
+              className="h-full overflow-y-auto p-5 sm:p-8 transition-opacity duration-200 ease-out"
+            >
+              {activeCategoryConfig && (
+                <div className="mb-6 hidden sm:block">
+                  <h3 className="text-lg font-semibold text-text-primary">{activeCategoryConfig.label}</h3>
+                  <p className="mt-1 text-sm text-text-secondary">{activeCategoryConfig.description}</p>
+                </div>
+              )}
+              {renderCategoryContent()}
+            </div>
           </div>
         </div>
 
         <SettingsModalFooter onClose={onClose} onSave={handleSave} onSaveAsPreset={handleSaveAsPreset} />
+        <div
+          className="absolute bottom-0 right-0 p-3 cursor-nwse-resize text-text-secondary/70 hover:text-primary transition-colors duration-150"
+          onPointerDown={handleResizePointerDown}
+          role="presentation"
+          aria-hidden="true"
+        >
+          <div
+            className={`pointer-events-none h-3 w-3 border-b border-r border-current ${
+              isResizing ? 'opacity-100' : 'opacity-70'
+            }`}
+          />
+        </div>
       </div>
     </div>
   );

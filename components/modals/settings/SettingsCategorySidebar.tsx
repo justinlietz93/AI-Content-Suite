@@ -8,13 +8,19 @@ interface SettingsCategorySidebarProps {
   onSelect: (categoryId: SettingsCategoryId) => void;
 }
 
+/**
+ * Renders the desktop navigation list for switching between settings categories within the modal.
+ *
+ * @param props - Category metadata alongside the active selection and click handler.
+ * @returns Sidebar navigation markup that reflects the current selection state.
+ */
 export const SettingsCategorySidebar: React.FC<SettingsCategorySidebarProps> = ({
   categories,
   activeCategory,
   onSelect,
 }) => (
   <aside
-    className="hidden sm:flex sm:flex-col w-64 border-r border-border-color bg-secondary/40 p-4 gap-3 overflow-y-auto"
+    className="hidden sm:flex sm:flex-col w-64 border-r border-border-color/80 bg-secondary/40 p-4 gap-3 overflow-y-auto"
     role="tablist"
     aria-orientation="vertical"
   >
@@ -29,10 +35,10 @@ export const SettingsCategorySidebar: React.FC<SettingsCategorySidebarProps> = (
           aria-selected={isActive}
           aria-controls={`settings-panel-${category.id}`}
           role="tab"
-          className={`w-full flex items-center justify-between gap-3 px-4 py-3 text-sm rounded-full border transition-colors duration-150 text-left ${
+          className={`w-full flex items-center justify-between gap-3 px-4 py-3 text-sm rounded-md border transition-colors duration-200 text-left ${
             isActive
               ? 'bg-primary/10 border-primary text-primary font-semibold shadow-sm'
-              : 'bg-surface border-border-color text-text-secondary hover:text-text-primary'
+              : 'bg-surface/80 border-border-color text-text-secondary hover:text-text-primary'
           }`}
         >
           <span className="flex-1">
