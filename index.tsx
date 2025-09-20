@@ -28,11 +28,11 @@ if (typeof process === 'undefined') {
   window.process = { env: {} };
 }
 if (!process.env.API_KEY) {
-  // IMPORTANT: Replace this with your actual API key or use environment variables.
+  // IMPORTANT: Replace this with your default API key or manage credentials at runtime via the AI Settings dialog.
   // For safety, it's best to manage API keys outside of version control.
   // This is only a placeholder for the application to run in a sandboxed environment.
-  // process.env.API_KEY = "YOUR_GEMINI_API_KEY"; 
-  console.warn("API_KEY environment variable is not set. Gemini API calls will fail.");
+  // process.env.API_KEY = "YOUR_DEFAULT_AI_API_KEY";
+  console.warn("API_KEY environment variable is not set. Configure provider keys from the AI Settings dialog before using AI features.");
 }
 
 

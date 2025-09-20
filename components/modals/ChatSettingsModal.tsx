@@ -1,7 +1,9 @@
 
 
-import React, { useState, useEffect, MouseEvent } from 'react';
-import type { ChatSettings, SavedPrompt } from '../../types';
+import React, { useState, useEffect, useCallback, useRef, MouseEvent } from 'react';
+import type { ChatSettings, SavedPrompt, AIProviderSettings, AIProviderId, ModelOption } from '../../types';
+import type { ProviderInfo } from '../../services/providerRegistry';
+import { DEFAULT_PROVIDER_MODELS } from '../../constants';
 import { XCircleIcon } from '../icons/XCircleIcon';
 import { TrashIcon } from '../icons/TrashIcon';
 
@@ -9,25 +11,145 @@ interface ChatSettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   currentSettings: ChatSettings;
-  onSave: (newSettings: ChatSettings) => void;
+  providerSettings: AIProviderSettings;
+  providers: ProviderInfo[];
+  onSave: (newSettings: ChatSettings, providerSettings: AIProviderSettings) => void;
+  onFetchModels: (providerId: AIProviderId, apiKey?: string) => Promise<ModelOption[]>;
   savedPrompts: SavedPrompt[];
   onSavePreset: (name: string, prompt: string) => void;
   onDeletePreset: (name: string) => void;
 }
 
-export const ChatSettingsModal: React.FC<ChatSettingsModalProps> = ({ isOpen, onClose, currentSettings, onSave, savedPrompts, onSavePreset, onDeletePreset }) => {
+export const ChatSettingsModal: React.FC<ChatSettingsModalProps> = ({
+  isOpen,
+  onClose,
+  currentSettings,
+  providerSettings,
+  providers,
+  onSave,
+  onFetchModels,
+  savedPrompts,
+  onSavePreset,
+  onDeletePreset,
+}) => {
   const [editedSettings, setEditedSettings] = useState<ChatSettings>(currentSettings);
+  const [editedProviderSettings, setEditedProviderSettings] = useState<AIProviderSettings>(providerSettings);
+  const [modelOptions, setModelOptions] = useState<ModelOption[]>([]);
+  const [modelsLoading, setModelsLoading] = useState(false);
+  const [modelsError, setModelsError] = useState<string | null>(null);
   const [selectedPreset, setSelectedPreset] = useState<string>(''); // Holds the name of the selected preset
+  const loadRequestIdRef = useRef(0);
+
+  const loadModels = useCallback(async (providerId: AIProviderId, apiKey?: string) => {
+    const providerInfo = providers.find(p => p.id === providerId);
+    const trimmedKey = apiKey?.trim();
+
+    if (providerInfo?.requiresApiKey && !trimmedKey) {
+      setModelOptions([]);
+      setModelsError(`${providerInfo.label} requires an API key to load models.`);
+      setModelsLoading(false);
+      return;
+    }
+
+    const requestId = ++loadRequestIdRef.current;
+    setModelsLoading(true);
+    setModelsError(null);
+    setModelOptions([]);
+
+    try {
+      const models = await onFetchModels(providerId, trimmedKey);
+      if (loadRequestIdRef.current !== requestId) {
+        return;
+      }
+      setModelOptions(models);
+      if (models.length > 0) {
+        setEditedProviderSettings(prev => {
+          if (prev.selectedProvider !== providerId) return prev;
+          if (models.some(model => model.id === prev.selectedModel)) {
+            return prev;
+          }
+          return { ...prev, selectedModel: models[0].id };
+        });
+      }
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        return;
+      }
+      const message = error instanceof Error ? error.message : String(error);
+      setModelsError(message);
+      setModelOptions([]);
+    } finally {
+      if (loadRequestIdRef.current === requestId) {
+        setModelsLoading(false);
+      }
+    }
+  }, [onFetchModels, providers]);
 
   useEffect(() => {
     if (isOpen) {
       setEditedSettings(currentSettings);
+      setEditedProviderSettings(providerSettings);
+      setModelOptions([]);
+      setModelsError(null);
+      setModelsLoading(false);
       setSelectedPreset(''); // Reset selection when opening
     }
-  }, [isOpen, currentSettings]);
+  }, [isOpen, currentSettings, providerSettings]);
+
+  useEffect(() => {
+    if (isOpen) {
+      const providerId = providerSettings.selectedProvider;
+      const apiKey = providerSettings.apiKeys?.[providerId];
+      loadModels(providerId, apiKey);
+    }
+  }, [isOpen, providerSettings, loadModels]);
 
   const handleSave = () => {
-    onSave(editedSettings);
+    const providerId = editedProviderSettings.selectedProvider;
+    const trimmedModel = editedProviderSettings.selectedModel.trim();
+    const fallbackModel = DEFAULT_PROVIDER_MODELS[providerId] ?? DEFAULT_PROVIDER_MODELS[providerSettings.selectedProvider];
+    const sanitizedApiKeys = Object.entries(editedProviderSettings.apiKeys || {}).reduce<AIProviderSettings['apiKeys']>((acc, [key, value]) => {
+      const trimmed = typeof value === 'string' ? value.trim() : value;
+      if (trimmed) {
+        acc[key] = trimmed;
+      }
+      return acc;
+    }, {});
+
+    const finalProviderSettings: AIProviderSettings = {
+      selectedProvider: providerId,
+      selectedModel: trimmedModel || fallbackModel,
+      apiKeys: sanitizedApiKeys,
+    };
+
+    onSave(editedSettings, finalProviderSettings);
+  };
+
+  const handleProviderChange = (providerId: AIProviderId) => {
+    setEditedProviderSettings(prev => {
+      const fallbackModel = DEFAULT_PROVIDER_MODELS[providerId] ?? prev.selectedModel;
+      return {
+        ...prev,
+        selectedProvider: providerId,
+        selectedModel: fallbackModel,
+      };
+    });
+    const apiKey = editedProviderSettings.apiKeys?.[providerId];
+    loadModels(providerId, apiKey);
+  };
+
+  const handleApiKeyChange = (providerId: AIProviderId, value: string) => {
+    setEditedProviderSettings(prev => ({
+      ...prev,
+      apiKeys: { ...prev.apiKeys, [providerId]: value },
+    }));
+  };
+
+  const handleModelInputChange = (value: string) => {
+    setEditedProviderSettings(prev => ({
+      ...prev,
+      selectedModel: value,
+    }));
   };
 
   const handleLoadPreset = (name: string) => {
@@ -61,6 +183,9 @@ export const ChatSettingsModal: React.FC<ChatSettingsModalProps> = ({ isOpen, on
     }
   };
 
+  const selectedProviderInfo = providers.find(p => p.id === editedProviderSettings.selectedProvider);
+  const selectedApiKey = editedProviderSettings.apiKeys?.[editedProviderSettings.selectedProvider] ?? '';
+
   if (!isOpen) return null;
 
   return (
@@ -81,11 +206,91 @@ export const ChatSettingsModal: React.FC<ChatSettingsModalProps> = ({ isOpen, on
         
         <div className="p-6 sm:p-8 space-y-4">
             <div>
+              <label htmlFor="provider-selector" className="block text-sm font-medium text-text-secondary mb-2">
+                AI Provider
+              </label>
+              <select
+                id="provider-selector"
+                value={editedProviderSettings.selectedProvider}
+                onChange={(e) => handleProviderChange(e.target.value as AIProviderId)}
+                className="w-full px-3 py-2 bg-input border border-border-color rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-ring text-text-primary text-sm"
+              >
+                {providers.map(provider => (
+                  <option key={provider.id} value={provider.id}>{provider.label}</option>
+                ))}
+              </select>
+              {selectedProviderInfo?.docsUrl && (
+                <p className="mt-1 text-xs text-text-secondary">
+                  API docs:{' '}
+                  <a href={selectedProviderInfo.docsUrl} target="_blank" rel="noreferrer" className="text-primary underline">
+                    {selectedProviderInfo.docsUrl}
+                  </a>
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label htmlFor="provider-api-key" className="block text-sm font-medium text-text-secondary mb-2">
+                API Key
+              </label>
+              <input
+                id="provider-api-key"
+                type="password"
+                value={selectedApiKey}
+                onChange={(e) => handleApiKeyChange(editedProviderSettings.selectedProvider, e.target.value)}
+                placeholder={selectedProviderInfo?.requiresApiKey ? 'Enter your API key' : 'Optional for this provider'}
+                className="w-full px-3 py-2 bg-input border border-border-color rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-ring text-text-primary placeholder-text-secondary text-sm"
+              />
+              <p className="mt-1 text-xs text-text-secondary">
+                {selectedProviderInfo?.requiresApiKey
+                  ? 'Required to authenticate requests.'
+                  : 'Optional. Leave blank for local deployments.'}
+              </p>
+            </div>
+
+            <div>
+              <label htmlFor="provider-model" className="block text-sm font-medium text-text-secondary mb-2">
+                Model
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  id="provider-model"
+                  type="text"
+                  list="provider-model-options"
+                  value={editedProviderSettings.selectedModel}
+                  onChange={(e) => handleModelInputChange(e.target.value)}
+                  placeholder="Select or enter a model name"
+                  className="flex-grow px-3 py-2 bg-input border border-border-color rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-ring text-text-primary placeholder-text-secondary text-sm"
+                />
+                <button
+                  type="button"
+                  onClick={() => loadModels(editedProviderSettings.selectedProvider, selectedApiKey)}
+                  className="px-3 py-2 bg-muted text-text-primary font-medium rounded-md hover:bg-border-color transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-secondary disabled:opacity-50"
+                  disabled={modelsLoading}
+                >
+                  {modelsLoading ? 'Loading...' : 'Refresh'}
+                </button>
+              </div>
+              <datalist id="provider-model-options">
+                {modelOptions.map(model => (
+                  <option key={model.id} value={model.id}>{model.label}</option>
+                ))}
+              </datalist>
+              {modelsError ? (
+                <p className="mt-1 text-xs text-destructive">{modelsError}</p>
+              ) : modelOptions.length > 0 ? (
+                <p className="mt-1 text-xs text-text-secondary">Choose a model from the suggestions or provide a custom value.</p>
+              ) : (
+                <p className="mt-1 text-xs text-text-secondary">Enter a model name or refresh to fetch available options.</p>
+              )}
+            </div>
+
+            <div>
               <label htmlFor="preset-selector" className="block text-sm font-medium text-text-secondary mb-2">
                 Manage Presets
               </label>
               <div className="flex items-center gap-2">
-                <select 
+                <select
                   id="preset-selector"
                   value={selectedPreset}
                   onChange={(e) => handleLoadPreset(e.target.value)}

@@ -13,10 +13,10 @@ export const readFileAsText = (file: File): Promise<string> => {
 };
 
 /**
- * Converts a File object to a Gemini GenerativePart.
+ * Converts a File object to a provider-agnostic chat message part.
  * Handles images by converting to base64 and other files as text.
  * @param file The file to convert.
- * @returns A promise that resolves to a GenerativePart object.
+ * @returns A promise that resolves to a message part object understood by supported providers.
  */
 export const fileToGenerativePart = async (file: File): Promise<any> => {
     if (file.type.startsWith('image/')) {
