@@ -20,6 +20,11 @@ export interface ChatInterfaceProps {
     onOpenSettings: () => void;
 }
 
+/**
+ * Presents the live chat workspace including transcript history, drag-and-drop file
+ * attachments, and the streaming input form. The component expects sizing to be managed
+ * by the parent feature panel and therefore stretches to fill the available height.
+ */
 export const ChatInterface: React.FC<ChatInterfaceProps> = ({
     history, isStreaming,
     chatInput, onChatInputChange,
@@ -51,7 +56,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
     return (
         <div
-            className={`relative animate-fade-in-scale flex flex-col flex-1 min-h-0 transition-all duration-300 rounded-lg ${isDraggingOver ? 'ring-4 ring-primary ring-offset-4 ring-offset-surface' : ''}`}
+            className={`relative animate-fade-in-scale flex h-full flex-col flex-1 min-h-0 transition-shadow duration-200 rounded-lg ${isDraggingOver ? 'ring-4 ring-primary ring-offset-4 ring-offset-surface' : ''}`}
             onDragEnter={handleDragEnter} onDragLeave={handleDragLeave} onDragOver={handleDragOver} onDrop={handleDrop}
         >
             {isDraggingOver && (
