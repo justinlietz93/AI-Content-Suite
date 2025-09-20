@@ -1,9 +1,25 @@
 
-
 import React, { useState, useEffect, useCallback, useRef, MouseEvent } from 'react';
-import type { ChatSettings, SavedPrompt, AIProviderSettings, AIProviderId, ModelOption } from '../../types';
-import type { ProviderInfo } from '../../services/providerRegistry';
-import { DEFAULT_PROVIDER_MODELS } from '../../constants';
+import type {
+  ChatSettings,
+  SavedPrompt,
+  AIProviderSettings,
+  AIProviderId,
+  ModelOption,
+  VectorStoreSettings,
+  EmbeddingProviderId,
+} from '../../types';
+import type { ProviderInfo, EmbeddingProviderInfo } from '../../services/providerRegistry';
+import {
+  DEFAULT_PROVIDER_MODELS,
+  DEFAULT_EMBEDDING_MODELS,
+  INITIAL_CHAT_SETTINGS,
+} from '../../constants';
+import {
+  EMBEDDING_PROVIDERS,
+  requiresEmbeddingApiKey,
+  getEmbeddingProviderDefaultEndpoint,
+} from '../../services/providerRegistry';
 import { XCircleIcon } from '../icons/XCircleIcon';
 import { TrashIcon } from '../icons/TrashIcon';
 
@@ -20,6 +36,23 @@ interface ChatSettingsModalProps {
   onDeletePreset: (name: string) => void;
 }
 
+const ensureVectorStoreSettings = (vectorStore?: VectorStoreSettings): VectorStoreSettings => {
+  const defaults = INITIAL_CHAT_SETTINGS.vectorStore!;
+  return {
+    ...defaults,
+    ...(vectorStore ?? {}),
+    embedding: {
+      ...defaults.embedding,
+      ...(vectorStore?.embedding ?? {}),
+    },
+  };
+};
+
+const withDefaults = (settings: ChatSettings): ChatSettings => ({
+  ...settings,
+  vectorStore: ensureVectorStoreSettings(settings.vectorStore),
+});
+
 export const ChatSettingsModal: React.FC<ChatSettingsModalProps> = ({
   isOpen,
   onClose,
@@ -32,13 +65,24 @@ export const ChatSettingsModal: React.FC<ChatSettingsModalProps> = ({
   onSavePreset,
   onDeletePreset,
 }) => {
-  const [editedSettings, setEditedSettings] = useState<ChatSettings>(currentSettings);
+
+  const [editedSettings, setEditedSettings] = useState<ChatSettings>(() => withDefaults(currentSettings));
   const [editedProviderSettings, setEditedProviderSettings] = useState<AIProviderSettings>(providerSettings);
   const [modelOptions, setModelOptions] = useState<ModelOption[]>([]);
   const [modelsLoading, setModelsLoading] = useState(false);
   const [modelsError, setModelsError] = useState<string | null>(null);
   const [selectedPreset, setSelectedPreset] = useState<string>(''); // Holds the name of the selected preset
   const loadRequestIdRef = useRef(0);
+
+  const updateVectorStore = useCallback((updater: (prev: VectorStoreSettings) => VectorStoreSettings) => {
+    setEditedSettings(prev => {
+      const currentVector = ensureVectorStoreSettings(prev.vectorStore);
+      return {
+        ...prev,
+        vectorStore: updater(currentVector),
+      };
+    });
+  }, []);
 
   const loadModels = useCallback(async (providerId: AIProviderId, apiKey?: string) => {
     const providerInfo = providers.find(p => p.id === providerId);
@@ -87,7 +131,7 @@ export const ChatSettingsModal: React.FC<ChatSettingsModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
-      setEditedSettings(currentSettings);
+      setEditedSettings(withDefaults(currentSettings));
       setEditedProviderSettings(providerSettings);
       setModelOptions([]);
       setModelsError(null);
@@ -116,13 +160,40 @@ export const ChatSettingsModal: React.FC<ChatSettingsModalProps> = ({
       return acc;
     }, {});
 
+    const draftVectorStore = ensureVectorStoreSettings(editedSettings.vectorStore);
+    const parsedTopK = Number(draftVectorStore.topK);
+    const sanitizedTopK = Number.isFinite(parsedTopK) && parsedTopK > 0 ? Math.min(Math.round(parsedTopK), 20) : 5;
+    const sanitizedVectorStore: VectorStoreSettings = {
+      enabled: Boolean(draftVectorStore.enabled),
+      url: (draftVectorStore.url || '').trim(),
+      apiKey: draftVectorStore.apiKey && draftVectorStore.apiKey.trim() !== '' ? draftVectorStore.apiKey.trim() : undefined,
+      collection: (draftVectorStore.collection || '').trim(),
+      topK: sanitizedTopK,
+      embedding: {
+        provider: draftVectorStore.embedding.provider,
+        model: draftVectorStore.embedding.model.trim(),
+        apiKey:
+          draftVectorStore.embedding.apiKey && draftVectorStore.embedding.apiKey.trim() !== ''
+            ? draftVectorStore.embedding.apiKey.trim()
+            : undefined,
+        baseUrl:
+          draftVectorStore.embedding.baseUrl && draftVectorStore.embedding.baseUrl.trim() !== ''
+            ? draftVectorStore.embedding.baseUrl.trim()
+            : undefined,
+      },
+    };
     const finalProviderSettings: AIProviderSettings = {
       selectedProvider: providerId,
       selectedModel: trimmedModel || fallbackModel,
       apiKeys: sanitizedApiKeys,
     };
 
-    onSave(editedSettings, finalProviderSettings);
+    const finalChatSettings: ChatSettings = {
+      ...editedSettings,
+      vectorStore: sanitizedVectorStore,
+    };
+
+    onSave(finalChatSettings, finalProviderSettings);
   };
 
   const handleProviderChange = (providerId: AIProviderId) => {
@@ -149,6 +220,70 @@ export const ChatSettingsModal: React.FC<ChatSettingsModalProps> = ({
     setEditedProviderSettings(prev => ({
       ...prev,
       selectedModel: value,
+    }));
+  };
+
+  const handleVectorStoreEnabledChange = (enabled: boolean) => {
+    updateVectorStore(prev => ({ ...prev, enabled }));
+  };
+
+  const handleVectorStoreUrlChange = (value: string) => {
+    updateVectorStore(prev => ({ ...prev, url: value }));
+  };
+
+  const handleVectorStoreCollectionChange = (value: string) => {
+    updateVectorStore(prev => ({ ...prev, collection: value }));
+  };
+
+  const handleVectorStoreApiKeyChange = (value: string) => {
+    updateVectorStore(prev => ({ ...prev, apiKey: value }));
+  };
+
+  const handleVectorStoreTopKChange = (value: string) => {
+    const numericValue = Number(value);
+    updateVectorStore(prev => ({
+      ...prev,
+      topK: value === '' ? 0 : Number.isFinite(numericValue) ? numericValue : prev.topK,
+    }));
+  };
+
+  const handleEmbeddingProviderChange = (providerId: EmbeddingProviderId) => {
+    updateVectorStore(prev => {
+      if (prev.embedding.provider === providerId) {
+        return { ...prev, embedding: { ...prev.embedding, provider: providerId } };
+      }
+      const defaultModel = DEFAULT_EMBEDDING_MODELS[providerId] ?? '';
+      const defaultEndpoint = getEmbeddingProviderDefaultEndpoint(providerId) ?? '';
+      return {
+        ...prev,
+        embedding: {
+          ...prev.embedding,
+          provider: providerId,
+          model: defaultModel,
+          baseUrl: providerId === 'custom' ? '' : defaultEndpoint,
+        },
+      };
+    });
+  };
+
+  const handleEmbeddingModelChange = (value: string) => {
+    updateVectorStore(prev => ({
+      ...prev,
+      embedding: { ...prev.embedding, model: value },
+    }));
+  };
+
+  const handleEmbeddingApiKeyChange = (value: string) => {
+    updateVectorStore(prev => ({
+      ...prev,
+      embedding: { ...prev.embedding, apiKey: value },
+    }));
+  };
+
+  const handleEmbeddingBaseUrlChange = (value: string) => {
+    updateVectorStore(prev => ({
+      ...prev,
+      embedding: { ...prev.embedding, baseUrl: value },
     }));
   };
 
@@ -185,6 +320,16 @@ export const ChatSettingsModal: React.FC<ChatSettingsModalProps> = ({
 
   const selectedProviderInfo = providers.find(p => p.id === editedProviderSettings.selectedProvider);
   const selectedApiKey = editedProviderSettings.apiKeys?.[editedProviderSettings.selectedProvider] ?? '';
+  const vectorStoreSettings = editedSettings.vectorStore ?? ensureVectorStoreSettings();
+  const embeddingSettings = vectorStoreSettings.embedding;
+  const selectedEmbeddingProviderInfo = EMBEDDING_PROVIDERS.find(p => p.id === embeddingSettings.provider) as
+    | EmbeddingProviderInfo
+    | undefined;
+  const embeddingEndpointPlaceholder =
+    embeddingSettings.provider === 'custom'
+      ? 'https://your-embedding-endpoint/v1/embeddings'
+      : getEmbeddingProviderDefaultEndpoint(embeddingSettings.provider) ?? '';
+  const embeddingRequiresApiKey = requiresEmbeddingApiKey(embeddingSettings.provider);
 
   if (!isOpen) return null;
 
@@ -285,6 +430,180 @@ export const ChatSettingsModal: React.FC<ChatSettingsModalProps> = ({
               )}
             </div>
 
+            <div className="border border-border-color rounded-lg p-4 space-y-4">
+              <div className="flex items-start gap-3">
+                <input
+                  id="vector-store-enabled"
+                  type="checkbox"
+                  checked={vectorStoreSettings.enabled}
+                  onChange={(e) => handleVectorStoreEnabledChange(e.target.checked)}
+                  className="mt-1 h-4 w-4 text-primary focus:ring-ring border-border-color rounded"
+                />
+                <div>
+                  <label htmlFor="vector-store-enabled" className="text-sm font-medium text-text-secondary">
+                    Enable Qdrant retrieval
+                  </label>
+                  <p className="mt-1 text-xs text-text-secondary">
+                    When enabled, chat requests will fetch relevant knowledge base entries from your centralized Qdrant
+                    collection and share them with the model before it responds.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="sm:col-span-2">
+                  <label htmlFor="vector-store-url" className="block text-sm font-medium text-text-secondary mb-2">
+                    Qdrant URL
+                  </label>
+                  <input
+                    id="vector-store-url"
+                    type="url"
+                    value={vectorStoreSettings.url}
+                    onChange={(e) => handleVectorStoreUrlChange(e.target.value)}
+                    placeholder="https://qdrant.yourcompany.com"
+                    className="w-full px-3 py-2 bg-input border border-border-color rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-ring text-text-primary placeholder-text-secondary text-sm"
+                    disabled={!vectorStoreSettings.enabled}
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="vector-store-collection" className="block text-sm font-medium text-text-secondary mb-2">
+                    Collection name
+                  </label>
+                  <input
+                    id="vector-store-collection"
+                    type="text"
+                    value={vectorStoreSettings.collection}
+                    onChange={(e) => handleVectorStoreCollectionChange(e.target.value)}
+                    placeholder="knowledge-base"
+                    className="w-full px-3 py-2 bg-input border border-border-color rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-ring text-text-primary placeholder-text-secondary text-sm"
+                    disabled={!vectorStoreSettings.enabled}
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="vector-store-api-key" className="block text-sm font-medium text-text-secondary mb-2">
+                    Qdrant API key
+                  </label>
+                  <input
+                    id="vector-store-api-key"
+                    type="password"
+                    value={vectorStoreSettings.apiKey ?? ''}
+                    onChange={(e) => handleVectorStoreApiKeyChange(e.target.value)}
+                    placeholder="Optional"
+                    className="w-full px-3 py-2 bg-input border border-border-color rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-ring text-text-primary placeholder-text-secondary text-sm"
+                    disabled={!vectorStoreSettings.enabled}
+                  />
+                  <p className="mt-1 text-xs text-text-secondary">
+                    Leave blank if your cluster is secured by network rules. Provide a key for hosted deployments.
+                  </p>
+                </div>
+
+                <div>
+                  <label htmlFor="vector-store-topk" className="block text-sm font-medium text-text-secondary mb-2">
+                    Results per query (Top-k)
+                  </label>
+                  <input
+                    id="vector-store-topk"
+                    type="number"
+                    min={1}
+                    max={20}
+                    value={vectorStoreSettings.topK || ''}
+                    onChange={(e) => handleVectorStoreTopKChange(e.target.value)}
+                    className="w-full px-3 py-2 bg-input border border-border-color rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-ring text-text-primary placeholder-text-secondary text-sm"
+                    disabled={!vectorStoreSettings.enabled}
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label htmlFor="embedding-provider" className="block text-sm font-medium text-text-secondary mb-2">
+                    Embedding provider
+                  </label>
+                  <select
+                    id="embedding-provider"
+                    value={embeddingSettings.provider}
+                    onChange={(e) => handleEmbeddingProviderChange(e.target.value as EmbeddingProviderId)}
+                    className="w-full px-3 py-2 bg-input border border-border-color rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-ring text-text-primary text-sm"
+                    disabled={!vectorStoreSettings.enabled}
+                  >
+                    {EMBEDDING_PROVIDERS.map(provider => (
+                      <option key={provider.id} value={provider.id}>
+                        {provider.label}
+                      </option>
+                    ))}
+                  </select>
+                  {selectedEmbeddingProviderInfo?.docsUrl && (
+                    <p className="mt-1 text-xs text-text-secondary">
+                      API docs:{' '}
+                      <a
+                        href={selectedEmbeddingProviderInfo.docsUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-primary underline"
+                      >
+                        {selectedEmbeddingProviderInfo.docsUrl}
+                      </a>
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label htmlFor="embedding-model" className="block text-sm font-medium text-text-secondary mb-2">
+                    Embedding model
+                  </label>
+                  <input
+                    id="embedding-model"
+                    type="text"
+                    value={embeddingSettings.model}
+                    onChange={(e) => handleEmbeddingModelChange(e.target.value)}
+                    placeholder="text-embedding-3-small"
+                    className="w-full px-3 py-2 bg-input border border-border-color rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-ring text-text-primary placeholder-text-secondary text-sm"
+                    disabled={!vectorStoreSettings.enabled}
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="embedding-api-key" className="block text-sm font-medium text-text-secondary mb-2">
+                    Embedding API key
+                  </label>
+                  <input
+                    id="embedding-api-key"
+                    type="password"
+                    value={embeddingSettings.apiKey ?? ''}
+                    onChange={(e) => handleEmbeddingApiKeyChange(e.target.value)}
+                    placeholder={embeddingRequiresApiKey ? 'Required for this provider' : 'Optional'}
+                    className="w-full px-3 py-2 bg-input border border-border-color rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-ring text-text-primary placeholder-text-secondary text-sm"
+                    disabled={!vectorStoreSettings.enabled}
+                  />
+                  <p className="mt-1 text-xs text-text-secondary">
+                    {embeddingRequiresApiKey
+                      ? 'Required to request embeddings from this provider.'
+                      : 'Optional. Local endpoints such as Ollama typically do not need an API key.'}
+                  </p>
+                </div>
+
+                <div>
+                  <label htmlFor="embedding-endpoint" className="block text-sm font-medium text-text-secondary mb-2">
+                    Embedding endpoint override
+                  </label>
+                  <input
+                    id="embedding-endpoint"
+                    type="url"
+                    value={embeddingSettings.baseUrl ?? ''}
+                    onChange={(e) => handleEmbeddingBaseUrlChange(e.target.value)}
+                    placeholder={embeddingEndpointPlaceholder || 'https://...' }
+                    className="w-full px-3 py-2 bg-input border border-border-color rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-ring text-text-primary placeholder-text-secondary text-sm"
+                    disabled={!vectorStoreSettings.enabled}
+                  />
+                  <p className="mt-1 text-xs text-text-secondary">
+                    Leave blank to use the default endpoint for {selectedEmbeddingProviderInfo?.label ?? 'this provider'}.
+                    Provide a custom URL for self-hosted or proxy deployments.
+                  </p>
+                </div>
+              </div>
+            </div>
             <div>
               <label htmlFor="preset-selector" className="block text-sm font-medium text-text-secondary mb-2">
                 Manage Presets

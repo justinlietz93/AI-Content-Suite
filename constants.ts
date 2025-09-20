@@ -1,6 +1,16 @@
 
-
-import type { ProgressUpdate, ReasoningSettings, ScaffolderSettings, RequestSplitterSettings, PromptEnhancerSettings, AgentDesignerSettings, ChatSettings, AIProviderSettings, AIProviderId } from './types';
+import type {
+  ProgressUpdate,
+  ReasoningSettings,
+  ScaffolderSettings,
+  RequestSplitterSettings,
+  PromptEnhancerSettings,
+  AgentDesignerSettings,
+  ChatSettings,
+  AIProviderSettings,
+  AIProviderId,
+  EmbeddingProviderId,
+} from './types';
 
 // Import all summary prompts from the new modular structure
 import * as summaryPrompts from './prompts/summaries';
@@ -26,6 +36,14 @@ export const DEFAULT_PROVIDER_MODELS: Record<AIProviderId, string> = {
   deepseek: 'deepseek-chat',
   anthropic: 'claude-3-5-sonnet-latest',
   ollama: 'llama3.1:8b',
+};
+
+export const DEFAULT_EMBEDDING_MODELS: Record<EmbeddingProviderId, string> = {
+  openai: 'text-embedding-3-small',
+  openrouter: 'text-embedding-3-small',
+  deepseek: 'deepseek-embedding',
+  ollama: 'nomic-embed-text',
+  custom: '',
 };
 
 // Approximate token estimation: 1 token ~ 4 characters.
@@ -108,6 +126,25 @@ export const INITIAL_AGENT_DESIGNER_SETTINGS: AgentDesignerSettings = {
 
 export const INITIAL_CHAT_SETTINGS: ChatSettings = {
     systemInstruction: 'You are a helpful and friendly AI assistant. Answer the user\'s questions clearly and concisely.',
+    vectorStore: {
+        enabled: false,
+        url: '',
+        apiKey: '',
+        collection: '',
+        topK: 5,
+        embedding: {
+            provider: 'openai',
+            model: DEFAULT_EMBEDDING_MODELS.openai,
+            apiKey: '',
+            baseUrl: '',
+        },
+    },
+};
+
+export const INITIAL_AI_PROVIDER_SETTINGS: AIProviderSettings = {
+    selectedProvider: 'openai',
+    selectedModel: DEFAULT_PROVIDER_MODELS.openai,
+    apiKeys: {},
 };
 
 export const INITIAL_AI_PROVIDER_SETTINGS: AIProviderSettings = {

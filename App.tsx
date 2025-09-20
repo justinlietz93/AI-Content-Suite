@@ -33,6 +33,7 @@ import { ResultsViewer } from './components/layouts/ResultsViewer';
 
 
 const PROVIDER_SETTINGS_STORAGE_KEY = 'ai_content_suite_provider_settings';
+const CHAT_SETTINGS_STORAGE_KEY = 'ai_content_suite_chat_settings';
 
 const App: React.FC = () => {
   // --- STATE MANAGEMENT ---
@@ -82,6 +83,37 @@ const App: React.FC = () => {
   // --- EFFECTS ---
   useEffect(() => {
     try {
+      const savedSettings = localStorage.getItem(CHAT_SETTINGS_STORAGE_KEY);
+      if (savedSettings) {
+        const parsed = JSON.parse(savedSettings);
+        if (parsed && typeof parsed === 'object') {
+          const defaults = INITIAL_CHAT_SETTINGS.vectorStore;
+          const parsedVectorStore = parsed.vectorStore && typeof parsed.vectorStore === 'object' ? parsed.vectorStore : {};
+          const mergedVectorStore = defaults
+            ? {
+                ...defaults,
+                ...parsedVectorStore,
+                embedding: {
+                  ...defaults.embedding,
+                  ...(parsedVectorStore.embedding ?? {}),
+                },
+              }
+            : parsedVectorStore;
+
+          setChatSettings({
+            ...INITIAL_CHAT_SETTINGS,
+            ...parsed,
+            vectorStore: mergedVectorStore,
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load chat settings from local storage:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
       const saved = localStorage.getItem(PROVIDER_SETTINGS_STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
@@ -108,6 +140,14 @@ const App: React.FC = () => {
       console.error('Failed to save provider settings to local storage:', e);
     }
   }, [aiProviderSettings]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(CHAT_SETTINGS_STORAGE_KEY, JSON.stringify(chatSettings));
+    } catch (error) {
+      console.error('Failed to save chat settings to local storage:', error);
+    }
+  }, [chatSettings]);
 
   useEffect(() => {
     const apiKey = aiProviderSettings.apiKeys?.[aiProviderSettings.selectedProvider];
@@ -343,16 +383,17 @@ const App: React.FC = () => {
 
       const userMessage: ChatMessage = { role: 'user', parts: userMessageParts };
 
-      setChatHistory(prev => [...prev, userMessage, { role: 'model', parts: [{ text: '' }] }]);
+      setChatHistory(prev => [...prev, userMessage, { role: 'model', parts: [{ text: '' }], thinking: [] }]);
       setChatInput('');
       setChatFiles(null);
       setIsStreamingResponse(true);
       setError(null);
 
-      const responseText = await sendChatMessage({
+      const response = await sendChatMessage({
         history: historyBeforeMessage,
         userMessage: userMessageParts,
         systemInstruction: chatSettings.systemInstruction,
+        vectorStoreSettings: chatSettings.vectorStore,
       });
 
       setChatHistory(prev => {
@@ -361,11 +402,15 @@ const App: React.FC = () => {
         const lastIndex = updatedHistory.length - 1;
         const lastMessage = updatedHistory[lastIndex];
         if (lastMessage && lastMessage.role === 'model') {
+          const thinkingSegments = response.thinking.length > 0 ? [...response.thinking] : undefined;
+          const finalText = response.text;
           const firstPart = lastMessage.parts[0];
+
           if (firstPart && 'text' in firstPart) {
-            firstPart.text = responseText;
+            firstPart.text = finalText;
+            lastMessage.thinking = thinkingSegments;
           } else {
-            updatedHistory[lastIndex] = { role: 'model', parts: [{ text: responseText }] };
+            updatedHistory[lastIndex] = { role: 'model', parts: [{ text: finalText }], thinking: thinkingSegments };
           }
         }
         return updatedHistory;
@@ -382,7 +427,15 @@ const App: React.FC = () => {
     } finally {
       setIsStreamingResponse(false);
     }
-  }, [aiProviderSettings, canSubmit, chatFiles, chatHistory, chatInput, chatSettings.systemInstruction]);
+  }, [
+    aiProviderSettings,
+    canSubmit,
+    chatFiles,
+    chatHistory,
+    chatInput,
+    chatSettings.systemInstruction,
+    chatSettings.vectorStore,
+  ]);
   
     const handleSavePromptPreset = (name: string, prompt: string) => {
       setSavedPrompts(prev => {
