@@ -133,6 +133,19 @@ export const INITIAL_AGENT_DESIGNER_SETTINGS: AgentDesignerSettings = {
 
 export const INITIAL_CHAT_SETTINGS: ChatSettings = {
     systemInstruction: 'You are a helpful and friendly AI assistant. Answer the user\'s questions clearly and concisely.',
+    vectorStore: {
+        enabled: false,
+        url: '',
+        apiKey: undefined,
+        collection: '',
+        topK: 5,
+        embedding: {
+            provider: 'openai',
+            model: DEFAULT_EMBEDDING_MODELS.openai,
+            apiKey: undefined,
+            baseUrl: '',
+        },
+    },
 };
 
 // --- Prompt Collections (Re-constructed from imports) ---
