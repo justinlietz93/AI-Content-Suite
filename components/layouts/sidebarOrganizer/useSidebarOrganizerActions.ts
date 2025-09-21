@@ -23,6 +23,7 @@ const DRAG_DATA_MIME = 'application/x-sidebar-item';
 const DRAG_DATA_TEXT_FEATURE_PREFIX = 'feature:';
 const DRAG_DATA_TEXT_CATEGORY_PREFIX = 'category:';
 
+
 interface UseSidebarOrganizerActionsParams {
   state: SidebarOrganizationState;
   dispatch: Dispatch<SidebarOrganizationAction>;
