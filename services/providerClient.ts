@@ -29,6 +29,7 @@ export type ProviderCallArgs = {
   reasoning?: ReasoningBehavior;
   thinking?: ThinkingBehavior;
   signal?: AbortSignal;
+  onUpdate?: (update: ProviderTextResponse) => void;
 };
 
 interface ActiveProviderConfig {
@@ -347,6 +348,251 @@ const finalizeCollector = (collector: NormalizedCollector, fallback?: string): P
   };
 };
 
+type StreamingSegmentState = {
+  key: string;
+  type?: string;
+  label: string;
+  text: string;
+};
+
+type StreamingAccumulator = {
+  text: string;
+  thinking: Map<string, StreamingSegmentState>;
+  order: string[];
+  sequence: number;
+};
+
+const createStreamingAccumulator = (): StreamingAccumulator => ({
+  text: '',
+  thinking: new Map(),
+  order: [],
+  sequence: 0,
+});
+
+const appendStreamingText = (accumulator: StreamingAccumulator, value: unknown) => {
+  if (typeof value !== 'string') {
+    return;
+  }
+  accumulator.text += value;
+};
+
+const appendStreamingJson = (accumulator: StreamingAccumulator, value: unknown): boolean => {
+  if (value == null) {
+    return false;
+  }
+  if (typeof value === 'string') {
+    appendStreamingText(accumulator, value);
+    return true;
+  }
+  try {
+    const serialized = JSON.stringify(value);
+    if (typeof serialized === 'string' && serialized) {
+      appendStreamingText(accumulator, serialized);
+      return true;
+    }
+  } catch {
+    return false;
+  }
+  return false;
+};
+
+const ensureStreamingSegment = (
+  accumulator: StreamingAccumulator,
+  hint?: string,
+  source?: Record<string, unknown>,
+): StreamingSegmentState => {
+  const normalizedHint = typeof hint === 'string' ? hint : undefined;
+  const labelHint = typeof source?.label === 'string' ? (source.label as string) : undefined;
+  const label = formatThinkingLabel(normalizedHint ?? labelHint);
+
+  const identifier =
+    (typeof source?.id === 'string' ? (source.id as string) : undefined) ??
+    (typeof source?.key === 'string' ? (source.key as string) : undefined) ??
+    (Number.isFinite(source?.index) ? String(source?.index) : undefined) ??
+    (typeof source?.name === 'string' ? (source.name as string) : undefined);
+
+  const baseKey = `${normalizedHint ?? 'thinking'}::`;
+  let key = identifier ? `${baseKey}${identifier}` : undefined;
+
+  if (!key && accumulator.order.length > 0) {
+    const lastKey = accumulator.order[accumulator.order.length - 1];
+    const lastSegment = accumulator.thinking.get(lastKey);
+    if (lastSegment && lastSegment.type === normalizedHint) {
+      key = lastKey;
+    }
+  }
+
+  if (!key) {
+    key = `${baseKey}${accumulator.sequence++}`;
+  }
+
+  if (!accumulator.thinking.has(key)) {
+    accumulator.thinking.set(key, {
+      key,
+      type: normalizedHint,
+      label,
+      text: '',
+    });
+    if (!accumulator.order.includes(key)) {
+      accumulator.order.push(key);
+    }
+  }
+
+  return accumulator.thinking.get(key)!;
+};
+
+const appendStreamingThinking = (
+  accumulator: StreamingAccumulator,
+  value: unknown,
+  hint?: string,
+  source?: Record<string, unknown>,
+) => {
+  if (typeof value !== 'string') {
+    return;
+  }
+  const segment = ensureStreamingSegment(accumulator, hint, source);
+  segment.text += value;
+};
+
+const collectStreamingParts = (
+  value: unknown,
+  accumulator: StreamingAccumulator,
+  hint?: string,
+  source?: Record<string, unknown>,
+) => {
+  if (value == null) {
+    return;
+  }
+
+  if (typeof value === 'string') {
+    if (isThinkingHint(hint)) {
+      appendStreamingThinking(accumulator, value, hint, source);
+    } else {
+      appendStreamingText(accumulator, value);
+    }
+    return;
+  }
+
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    if (!isThinkingHint(hint)) {
+      appendStreamingText(accumulator, String(value));
+    }
+    return;
+  }
+
+  if (Array.isArray(value)) {
+    if (isJsonHint(hint) && appendStreamingJson(accumulator, value)) {
+      return;
+    }
+    value.forEach((item) => {
+      const nestedSource =
+        item && typeof item === 'object' ? (item as Record<string, unknown>) : undefined;
+      collectStreamingParts(item, accumulator, hint, nestedSource);
+    });
+    return;
+  }
+
+  if (typeof value === 'object') {
+    const objectValue = value as Record<string, unknown>;
+    const typeHint = typeof objectValue.type === 'string' ? (objectValue.type as string) : hint;
+    const handledKeys = new Set<string>(['type']);
+
+    const hasStructuredPayload =
+      Object.prototype.hasOwnProperty.call(objectValue, 'json') ||
+      Object.prototype.hasOwnProperty.call(objectValue, 'parsed') ||
+      Object.prototype.hasOwnProperty.call(objectValue, 'response_json') ||
+      Object.prototype.hasOwnProperty.call(objectValue, 'arguments');
+
+    if (isJsonHint(typeHint) && !hasStructuredPayload) {
+      if (appendStreamingJson(accumulator, objectValue)) {
+        return;
+      }
+    }
+
+    if (typeof objectValue.text === 'string') {
+      if (isThinkingHint(typeHint)) {
+        appendStreamingThinking(accumulator, objectValue.text, typeHint, objectValue);
+      } else {
+        appendStreamingText(accumulator, objectValue.text);
+      }
+      handledKeys.add('text');
+    }
+
+    if (typeof objectValue.output_text === 'string') {
+      if (isThinkingHint(typeHint)) {
+        appendStreamingThinking(accumulator, objectValue.output_text, typeHint, objectValue);
+      } else {
+        appendStreamingText(accumulator, objectValue.output_text);
+      }
+      handledKeys.add('output_text');
+    }
+
+    if (typeof objectValue.message === 'string') {
+      if (isThinkingHint(typeHint)) {
+        appendStreamingThinking(accumulator, objectValue.message, typeHint, objectValue);
+      } else {
+        appendStreamingText(accumulator, objectValue.message);
+      }
+      handledKeys.add('message');
+    }
+
+    if (Object.prototype.hasOwnProperty.call(objectValue, 'json')) {
+      if (appendStreamingJson(accumulator, objectValue.json)) {
+        handledKeys.add('json');
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(objectValue, 'parsed')) {
+      if (appendStreamingJson(accumulator, objectValue.parsed)) {
+        handledKeys.add('parsed');
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(objectValue, 'response_json')) {
+      if (appendStreamingJson(accumulator, objectValue.response_json)) {
+        handledKeys.add('response_json');
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(objectValue, 'arguments')) {
+      if (appendStreamingJson(accumulator, objectValue.arguments)) {
+        handledKeys.add('arguments');
+      }
+    }
+
+    Object.entries(objectValue).forEach(([key, nestedValue]) => {
+      if (handledKeys.has(key) || SKIP_OBJECT_KEYS.has(key)) {
+        return;
+      }
+      const nextHint = isThinkingHint(key) ? key : typeHint;
+      const nestedSource =
+        nestedValue && typeof nestedValue === 'object'
+          ? (nestedValue as Record<string, unknown>)
+          : undefined;
+      collectStreamingParts(nestedValue, accumulator, nextHint, nestedSource);
+    });
+  }
+};
+
+const buildStreamingSegments = (accumulator: StreamingAccumulator, trim = false): ThinkingSegment[] =>
+  accumulator.order
+    .map((key) => accumulator.thinking.get(key))
+    .filter((segment): segment is StreamingSegmentState => Boolean(segment))
+    .map((segment) => ({
+      type: segment.type,
+      label: segment.label,
+      text: trim ? segment.text.trim() : segment.text,
+    }))
+    .filter((segment) => (trim ? segment.text.length > 0 : true));
+
+const snapshotStreamingUpdate = (
+  accumulator: StreamingAccumulator,
+  trim = false,
+): ProviderTextResponse => ({
+  text: trim ? accumulator.text.trim() : accumulator.text,
+  thinking: buildStreamingSegments(accumulator, trim),
+});
+
 const extractFirstNonEmpty = (candidates: unknown[]): string | undefined => {
   for (const candidate of candidates) {
     if (typeof candidate === 'string') {
@@ -382,14 +628,25 @@ const extractFirstNonEmpty = (candidates: unknown[]): string | undefined => {
 const callOpenAICompatible = async (
   endpoint: string,
   apiKey: string,
-  { messages, maxOutputTokens, responseFormat, temperature, reasoning, thinking, signal }: ProviderCallArgs,
+  {
+    messages,
+    maxOutputTokens,
+    responseFormat,
+    temperature,
+    reasoning,
+    thinking,
+    signal,
+    onUpdate,
+  }: ProviderCallArgs,
   extraHeaders: Record<string, string> = {},
 ): Promise<ProviderTextResponse> => {
   const { model, maxOutputTokens: defaultMaxTokens } = ensureConfig();
+  const shouldStream = typeof onUpdate === 'function';
+
   const requestBody: Record<string, unknown> = {
     model,
     messages: toOpenAIMessage(messages),
-    stream: false,
+    stream: shouldStream,
   };
 
   const resolvedTemperature = typeof temperature === 'number' ? temperature : GENERATION_DEFAULTS.temperature;
@@ -445,28 +702,172 @@ const callOpenAICompatible = async (
     throw new Error(`Provider request failed (${response.status}): ${errorText || response.statusText}`);
   }
 
-  const data = await response.json();
-  const choice = data?.choices?.[0];
-  const message = choice?.message ?? {};
+  if (!shouldStream || !response.body) {
+    const data = await response.json();
+    const choice = data?.choices?.[0];
+    const message = choice?.message ?? {};
 
-  const collector = createCollector();
-  collectNormalizedParts(message?.content, collector);
-  collectNormalizedParts(message?.reasoning, collector, 'reasoning');
-  collectNormalizedParts(message?.thinking, collector, 'thinking');
-  collectNormalizedParts(choice?.reasoning, collector, 'reasoning');
-  collectNormalizedParts(choice?.thinking, collector, 'thinking');
+    const collector = createCollector();
+    collectNormalizedParts(message?.content, collector);
+    collectNormalizedParts(message?.reasoning, collector, 'reasoning');
+    collectNormalizedParts(message?.thinking, collector, 'thinking');
+    collectNormalizedParts(choice?.reasoning, collector, 'reasoning');
+    collectNormalizedParts(choice?.thinking, collector, 'thinking');
 
-  const fallback = extractFirstNonEmpty([
-    message?.content,
-    message?.text,
-    choice?.text,
-  ]);
+    const fallback = extractFirstNonEmpty([
+      message?.content,
+      message?.text,
+      choice?.text,
+    ]);
 
-  return finalizeCollector(collector, fallback);
+    const result = finalizeCollector(collector, fallback);
+    if (shouldStream && onUpdate) {
+      onUpdate(result);
+    }
+    return result;
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  const accumulator = createStreamingAccumulator();
+  let buffer = '';
+  let sawDone = false;
+  let lastChoice: any = null;
+  let finalMessage: any = null;
+
+  const emitUpdate = () => {
+    if (onUpdate) {
+      onUpdate(snapshotStreamingUpdate(accumulator));
+    }
+  };
+
+  const handleEvent = (eventChunk: string) => {
+    const trimmed = eventChunk.trim();
+    if (!trimmed) {
+      return;
+    }
+    const lines = trimmed.split('\n');
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+      if (!line.startsWith('data:')) {
+        continue;
+      }
+      const payload = line.slice(5).trim();
+      if (!payload) {
+        continue;
+      }
+      if (payload === '[DONE]') {
+        sawDone = true;
+        continue;
+      }
+      try {
+        const parsed = JSON.parse(payload);
+        const choice = parsed?.choices?.[0];
+        if (!choice) {
+          continue;
+        }
+        lastChoice = choice;
+        if (choice.message) {
+          finalMessage = choice.message;
+        }
+
+        const delta = choice.delta ?? {};
+        if (delta.content !== undefined) {
+          collectStreamingParts(delta.content, accumulator);
+        }
+        if (typeof delta.text === 'string') {
+          collectStreamingParts(delta.text, accumulator);
+        }
+        if (delta.reasoning !== undefined) {
+          collectStreamingParts(delta.reasoning, accumulator, 'reasoning');
+        }
+        if (delta.thinking !== undefined) {
+          collectStreamingParts(delta.thinking, accumulator, 'thinking');
+        }
+        if (choice.reasoning !== undefined) {
+          collectStreamingParts(choice.reasoning, accumulator, 'reasoning');
+        }
+        if (choice.thinking !== undefined) {
+          collectStreamingParts(choice.thinking, accumulator, 'thinking');
+        }
+
+        emitUpdate();
+      } catch (error) {
+        console.warn('Failed to parse provider stream chunk:', error);
+      }
+    }
+  };
+
+  const processBuffer = (flush = false) => {
+    let boundaryIndex = buffer.indexOf('\n\n');
+    while (boundaryIndex !== -1) {
+      const eventChunk = buffer.slice(0, boundaryIndex);
+      buffer = buffer.slice(boundaryIndex + 2);
+      handleEvent(eventChunk);
+      boundaryIndex = buffer.indexOf('\n\n');
+    }
+
+    if (flush && buffer.trim()) {
+      handleEvent(buffer);
+      buffer = '';
+    }
+  };
+
+  while (true) {
+    const { value, done } = await reader.read();
+    buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
+    processBuffer(done);
+    if (done || sawDone) {
+      if (!done && sawDone) {
+        try {
+          await reader.cancel();
+        } catch {
+          // No-op: cancellation failures are non-fatal here.
+        }
+      }
+      break;
+    }
+  }
+
+  processBuffer(true);
+
+  let finalResult = snapshotStreamingUpdate(accumulator, true);
+
+  if ((!finalResult.text || finalResult.text.length === 0) && finalMessage) {
+    const collector = createCollector();
+    collectNormalizedParts(finalMessage?.content, collector);
+    collectNormalizedParts(finalMessage?.reasoning, collector, 'reasoning');
+    collectNormalizedParts(finalMessage?.thinking, collector, 'thinking');
+    if (lastChoice) {
+      collectNormalizedParts(lastChoice?.reasoning, collector, 'reasoning');
+      collectNormalizedParts(lastChoice?.thinking, collector, 'thinking');
+    }
+    const fallback = extractFirstNonEmpty([
+      finalMessage?.content,
+      finalMessage?.text,
+      lastChoice?.text,
+    ]);
+    finalResult = finalizeCollector(collector, fallback);
+  } else if (finalResult.thinking.length === 0 && lastChoice) {
+    const collector = createCollector();
+    collectNormalizedParts(lastChoice?.message?.thinking, collector, 'thinking');
+    collectNormalizedParts(lastChoice?.thinking, collector, 'thinking');
+    collectNormalizedParts(lastChoice?.reasoning, collector, 'reasoning');
+    const fallbackThinking = finalizeCollector(collector).thinking;
+    if (fallbackThinking.length > 0) {
+      finalResult = { ...finalResult, thinking: fallbackThinking };
+    }
+  }
+
+  if (onUpdate) {
+    onUpdate(finalResult);
+  }
+
+  return finalResult;
 };
 
 const callAnthropic = async (
-  { messages, maxOutputTokens, responseFormat, temperature, signal }: ProviderCallArgs,
+  { messages, maxOutputTokens, responseFormat, temperature, signal, onUpdate }: ProviderCallArgs,
   apiKey: string,
 ): Promise<ProviderTextResponse> => {
   const systemMessage = messages.find((msg) => msg.role === 'system');
@@ -516,10 +917,19 @@ const callAnthropic = async (
   if (!result.text && result.thinking.length === 0) {
     throw new Error('Anthropic did not return a textual response.');
   }
+  if (onUpdate) {
+    onUpdate(result);
+  }
   return result;
 };
 
-const callOllama = async ({ messages, maxOutputTokens, temperature, signal }: ProviderCallArgs): Promise<ProviderTextResponse> => {
+const callOllama = async ({
+  messages,
+  maxOutputTokens,
+  temperature,
+  signal,
+  onUpdate,
+}: ProviderCallArgs): Promise<ProviderTextResponse> => {
   const systemMessages = messages.filter((msg) => msg.role === 'system');
   const conversation = messages.filter((msg) => msg.role !== 'system');
   const { maxOutputTokens: defaultMaxTokens } = ensureConfig();
@@ -569,7 +979,11 @@ const callOllama = async ({ messages, maxOutputTokens, temperature, signal }: Pr
   if (!data || typeof data.response !== 'string') {
     throw new Error('Ollama did not return a textual response.');
   }
-  return { text: data.response, thinking: [] };
+  const result = { text: data.response, thinking: [] };
+  if (onUpdate) {
+    onUpdate(result);
+  }
+  return result;
 };
 
 export const callProvider = async ({
@@ -580,6 +994,7 @@ export const callProvider = async ({
   reasoning,
   thinking,
   signal,
+  onUpdate,
 }: ProviderCallArgs): Promise<ProviderTextResponse> => {
   if (signal?.aborted) {
     throw new DOMException('Aborted by user', 'AbortError');
@@ -604,13 +1019,14 @@ export const callProvider = async ({
           reasoning,
           thinking,
           signal,
+          onUpdate,
         });
       case 'openrouter': {
         const referer = typeof window !== 'undefined' ? window.location.origin : 'https://local.app';
         return await callOpenAICompatible(
           'https://openrouter.ai/api/v1/chat/completions',
           apiKey!,
-          { messages, maxOutputTokens, responseFormat, temperature, reasoning, thinking, signal },
+          { messages, maxOutputTokens, responseFormat, temperature, reasoning, thinking, signal, onUpdate },
           { 'HTTP-Referer': referer, 'X-Title': 'AI Content Suite' },
         );
       }
@@ -623,6 +1039,7 @@ export const callProvider = async ({
           reasoning,
           thinking,
           signal,
+          onUpdate,
         });
       case 'deepseek':
         return await callOpenAICompatible('https://api.deepseek.com/chat/completions', apiKey!, {
@@ -633,11 +1050,12 @@ export const callProvider = async ({
           reasoning,
           thinking,
           signal,
+          onUpdate,
         });
       case 'anthropic':
-        return await callAnthropic({ messages, maxOutputTokens, responseFormat, temperature, signal }, apiKey!);
+        return await callAnthropic({ messages, maxOutputTokens, responseFormat, temperature, signal, onUpdate }, apiKey!);
       case 'ollama':
-        return await callOllama({ messages, maxOutputTokens, responseFormat, temperature, signal });
+        return await callOllama({ messages, maxOutputTokens, responseFormat, temperature, signal, onUpdate });
       default:
         throw new Error(`Unsupported provider: ${config.providerId}`);
     }

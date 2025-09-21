@@ -247,9 +247,10 @@ export const sendChatMessage = async (
     vectorStoreSettings?: VectorStoreSettings;
     generation?: ChatGenerationSettings;
     signal?: AbortSignal;
+    onUpdate?: (update: ProviderTextResponse) => void;
   },
 ): Promise<ProviderTextResponse> => {
-  const { history, userMessage, systemInstruction, vectorStoreSettings, generation, signal } = args;
+  const { history, userMessage, systemInstruction, vectorStoreSettings, generation, signal, onUpdate } = args;
 
   let contextSections: string[] | undefined;
   if (vectorStoreSettings?.enabled) {
@@ -313,5 +314,6 @@ export const sendChatMessage = async (
     temperature: normalizedTemperature,
     reasoning: reasoningBehavior,
     thinking: thinkingBehavior,
+    onUpdate,
   });
 };

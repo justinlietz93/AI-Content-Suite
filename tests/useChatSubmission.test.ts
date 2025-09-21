@@ -280,6 +280,7 @@ describe('useChatSubmission', () => {
       systemInstruction: 'Be helpful',
       vectorStoreSettings: params.chatSettings.vectorStore,
       generation: params.chatSettings.generation,
+      onUpdate: expect.any(Function),
     });
     expect(state.chatHistory).toHaveLength(2);
     expect(state.chatHistory[0]).toEqual({ role: 'user', parts: [{ text: 'Hello model' }] });
@@ -295,6 +296,98 @@ describe('useChatSubmission', () => {
     expect(state.isStreamingResponse).toBe(false);
     expect(state.error).toBeNull();
     expect(fileToGenerativePartMock).not.toHaveBeenCalled();
+  });
+
+  it('applies streaming updates to the placeholder message', async () => {
+    const state = createWorkspaceState();
+    const params = createParams(state, { chatInput: 'Stream please' });
+
+    sendChatMessageMock.mockImplementation(async (args) => {
+      expect(typeof args.onUpdate).toBe('function');
+      args.onUpdate?.({
+        text: 'Partial chunk',
+        thinking: [
+          { label: 'Reasoning', text: 'Step 1', type: 'reasoning' },
+        ],
+      });
+
+      const placeholder = state.chatHistory[state.chatHistory.length - 1];
+      expect(placeholder.parts[0]).toEqual({ text: 'Partial chunk' });
+      expect(placeholder.thinking).toEqual([
+        { label: 'Reasoning', text: 'Step 1', type: 'reasoning' },
+      ]);
+
+      return {
+        text: 'Final chunk',
+        thinking: [
+          { label: 'Reasoning', text: 'Step 1', type: 'reasoning' },
+        ],
+      };
+    });
+
+    const { result } = renderHook(() => useChatSubmission(params));
+
+    await act(async () => {
+      await result.current();
+    });
+
+    expect(sendChatMessageMock).toHaveBeenCalledTimes(1);
+    const modelMessage = state.chatHistory[state.chatHistory.length - 1];
+    expect(modelMessage.parts[0]).toEqual({ text: 'Final chunk' });
+    expect(modelMessage.thinking).toEqual([
+      { label: 'Reasoning', text: 'Step 1', type: 'reasoning' },
+    ]);
+  });
+
+  it('ignores streaming updates when the last message is not a model', async () => {
+    const state = createWorkspaceState();
+    const params = createParams(state, { chatInput: 'Ensure ignore' });
+
+    sendChatMessageMock.mockImplementation(async (args) => {
+      const placeholderIndex = state.chatHistory.length - 1;
+      const originalPlaceholder = state.chatHistory[placeholderIndex];
+      state.chatHistory[placeholderIndex] = { role: 'user', parts: [{ text: 'detour' }] } as any;
+      args.onUpdate?.({ text: 'Should be ignored', thinking: [] });
+      expect(state.chatHistory[placeholderIndex]).toEqual({ role: 'user', parts: [{ text: 'detour' }] });
+      state.chatHistory[placeholderIndex] = originalPlaceholder;
+      return { text: 'Final answer', thinking: [] };
+    });
+
+    const { result } = renderHook(() => useChatSubmission(params));
+
+    await act(async () => {
+      await result.current();
+    });
+
+    const modelMessage = state.chatHistory[state.chatHistory.length - 1];
+    expect(modelMessage.parts[0]).toEqual({ text: 'Final answer' });
+  });
+
+  it('preserves additional parts when updating model responses', async () => {
+    const state = createWorkspaceState();
+    const params = createParams(state, { chatInput: 'Keep attachments' });
+
+    sendChatMessageMock.mockImplementation(async (args) => {
+      const placeholder = state.chatHistory[state.chatHistory.length - 1];
+      placeholder.parts = [
+        { text: '' },
+        { inlineData: { mimeType: 'text/plain', data: 'ZGF0YQ==' } },
+      ];
+      args.onUpdate?.({ text: 'Partial text', thinking: [] });
+      return { text: 'Complete text', thinking: [] };
+    });
+
+    const { result } = renderHook(() => useChatSubmission(params));
+
+    await act(async () => {
+      await result.current();
+    });
+
+    const modelMessage = state.chatHistory[state.chatHistory.length - 1];
+    expect(modelMessage.parts).toEqual([
+      { text: 'Complete text' },
+      { inlineData: { mimeType: 'text/plain', data: 'ZGF0YQ==' } },
+    ]);
   });
 
   it('converts attached files to generative parts before sending', async () => {
@@ -329,6 +422,7 @@ describe('useChatSubmission', () => {
       systemInstruction: 'Be helpful',
       vectorStoreSettings: params.chatSettings.vectorStore,
       generation: params.chatSettings.generation,
+      onUpdate: expect.any(Function),
     });
     expect(state.chatFiles).toBeNull();
   });
@@ -359,8 +453,9 @@ describe('useChatSubmission', () => {
   it('skips response updates when chat history was cleared mid-flight', async () => {
     const state = createWorkspaceState();
     const params = createParams(state, { chatInput: 'History cleared' });
-    sendChatMessageMock.mockImplementation(async () => {
+    sendChatMessageMock.mockImplementation(async (args) => {
       state.chatHistory = [];
+      args.onUpdate?.({ text: 'Ignored', thinking: [] });
       return { text: 'Irrelevant', thinking: [] };
     });
 
