@@ -233,6 +233,62 @@ describe('Sidebar', () => {
     });
   });
 
+  it('places a feature directly after the hovered row when dragging downward within a category', async () => {
+    console.info('Confirming dragging a feature downward re-inserts it immediately after the destination row.');
+
+    render(
+      <Sidebar
+        collapsed={false}
+        onToggle={noop}
+        activeMode={'technical' as Mode}
+        onSelectMode={noop}
+      />,
+    );
+
+    await screen.findByTestId('category-section-workspace');
+    const styleExtractor = document.querySelector(
+      '[data-feature-id="styleExtractor"]',
+    ) as HTMLButtonElement;
+    const mathFormatterButton = document.querySelector(
+      '[data-feature-id="mathFormatter"]',
+    ) as HTMLButtonElement;
+    expect(styleExtractor).toBeTruthy();
+    expect(mathFormatterButton).toBeTruthy();
+    const mathFormatterRow = mathFormatterButton.parentElement as HTMLElement;
+    expect(mathFormatterRow).toBeTruthy();
+    Object.defineProperty(mathFormatterRow, 'getBoundingClientRect', {
+      value: () =>
+        ({
+          top: 0,
+          bottom: 40,
+          left: 0,
+          right: 200,
+          height: 40,
+          width: 200,
+          x: 0,
+          y: 0,
+          toJSON: () => {},
+        }) as DOMRect,
+    });
+    const transfer = createDataTransfer();
+
+    fireEvent.dragStart(styleExtractor, { dataTransfer: transfer });
+    fireEvent.dragOver(mathFormatterRow, { dataTransfer: transfer, clientY: 35 });
+    fireEvent.drop(mathFormatterRow, { dataTransfer: transfer, clientY: 35 });
+
+    const workspaceSection = screen.getByTestId('category-section-workspace');
+
+    await waitFor(() => {
+      const order = getFeatureOrder(workspaceSection);
+      const mathFormatterIndex = order.indexOf('mathFormatter');
+      const styleExtractorIndex = order.indexOf('styleExtractor');
+      const rewriterIndex = order.indexOf('rewriter');
+      expect(mathFormatterIndex).toBeGreaterThan(-1);
+      expect(styleExtractorIndex).toBeGreaterThan(rewriterIndex);
+      expect(order[order.length - 1]).not.toBe('styleExtractor');
+    });
+  });
+
   it('reorders categories when dropping onto another category header', async () => {
     console.info('Confirming dropping a category on another header updates category order.');
 
@@ -251,9 +307,24 @@ describe('Sidebar', () => {
     expect(workspaceHeader).toBeTruthy();
     const transfer = createDataTransfer();
 
+    Object.defineProperty(workspaceHeader, 'getBoundingClientRect', {
+      value: () =>
+        ({
+          top: 0,
+          bottom: 40,
+          left: 0,
+          right: 200,
+          height: 40,
+          width: 200,
+          x: 0,
+          y: 0,
+          toJSON: () => {},
+        }) as DOMRect,
+    });
+
     fireEvent.dragStart(interactiveHeader, { dataTransfer: transfer });
-    fireEvent.dragOver(workspaceHeader, { dataTransfer: transfer });
-    fireEvent.drop(workspaceHeader, { dataTransfer: transfer });
+    fireEvent.dragOver(workspaceHeader, { dataTransfer: transfer, clientY: 5 });
+    fireEvent.drop(workspaceHeader, { dataTransfer: transfer, clientY: 5 });
 
     await waitFor(() => {
       const orderedIds = Array.from(
@@ -263,6 +334,90 @@ describe('Sidebar', () => {
         .filter(id => id && id !== 'uncategorized');
 
       expect(orderedIds.slice(0, 3)).toEqual(['interactive', 'workspace', 'orchestration']);
+    });
+  });
+
+  it('inserts a moved category immediately before the hovered header when dragging downward', async () => {
+    console.info('Verifying dragging a category downward places it directly before the target header.');
+
+    render(
+      <Sidebar
+        collapsed={false}
+        onToggle={noop}
+        activeMode={'technical' as Mode}
+        onSelectMode={noop}
+      />,
+    );
+
+    const workspaceHeader = document.querySelector('[data-category-id="workspace"]') as HTMLElement;
+    const interactiveHeader = document.querySelector('[data-category-id="interactive"]') as HTMLElement;
+    const beforeDropZone = screen.getByTestId('category-dropzone-before-interactive');
+    expect(workspaceHeader).toBeTruthy();
+    expect(interactiveHeader).toBeTruthy();
+    expect(beforeDropZone).toBeTruthy();
+    const transfer = createDataTransfer();
+
+    fireEvent.dragStart(workspaceHeader, { dataTransfer: transfer });
+    fireEvent.dragOver(beforeDropZone, { dataTransfer: transfer });
+    fireEvent.drop(beforeDropZone, { dataTransfer: transfer });
+
+    await waitFor(() => {
+      const orderedIds = Array.from(
+        document.querySelectorAll('[data-testid^="category-section-"]'),
+      )
+        .map(element => element.getAttribute('data-testid')?.replace('category-section-', '') ?? '')
+        .filter(id => id && id !== 'uncategorized');
+
+      expect(orderedIds.slice(0, 3)).toEqual(['orchestration', 'workspace', 'interactive']);
+    });
+  });
+
+  it('moves a category after the hovered header when dropping in the lower half', async () => {
+    console.info('Ensuring dropping near the bottom edge positions the category after the hovered header.');
+
+    render(
+      <Sidebar
+        collapsed={false}
+        onToggle={noop}
+        activeMode={'technical' as Mode}
+        onSelectMode={noop}
+      />,
+    );
+
+    const workspaceHeader = document.querySelector('[data-category-id="workspace"]') as HTMLElement;
+    const orchestrationHeader = document.querySelector('[data-category-id="orchestration"]') as HTMLElement;
+    expect(workspaceHeader).toBeTruthy();
+    expect(orchestrationHeader).toBeTruthy();
+
+    Object.defineProperty(orchestrationHeader, 'getBoundingClientRect', {
+      value: () =>
+        ({
+          top: 0,
+          bottom: 40,
+          left: 0,
+          right: 200,
+          height: 40,
+          width: 200,
+          x: 0,
+          y: 0,
+          toJSON: () => {},
+        }) as DOMRect,
+    });
+
+    const transfer = createDataTransfer();
+
+    fireEvent.dragStart(workspaceHeader, { dataTransfer: transfer });
+    fireEvent.dragOver(orchestrationHeader, { dataTransfer: transfer, clientY: 35 });
+    fireEvent.drop(orchestrationHeader, { dataTransfer: transfer, clientY: 35 });
+
+    await waitFor(() => {
+      const orderedIds = Array.from(
+        document.querySelectorAll('[data-testid^="category-section-"]'),
+      )
+        .map(element => element.getAttribute('data-testid')?.replace('category-section-', '') ?? '')
+        .filter(id => id && id !== 'uncategorized');
+
+      expect(orderedIds.slice(0, 3)).toEqual(['orchestration', 'workspace', 'interactive']);
     });
   });
 });

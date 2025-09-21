@@ -60,6 +60,12 @@ export interface MainFormProps {
     onFileSelect: (files: File[]) => void;
 }
 
+/**
+ * Lays out the active feature controls and supporting file loader within the workspace.
+ * The main region flexes to prioritize configuration inputs while keeping the attachment
+ * drop zone accessible, but responsive to reduced viewport heights. Rendering is purely
+ * client-side with no asynchronous operations or retry considerations.
+ */
 export const MainForm: React.FC<MainFormProps> = (props) => {
     
     const renderControls = () => {
@@ -98,8 +104,8 @@ export const MainForm: React.FC<MainFormProps> = (props) => {
     }
 
     return (
-        <div className="animate-fade-in-scale flex h-full flex-col flex-1 min-h-0 gap-6">
-            <div className="flex-1 min-h-0 overflow-y-auto space-y-6 pr-1">
+        <div className="animate-fade-in-scale flex h-full flex-col flex-1 min-h-0 gap-4 sm:gap-5 lg:gap-6">
+            <div className="flex-1 min-h-0 overflow-y-auto space-y-4 sm:space-y-5 lg:space-y-6 pr-1">
                 {renderControls()}
             </div>
             <FileLoader onFileSelect={props.onFileSelect} selectedFiles={props.currentFiles} mode={props.activeMode} />

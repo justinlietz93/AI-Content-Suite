@@ -17,8 +17,8 @@ interface CategoryHeaderProps {
   name: string;
   /** Indicates that this category is currently dragged. */
   isDragging: boolean;
-  /** Highlights the header when another category is targeting it. */
-  isCategoryDropTarget: boolean;
+  /** Indicates which edge of the header is currently targeted by a category drop, if any. */
+  categoryDropPosition: 'before' | 'after' | null;
   /** Highlights the header when a feature intends to drop into the category. */
   isFeatureDropTarget: boolean;
   /** Accessibility labels used for tooltips. */
@@ -64,7 +64,7 @@ export const CategoryHeader: React.FC<CategoryHeaderProps> = ({
   categoryId,
   name,
   isDragging,
-  isCategoryDropTarget,
+  categoryDropPosition,
   isFeatureDropTarget,
   labels,
   isCollapsed,
@@ -92,10 +92,13 @@ export const CategoryHeader: React.FC<CategoryHeaderProps> = ({
 
   const showActions = !isEditing;
   const errorId = editingError ? `rename-${categoryId}-error` : undefined;
-  const isDropTarget = isCategoryDropTarget || isFeatureDropTarget;
+  const hasCategoryDrop = categoryDropPosition !== null;
+  const dropBeforeActive = categoryDropPosition === 'before';
+  const dropAfterActive = categoryDropPosition === 'after';
+  const isDropTarget = hasCategoryDrop || isFeatureDropTarget;
   const containerClasses = [
-    'group mb-2 flex items-center justify-between rounded-md px-2 py-1 text-[0.65rem] uppercase tracking-widest text-text-secondary/70 transition-colors',
-    isDropTarget ? 'bg-primary/10 ring-2 ring-primary/60' : '',
+    'group flex items-center justify-between rounded-md px-2 py-1 text-[0.65rem] uppercase tracking-widest text-text-secondary/70 transition-colors',
+    isFeatureDropTarget ? 'bg-primary/10 ring-2 ring-primary/60' : '',
   ]
     .filter(Boolean)
     .join(' ');
@@ -259,99 +262,113 @@ export const CategoryHeader: React.FC<CategoryHeaderProps> = ({
 
   return (
     <div className="space-y-1">
-      <div
-        className={containerClasses}
-        draggable={!isEditing}
-        onDragStart={event => {
-          if (isEditing) {
-            event.preventDefault();
-            return;
-          }
-          onDragStart(event);
-        }}
-        onDragEnd={onDragEnd}
-        onKeyDown={onKeyDown}
-        onDragOver={onHeaderDragOver}
-        onDragLeave={onHeaderDragLeave}
-        onDrop={onHeaderDrop}
-        onMouseMove={handleHeaderMouseMove}
-        onMouseLeave={handleHeaderMouseLeave}
-        onFocus={handleHeaderFocus}
-        onBlur={handleHeaderBlur}
-        onPointerDown={handleHeaderPointerDown}
-        onPointerUp={handleHeaderPointerUp}
-        onPointerCancel={handleHeaderPointerUp}
-        onClick={handleHeaderClick}
-        tabIndex={isEditing ? -1 : 0}
-        role="button"
-        aria-grabbed={isDragging}
-        aria-dropeffect={isDropTarget ? 'move' : undefined}
-        data-category-id={categoryId}
-      >
-        <div className="flex flex-1 items-center gap-2 overflow-hidden">
-          <div
-            ref={actionContainerRef}
-            className={`flex flex-shrink-0 items-center gap-1 overflow-hidden transition-[width,opacity] duration-200 ease-out ${
-              shouldRevealActions ? 'w-[3.5rem] opacity-100' : 'w-0 opacity-0'
-            }`}
-            data-testid={`category-actions-${categoryId}`}
-            aria-hidden={!shouldRevealActions}
-            onMouseEnter={handleActionMouseEnter}
-            onMouseLeave={handleActionMouseLeave}
-            onFocusCapture={handleActionFocusCapture}
-            onBlurCapture={handleActionBlurCapture}
-          >
-            {showActions ? (
-              <>
-                <button
-                  type="button"
-                  className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-500 text-white shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  onClick={onBeginRename}
-                  aria-label={labels.renameCategory}
-                >
-                  <HandymanIcon fontSize="small" />
-                </button>
-                <button
-                  type="button"
-                  className="flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-white shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  onClick={onDelete}
-                  aria-label={labels.deleteCategory}
-                >
-                  <HighlightOffIcon fontSize="small" />
-                </button>
-              </>
-            ) : null}
-          </div>
-          {isEditing ? (
-            <>
-              <label className="sr-only" htmlFor={`rename-${categoryId}`}>
-                {labels.renameCategory}
-              </label>
-              <input
-                id={`rename-${categoryId}`}
-                className="min-w-0 flex-1 rounded-md border border-border-color bg-surface px-2 py-1 text-[0.65rem] uppercase tracking-widest text-text-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                value={editingValue}
-                onChange={event => onRenameChange(categoryId, event.target.value)}
-                onKeyDown={onRenameKeyDown}
-                onBlur={onRenameBlur}
-                onFocus={event => event.currentTarget.select()}
-                aria-invalid={editingError ? true : undefined}
-                aria-describedby={errorId}
-                autoFocus
-              />
-            </>
-          ) : (
-            <span className="truncate">{name}</span>
-          )}
-        </div>
-        <button
-          type="button"
-          className="ml-2 text-xs text-text-secondary"
-          onClick={handleCollapseToggleClick}
-          aria-label={`${isCollapsed ? 'Expand' : 'Collapse'} ${name}`}
+      <div className="relative mb-2">
+        {dropBeforeActive ? (
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-x-0 -top-1 h-1 rounded-full bg-primary"
+          />
+        ) : null}
+        {dropAfterActive ? (
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-x-0 -bottom-1 h-1 rounded-full bg-primary"
+          />
+        ) : null}
+        <div
+          className={containerClasses}
+          draggable={!isEditing}
+          onDragStart={event => {
+            if (isEditing) {
+              event.preventDefault();
+              return;
+            }
+            onDragStart(event);
+          }}
+          onDragEnd={onDragEnd}
+          onKeyDown={onKeyDown}
+          onDragOver={onHeaderDragOver}
+          onDragLeave={onHeaderDragLeave}
+          onDrop={onHeaderDrop}
+          onMouseMove={handleHeaderMouseMove}
+          onMouseLeave={handleHeaderMouseLeave}
+          onFocus={handleHeaderFocus}
+          onBlur={handleHeaderBlur}
+          onPointerDown={handleHeaderPointerDown}
+          onPointerUp={handleHeaderPointerUp}
+          onPointerCancel={handleHeaderPointerUp}
+          onClick={handleHeaderClick}
+          tabIndex={isEditing ? -1 : 0}
+          role="button"
+          aria-grabbed={isDragging}
+          aria-dropeffect={isDropTarget ? 'move' : undefined}
+          data-category-id={categoryId}
         >
-          {isCollapsed ? '▸' : '▾'}
-        </button>
+          <div className="flex flex-1 items-center gap-2 overflow-hidden">
+            <div
+              ref={actionContainerRef}
+              className={`flex flex-shrink-0 items-center gap-1 overflow-hidden transition-[width,opacity] duration-200 ease-out ${
+                shouldRevealActions ? 'w-[3.5rem] opacity-100' : 'w-0 opacity-0'
+              }`}
+              data-testid={`category-actions-${categoryId}`}
+              aria-hidden={!shouldRevealActions}
+              onMouseEnter={handleActionMouseEnter}
+              onMouseLeave={handleActionMouseLeave}
+              onFocusCapture={handleActionFocusCapture}
+              onBlurCapture={handleActionBlurCapture}
+            >
+              {showActions ? (
+                <>
+                  <button
+                    type="button"
+                    className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-500 text-white shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    onClick={onBeginRename}
+                    aria-label={labels.renameCategory}
+                  >
+                    <HandymanIcon fontSize="small" />
+                  </button>
+                  <button
+                    type="button"
+                    className="flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-white shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    onClick={onDelete}
+                    aria-label={labels.deleteCategory}
+                  >
+                    <HighlightOffIcon fontSize="small" />
+                  </button>
+                </>
+              ) : null}
+            </div>
+            {isEditing ? (
+              <>
+                <label className="sr-only" htmlFor={`rename-${categoryId}`}>
+                  {labels.renameCategory}
+                </label>
+                <input
+                  id={`rename-${categoryId}`}
+                  className="min-w-0 flex-1 rounded-md border border-border-color bg-surface px-2 py-1 text-[0.65rem] uppercase tracking-widest text-text-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  value={editingValue}
+                  onChange={event => onRenameChange(categoryId, event.target.value)}
+                  onKeyDown={onRenameKeyDown}
+                  onBlur={onRenameBlur}
+                  onFocus={event => event.currentTarget.select()}
+                  aria-invalid={editingError ? true : undefined}
+                  aria-describedby={errorId}
+                  autoFocus
+                />
+              </>
+            ) : (
+              <span className="truncate">{name}</span>
+            )}
+          </div>
+          <button
+            type="button"
+            className="ml-2 text-xs text-text-secondary"
+            onClick={handleCollapseToggleClick}
+            aria-label={`${isCollapsed ? 'Expand' : 'Collapse'} ${name}`}
+          >
+            {isCollapsed ? '▸' : '▾'}
+          </button>
+        </div>
       </div>
       {editingError ? (
         <p id={errorId} className="px-2 text-xs text-red-500">

@@ -12,4 +12,8 @@ export type FeatureDropTarget =
   | { categoryId: string | null; index: number; context?: FeatureDropContext }
   | null;
 
-export type CategoryDropTarget = { targetIndex: number } | null;
+export type CategoryDropPosition = 'before' | 'after';
+
+export type CategoryDropTarget =
+  | { targetIndex: number; position: CategoryDropPosition; hoveredCategoryId: string | null }
+  | null;

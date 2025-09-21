@@ -90,11 +90,9 @@ export const FeatureList: React.FC<FeatureListProps> = ({
           <div
             className="relative rounded-md"
             onDragOver={event => {
-              if (draggingItem?.type !== 'feature') {
-                const data = parseDragData(event);
-                if (data?.type !== 'feature') {
-                  return;
-                }
+              const data = draggingItem ?? parseDragData(event);
+              if (data?.type !== 'feature') {
+                return;
               }
 
               const { index: targetIndex, context } = resolveItemDropPosition(event, index);
@@ -133,7 +131,7 @@ export const FeatureList: React.FC<FeatureListProps> = ({
               });
             }}
             onDrop={event => {
-              const data = draggingItem?.type === 'feature' ? draggingItem : parseDragData(event);
+              const data = draggingItem ?? parseDragData(event);
               if (data?.type !== 'feature') {
                 return;
               }
@@ -181,11 +179,9 @@ export const FeatureList: React.FC<FeatureListProps> = ({
           sizeClassName={hasFeatures ? 'h-3' : 'h-12'}
           className={collapsed ? '' : 'px-2'}
           onDragOver={event => {
-            if (draggingItem?.type !== 'feature') {
-              const data = parseDragData(event);
-              if (data?.type !== 'feature') {
-                return;
-              }
+            const data = draggingItem ?? parseDragData(event);
+            if (data?.type !== 'feature') {
+              return;
             }
             event.preventDefault();
             if (event.dataTransfer) {
@@ -211,7 +207,7 @@ export const FeatureList: React.FC<FeatureListProps> = ({
             );
           }}
           onDrop={event => {
-            const data = draggingItem?.type === 'feature' ? draggingItem : parseDragData(event);
+            const data = draggingItem ?? parseDragData(event);
             if (data?.type !== 'feature') {
               return;
             }
