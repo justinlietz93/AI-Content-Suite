@@ -235,7 +235,7 @@ export const ChatViewer: React.FC<ChatViewerProps> = ({ history, isStreaming }) 
                                                             <span className="font-mono text-[10px] text-muted-foreground/70">#{segIndex + 1}</span>
                                                         </div>
                                                         <div
-                                                            className="prose prose-sm prose-invert max-w-none rounded-md border border-border-color/40 bg-surface/70 p-3"
+                                                            className="prose prose-sm prose-invert max-w-none rounded-md border border-border-color/40 bg-surface/70 p-3 text-muted-foreground prose-p:text-muted-foreground prose-li:text-muted-foreground prose-strong:text-text-secondary prose-headings:text-text-secondary prose-code:text-text-secondary"
                                                             ref={(el) => {
                                                                 if (el) {
                                                                     thinkingRefs.current.set(segmentKey, el);
