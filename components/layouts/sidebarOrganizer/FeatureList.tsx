@@ -52,11 +52,16 @@ export const FeatureList: React.FC<FeatureListProps> = ({
         <DropZone
           active={featureDropTarget?.categoryId === bucket.categoryId && featureDropTarget.index === index}
           onDragOver={event => {
-            const data = parseDragData(event);
-            if (data?.type !== 'feature') {
-              return;
+            if (draggingItem?.type !== 'feature') {
+              const data = parseDragData(event);
+              if (data?.type !== 'feature') {
+                return;
+              }
             }
             event.preventDefault();
+            if (event.dataTransfer) {
+              event.dataTransfer.dropEffect = 'move';
+            }
             setFeatureDropTarget({ categoryId: bucket.categoryId, index });
           }}
           onDragLeave={() => {
@@ -65,7 +70,8 @@ export const FeatureList: React.FC<FeatureListProps> = ({
             );
           }}
           onDrop={event => {
-            const data = parseDragData(event);
+            const data =
+              draggingItem?.type === 'feature' ? draggingItem : parseDragData(event);
             if (data?.type !== 'feature') {
               return;
             }
@@ -95,11 +101,16 @@ export const FeatureList: React.FC<FeatureListProps> = ({
         featureDropTarget.index === bucket.features.length
       }
       onDragOver={event => {
-        const data = parseDragData(event);
-        if (data?.type !== 'feature') {
-          return;
+        if (draggingItem?.type !== 'feature') {
+          const data = parseDragData(event);
+          if (data?.type !== 'feature') {
+            return;
+          }
         }
         event.preventDefault();
+        if (event.dataTransfer) {
+          event.dataTransfer.dropEffect = 'move';
+        }
         setFeatureDropTarget({ categoryId: bucket.categoryId, index: bucket.features.length });
       }}
       onDragLeave={() => {
@@ -108,7 +119,8 @@ export const FeatureList: React.FC<FeatureListProps> = ({
         );
       }}
       onDrop={event => {
-        const data = parseDragData(event);
+        const data =
+          draggingItem?.type === 'feature' ? draggingItem : parseDragData(event);
         if (data?.type !== 'feature') {
           return;
         }

@@ -178,15 +178,26 @@ export const SidebarOrganizer: React.FC<SidebarOrganizerProps> = ({
             active={categoryDropTarget?.targetIndex === state.categories.length}
             sizeClassName="h-3"
             onDragOver={event => {
-              const data = parseDragData(event);
-              if (data?.type !== 'category') {
-                return;
+              if (draggingItem?.type !== 'category') {
+                const data = parseDragData(event);
+                if (data?.type !== 'category') {
+                  return;
+                }
               }
               event.preventDefault();
+              if (event.dataTransfer) {
+                event.dataTransfer.dropEffect = 'move';
+              }
               setCategoryDropTarget({ targetIndex: state.categories.length });
             }}
+            onDragLeave={() => {
+              setCategoryDropTarget(prev =>
+                prev?.targetIndex === state.categories.length ? null : prev,
+              );
+            }}
             onDrop={event => {
-              const data = parseDragData(event);
+              const data =
+                draggingItem?.type === 'category' ? draggingItem : parseDragData(event);
               if (data?.type !== 'category') {
                 return;
               }

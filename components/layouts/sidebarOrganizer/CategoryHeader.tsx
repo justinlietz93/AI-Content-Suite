@@ -65,9 +65,10 @@ export const CategoryHeader: React.FC<CategoryHeaderProps> = ({
   onKeyDown,
 }) => {
   const showActions = !isEditing;
+  const errorId = editingError ? `rename-${categoryId}-error` : undefined;
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-1">
       <div
         className="group mb-2 flex items-center justify-between rounded-md px-2 py-1 text-[0.65rem] uppercase tracking-widest text-text-secondary/70"
         draggable={!isEditing}
@@ -87,7 +88,7 @@ export const CategoryHeader: React.FC<CategoryHeaderProps> = ({
       >
         <div className="flex flex-1 items-center gap-2 overflow-hidden">
           <div
-            className={`flex items-center gap-1 overflow-hidden transition-[width,opacity] duration-200 ease-out ${
+            className={`flex flex-shrink-0 items-center gap-1 overflow-hidden transition-[width,opacity] duration-200 ease-out ${
               showActions
                 ? 'w-0 opacity-0 group-hover:w-[3.5rem] group-hover:opacity-100 group-focus-within:w-[3.5rem] group-focus-within:opacity-100'
                 : 'w-0 opacity-0'
@@ -115,7 +116,27 @@ export const CategoryHeader: React.FC<CategoryHeaderProps> = ({
               </>
             ) : null}
           </div>
-          <span className="truncate">{name}</span>
+          {isEditing ? (
+            <>
+              <label className="sr-only" htmlFor={`rename-${categoryId}`}>
+                {labels.renameCategory}
+              </label>
+              <input
+                id={`rename-${categoryId}`}
+                className="min-w-0 flex-1 rounded-md border border-border-color bg-surface px-2 py-1 text-[0.65rem] uppercase tracking-widest text-text-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                value={editingValue}
+                onChange={event => onRenameChange(categoryId, event.target.value)}
+                onKeyDown={onRenameKeyDown}
+                onBlur={onRenameBlur}
+                onFocus={event => event.currentTarget.select()}
+                aria-invalid={editingError ? true : undefined}
+                aria-describedby={errorId}
+                autoFocus
+              />
+            </>
+          ) : (
+            <span className="truncate">{name}</span>
+          )}
         </div>
         <button
           type="button"
@@ -126,23 +147,10 @@ export const CategoryHeader: React.FC<CategoryHeaderProps> = ({
           {isCollapsed ? '▸' : '▾'}
         </button>
       </div>
-      {isEditing ? (
-        <div className="px-2">
-          <label className="sr-only" htmlFor={`rename-${categoryId}`}>
-            {labels.renameCategory}
-          </label>
-          <input
-            id={`rename-${categoryId}`}
-            className="w-full rounded-md border border-border-color bg-surface px-2 py-1 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            value={editingValue}
-            onChange={event => onRenameChange(categoryId, event.target.value)}
-            onKeyDown={onRenameKeyDown}
-            onBlur={onRenameBlur}
-            onFocus={event => event.currentTarget.select()}
-            autoFocus
-          />
-          {editingError ? <p className="mt-1 text-xs text-red-500">{editingError}</p> : null}
-        </div>
+      {editingError ? (
+        <p id={errorId} className="px-2 text-xs text-red-500">
+          {editingError}
+        </p>
       ) : null}
     </div>
   );
