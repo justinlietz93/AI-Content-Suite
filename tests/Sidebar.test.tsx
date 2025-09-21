@@ -45,4 +45,23 @@ describe('Sidebar', () => {
     fireEvent.click(toggleButton);
     expect(workspaceList).toBeVisible();
   });
+
+  it('uses compact spacing between icons when collapsed', () => {
+    console.info(
+      'Ensuring collapsed sidebar sections drop extra padding so icon-only mode does not leave unintended gaps.',
+    );
+
+    render(
+      <Sidebar
+        collapsed={true}
+        onToggle={noop}
+        activeMode={'technical' as Mode}
+        onSelectMode={noop}
+      />,
+    );
+
+    const workspaceSection = screen.getByTestId('sidebar-section-workspace');
+    expect(workspaceSection).toHaveClass('py-2');
+    expect(workspaceSection).not.toHaveClass('py-4');
+  });
 });

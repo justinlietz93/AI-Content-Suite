@@ -157,8 +157,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
           const listId = `${section.id}-nav-list`;
           const isSectionCollapsed = collapsed ? false : collapsedSections[section.id] ?? false;
 
+          const sectionSpacingClasses = collapsed ? 'px-1 py-2' : 'px-2 py-4';
+
           return (
-            <div key={section.id} className="px-2 py-4" data-testid={`sidebar-section-${section.id}`}>
+            <div
+              key={section.id}
+              className={sectionSpacingClasses}
+              data-testid={`sidebar-section-${section.id}`}
+            >
               {!collapsed && (
                 <button
                   type="button"
@@ -186,7 +192,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     ? 'bg-primary/20 text-primary'
                     : 'text-text-secondary hover:text-text-primary hover:bg-secondary/60 focus-visible:text-text-primary';
                   const layoutClasses = collapsed
-                    ? 'justify-center px-0 py-3'
+                    ? 'justify-center px-0 py-2'
                     : 'gap-4 px-2 py-2 text-left';
                   const iconColorClasses = isActive
                     ? 'text-primary'

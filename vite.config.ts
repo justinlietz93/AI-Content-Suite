@@ -19,6 +19,12 @@ export default defineConfig(({ mode }) => {
       test: {
         environment: 'jsdom',
         setupFiles: ['./tests/setupTests.ts'],
+        alias: [
+          {
+            find: /^@mui\/icons-material\/(.*)$/i,
+            replacement: `${path.resolve(__dirname, 'tests/__mocks__/mui-icons')}/$1.ts`,
+          },
+        ],
         coverage: {
           reporter: ['text', 'lcov'],
           include: [
