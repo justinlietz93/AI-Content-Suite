@@ -1,4 +1,14 @@
 import React from 'react';
+import SummarizeIcon from '@mui/icons-material/Summarize';
+import StyleIcon from '@mui/icons-material/Style';
+import EditNoteIcon from '@mui/icons-material/EditNote';
+import FunctionsIcon from '@mui/icons-material/Functions';
+import PsychologyIcon from '@mui/icons-material/Psychology';
+import InsightsIcon from '@mui/icons-material/Insights';
+import CallSplitIcon from '@mui/icons-material/CallSplit';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
+import ArchitectureIcon from '@mui/icons-material/Architecture';
+import AssistantIcon from '@mui/icons-material/Assistant';
 import type { Mode } from '../../types';
 import { TABS } from '../../constants/uiConstants';
 
@@ -47,6 +57,19 @@ const NAV_SECTIONS: NavSection[] = [
     modes: ['chat'] as Mode[],
   },
 ];
+
+const MODE_ICONS: Record<Mode, React.ElementType> = {
+  technical: SummarizeIcon,
+  styleExtractor: StyleIcon,
+  rewriter: EditNoteIcon,
+  mathFormatter: FunctionsIcon,
+  reasoningStudio: PsychologyIcon,
+  scaffolder: InsightsIcon,
+  requestSplitter: CallSplitIcon,
+  promptEnhancer: AutoAwesomeIcon,
+  agentDesigner: ArchitectureIcon,
+  chat: AssistantIcon,
+};
 
 /**
  * Renders the workspace navigation sidebar, including optional collapse mode and
@@ -158,19 +181,36 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   const tab = TABS.find(tabItem => tabItem.id === mode);
                   if (!tab) return null;
                   const isActive = activeMode === mode;
+                  const IconComponent = MODE_ICONS[mode];
+                  const buttonStateClasses = isActive
+                    ? 'bg-primary/20 text-text-primary border border-primary/40'
+                    : 'text-text-secondary hover:text-text-primary hover:bg-secondary/60';
+                  const layoutClasses = collapsed
+                    ? 'justify-center px-0 py-1.5'
+                    : 'gap-3 px-2 py-2 text-left';
+                  const iconSizeClasses = collapsed ? 'text-[1.5rem]' : 'text-[1.15rem]';
 
                   return (
                     <li key={mode}>
                       <button
                         type="button"
                         onClick={() => onSelectMode?.(mode)}
-                        className={`w-full rounded-md px-2 py-2 text-left text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 focus:ring-offset-surface ${
-                          isActive
-                            ? 'bg-primary/20 text-text-primary border border-primary/40'
-                            : 'text-text-secondary hover:text-text-primary hover:bg-secondary/60'
-                        } ${collapsed ? 'justify-center text-[0.65rem] px-0 py-1.5' : ''}`}
+                        className={`w-full rounded-md text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 focus:ring-offset-surface flex items-center ${buttonStateClasses} ${layoutClasses}`}
+                        aria-label={collapsed ? tab.label : undefined}
+                        title={collapsed ? tab.label : undefined}
                       >
-                        {collapsed ? tab.label[0] : tab.label}
+                        {IconComponent ? (
+                          <IconComponent
+                            fontSize="inherit"
+                            className={`shrink-0 transition-colors ${iconSizeClasses}`}
+                            aria-hidden="true"
+                          />
+                        ) : null}
+                        {collapsed ? (
+                          <span className="sr-only">{tab.label}</span>
+                        ) : (
+                          <span className="truncate">{tab.label}</span>
+                        )}
                       </button>
                     </li>
                   );
