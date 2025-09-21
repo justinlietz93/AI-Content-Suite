@@ -87,49 +87,66 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
   const testId = `category-section-${bucket.categoryId ?? 'uncategorized'}`;
 
   if (bucket.categoryId === null) {
+    const hasUncategorizedFeatures = bucket.features.length > 0;
+    const isDraggingFeature = draggingItem?.type === 'feature';
+    const isRootZoneTargeted =
+      featureDropTarget?.categoryId === null && featureDropTarget.context === 'zone';
+    const shouldRenderRootZone =
+      hasUncategorizedFeatures || isDraggingFeature || isRootZoneTargeted;
+
+    const rootSectionSpacing = collapsed
+      ? shouldRenderRootZone
+        ? sectionSpacing
+        : 'px-1 first:pt-0 last:pb-2'
+      : shouldRenderRootZone
+      ? sectionSpacing
+      : 'px-2 pb-3 pt-0';
+
     return (
-      <div className={sectionSpacing} data-testid={testId}>
-        <DropZone
-          active={
-            featureDropTarget?.categoryId === null &&
-            featureDropTarget.index === 0 &&
-            featureDropTarget.context === 'zone'
-          }
-          sizeClassName={collapsed ? 'h-4' : 'h-6'}
-          className={collapsed ? '' : 'px-2'}
-          onDragOver={event => {
-            if (draggingItem?.type !== 'feature') {
-              const data = parseDragData(event);
+      <div className={rootSectionSpacing} data-testid={testId}>
+        {shouldRenderRootZone ? (
+          <DropZone
+            active={
+              featureDropTarget?.categoryId === null &&
+              featureDropTarget.index === 0 &&
+              featureDropTarget.context === 'zone'
+            }
+            sizeClassName={collapsed ? 'h-4' : 'h-6'}
+            className={collapsed ? '' : 'px-2'}
+            onDragOver={event => {
+              if (draggingItem?.type !== 'feature') {
+                const data = parseDragData(event);
+                if (data?.type !== 'feature') {
+                  return;
+                }
+              }
+              event.preventDefault();
+              if (event.dataTransfer) {
+                event.dataTransfer.dropEffect = 'move';
+              }
+              setFeatureDropTarget({ categoryId: null, index: 0, context: 'zone' });
+            }}
+            onDragLeave={event => {
+              const related = event.relatedTarget as Node | null;
+              if (related && event.currentTarget.contains(related)) {
+                return;
+              }
+              setFeatureDropTarget(prev =>
+                prev?.categoryId === null && prev.context === 'zone' ? null : prev,
+              );
+            }}
+            onDrop={event => {
+              const data =
+                draggingItem?.type === 'feature' ? draggingItem : parseDragData(event);
               if (data?.type !== 'feature') {
                 return;
               }
-            }
-            event.preventDefault();
-            if (event.dataTransfer) {
-              event.dataTransfer.dropEffect = 'move';
-            }
-            setFeatureDropTarget({ categoryId: null, index: 0, context: 'zone' });
-          }}
-          onDragLeave={event => {
-            const related = event.relatedTarget as Node | null;
-            if (related && event.currentTarget.contains(related)) {
-              return;
-            }
-            setFeatureDropTarget(prev =>
-              prev?.categoryId === null && prev.context === 'zone' ? null : prev,
-            );
-          }}
-          onDrop={event => {
-            const data =
-              draggingItem?.type === 'feature' ? draggingItem : parseDragData(event);
-            if (data?.type !== 'feature') {
-              return;
-            }
-            event.preventDefault();
-            onFeatureDrop(data.id, null, 0);
-            setFeatureDropTarget(null);
-          }}
-        />
+              event.preventDefault();
+              onFeatureDrop(data.id, null, 0);
+              setFeatureDropTarget(null);
+            }}
+          />
+        ) : null}
         <FeatureList
           bucket={bucket}
           collapsed={collapsed}

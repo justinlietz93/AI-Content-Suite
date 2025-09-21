@@ -76,6 +76,13 @@ export const FeatureList: React.FC<FeatureListProps> = ({
     featureDropTarget.index === index + 1 &&
     featureDropTarget.context === 'after-item';
 
+  const hasFeatures = bucket.features.length > 0;
+  const isDraggingFeature = draggingItem?.type === 'feature';
+  const isZoneTargeted =
+    featureDropTarget?.categoryId === bucket.categoryId &&
+    featureDropTarget.context === 'zone';
+  const shouldRenderTerminalZone = hasFeatures || isDraggingFeature || isZoneTargeted;
+
   return (
     <ul role="list" className="space-y-1">
       {bucket.features.map((feature, index) => (
@@ -164,54 +171,56 @@ export const FeatureList: React.FC<FeatureListProps> = ({
           </div>
         </li>
       ))}
-      <DropZone
-        active={
-          featureDropTarget?.categoryId === bucket.categoryId &&
-          featureDropTarget.index === bucket.features.length &&
-          featureDropTarget.context === 'zone'
-        }
-        sizeClassName={bucket.features.length === 0 ? 'h-12' : 'h-3'}
-        className={collapsed ? '' : 'px-2'}
-        onDragOver={event => {
-          if (draggingItem?.type !== 'feature') {
-            const data = parseDragData(event);
+      {shouldRenderTerminalZone ? (
+        <DropZone
+          active={
+            featureDropTarget?.categoryId === bucket.categoryId &&
+            featureDropTarget.index === bucket.features.length &&
+            featureDropTarget.context === 'zone'
+          }
+          sizeClassName={hasFeatures ? 'h-3' : 'h-12'}
+          className={collapsed ? '' : 'px-2'}
+          onDragOver={event => {
+            if (draggingItem?.type !== 'feature') {
+              const data = parseDragData(event);
+              if (data?.type !== 'feature') {
+                return;
+              }
+            }
+            event.preventDefault();
+            if (event.dataTransfer) {
+              event.dataTransfer.dropEffect = 'move';
+            }
+            setFeatureDropTarget({
+              categoryId: bucket.categoryId,
+              index: bucket.features.length,
+              context: 'zone',
+            });
+          }}
+          onDragLeave={event => {
+            const related = event.relatedTarget as Node | null;
+            if (related && event.currentTarget.contains(related)) {
+              return;
+            }
+            setFeatureDropTarget(prev =>
+              prev?.categoryId === bucket.categoryId &&
+              prev.index === bucket.features.length &&
+              prev.context === 'zone'
+                ? null
+                : prev,
+            );
+          }}
+          onDrop={event => {
+            const data = draggingItem?.type === 'feature' ? draggingItem : parseDragData(event);
             if (data?.type !== 'feature') {
               return;
             }
-          }
-          event.preventDefault();
-          if (event.dataTransfer) {
-            event.dataTransfer.dropEffect = 'move';
-          }
-          setFeatureDropTarget({
-            categoryId: bucket.categoryId,
-            index: bucket.features.length,
-            context: 'zone',
-          });
-        }}
-        onDragLeave={event => {
-          const related = event.relatedTarget as Node | null;
-          if (related && event.currentTarget.contains(related)) {
-            return;
-          }
-          setFeatureDropTarget(prev =>
-            prev?.categoryId === bucket.categoryId &&
-            prev.index === bucket.features.length &&
-            prev.context === 'zone'
-              ? null
-              : prev,
-          );
-        }}
-        onDrop={event => {
-          const data = draggingItem?.type === 'feature' ? draggingItem : parseDragData(event);
-          if (data?.type !== 'feature') {
-            return;
-          }
-          event.preventDefault();
-          onDrop(data.id, bucket.categoryId, bucket.features.length);
-          setFeatureDropTarget(null);
-        }}
-      />
+            event.preventDefault();
+            onDrop(data.id, bucket.categoryId, bucket.features.length);
+            setFeatureDropTarget(null);
+          }}
+        />
+      ) : null}
     </ul>
   );
 };

@@ -143,6 +143,23 @@ describe('Sidebar', () => {
     expect(screen.queryByRole('textbox')).toBeNull();
   });
 
+  it('collapses the uncategorized placeholder when no items exist', async () => {
+    console.info('Ensuring the uncategorized drop area stays hidden until features populate it.');
+
+    render(
+      <Sidebar
+        collapsed={false}
+        onToggle={noop}
+        activeMode={'technical' as Mode}
+        onSelectMode={noop}
+      />,
+    );
+
+    const uncategorizedSection = await screen.findByTestId('category-section-uncategorized');
+    expect(uncategorizedSection.children).toHaveLength(1);
+    expect(uncategorizedSection.querySelector('ul')).toBeTruthy();
+  });
+
   it('moves a feature into another category when dropped on the header', async () => {
     console.info('Verifying dropping a feature on a category header reassigns it.');
 
