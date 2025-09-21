@@ -65,11 +65,11 @@ export const buildDefaultSidebarState = (): SidebarOrganizationState => ({
  */
 export const DEFAULT_LABELS: SidebarOrganizerLabels = {
   addCategoryLabel: 'Add a new category',
-  addCategoryPlaceholder: 'Enter category name',
-  addCategoryButton: 'Add',
+  addCategoryButton: 'Add category',
   renameCategory: 'Rename category',
   deleteCategory: 'Delete category',
   emptyCategoryError: 'Category name cannot be empty.',
+  newCategoryDefaultName: 'New category',
   persistenceError: 'We were unable to save your sidebar changes. Your previous layout has been restored.',
   retryPersistence: 'Retry save',
   featureGrabAnnouncement: 'Started moving feature.',

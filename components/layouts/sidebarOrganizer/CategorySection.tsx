@@ -83,9 +83,11 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
   parseDragData,
   onSelectMode,
 }) => {
+  const sectionSpacing = collapsed ? 'px-1 first:pt-2 last:pb-2' : 'px-2 py-3';
+
   if (bucket.categoryId === null) {
     return (
-      <div className="px-2">
+      <div className={sectionSpacing}>
         <DropZone
           active={featureDropTarget?.categoryId === null && featureDropTarget.index === 0}
           onDragOver={event => {
@@ -128,8 +130,33 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
     );
   }
 
+  if (collapsed) {
+    return (
+      <div className={sectionSpacing}>
+        <FeatureList
+          bucket={bucket}
+          collapsed={collapsed}
+          activeMode={activeMode}
+          iconMap={iconMap}
+          tabLabels={tabLabels}
+          draggingItem={draggingItem}
+          featureDropTarget={featureDropTarget}
+          onSelectMode={onSelectMode}
+          onDragStart={onFeatureDragStart}
+          onDragEnd={onFeatureDragEnd}
+          onKeyDown={onFeatureKeyDown}
+          onDrop={onFeatureDrop}
+          setFeatureDropTarget={setFeatureDropTarget}
+          parseDragData={parseDragData}
+        />
+      </div>
+    );
+  }
+
+  const isCollapsed = collapsedCategoryIds.includes(bucket.categoryId);
+
   return (
-    <div className="px-2">
+    <div className={sectionSpacing}>
       <DropZone
         active={categoryDropTarget?.targetIndex === bucketIndex}
         sizeClassName="h-3"
@@ -153,10 +180,9 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
       <CategoryHeader
         categoryId={bucket.categoryId}
         name={bucket.title ?? ''}
-        collapsed={collapsed}
         isDragging={draggingItem?.type === 'category' && draggingItem.id === bucket.categoryId}
         labels={mergedLabels}
-        isCollapsed={collapsedCategoryIds.includes(bucket.categoryId)}
+        isCollapsed={isCollapsed}
         isEditing={editingCategoryId === bucket.categoryId}
         editingValue={editingName}
         editingError={editingError}
@@ -170,7 +196,7 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
         onDragEnd={onCategoryDragEnd}
         onKeyDown={event => onCategoryKeyDown(event, bucket.categoryId!)}
       />
-      {!collapsedCategoryIds.includes(bucket.categoryId) ? (
+      {!isCollapsed ? (
         <FeatureList
           bucket={bucket}
           collapsed={collapsed}

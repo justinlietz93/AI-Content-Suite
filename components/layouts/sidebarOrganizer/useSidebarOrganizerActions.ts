@@ -4,7 +4,7 @@
  */
 
 import { useCallback, useState } from 'react';
-import type { ChangeEvent, DragEvent, FormEvent, KeyboardEvent, Dispatch, SetStateAction } from 'react';
+import type { DragEvent, KeyboardEvent, Dispatch, SetStateAction } from 'react';
 import type { SidebarOrganizerLabels, SidebarOrganizationState } from './types';
 import type { SidebarOrganizationAction } from './types';
 import type { LayoutBucket } from './useLayoutBuckets';
@@ -30,16 +30,15 @@ interface UseSidebarOrganizerActionsParams {
 }
 
 interface UseSidebarOrganizerActionsResult {
-  newCategoryName: string;
-  newCategoryError: string | null;
   editingCategoryId: string | null;
   editingName: string;
   editingError: string | null;
+  /** True when a newly created category is awaiting a confirmed name. */
+  isCreatingCategory: boolean;
   draggingItem: DraggingItem | null;
   featureDropTarget: FeatureDropTarget;
   categoryDropTarget: CategoryDropTarget;
-  handleNewCategoryChange: (event: ChangeEvent<HTMLInputElement>) => void;
-  handleAddCategory: (event: FormEvent<HTMLFormElement>) => void;
+  handleAddCategory: () => void;
   beginRename: (categoryId: string, currentName: string) => void;
   commitRename: () => void;
   cancelRename: () => void;
@@ -67,11 +66,10 @@ export const useSidebarOrganizerActions = ({
   labels,
   announce,
 }: UseSidebarOrganizerActionsParams): UseSidebarOrganizerActionsResult => {
-  const [newCategoryName, setNewCategoryName] = useState('');
-  const [newCategoryError, setNewCategoryError] = useState<string | null>(null);
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
   const [editingError, setEditingError] = useState<string | null>(null);
+  const [pendingCategoryId, setPendingCategoryId] = useState<string | null>(null);
   const [draggingItem, setDraggingItem] = useState<DraggingItem | null>(null);
   const [featureDropTarget, setFeatureDropTarget] = useState<FeatureDropTarget>(null);
   const [categoryDropTarget, setCategoryDropTarget] = useState<CategoryDropTarget>(null);
@@ -86,40 +84,21 @@ export const useSidebarOrganizerActions = ({
   }, []);
 
   /**
-   * Updates controlled input state for new category creation.
+   * Clears rename state and optionally removes a newly created category that was never finalized.
    */
-  const handleNewCategoryChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
-    setNewCategoryName(event.target.value);
-    setNewCategoryError(null);
-  }, []);
-
-  /**
-   * Persists a newly created category while enforcing duplicate-name merge semantics.
-   */
-  const handleAddCategory = useCallback(
-    (event: FormEvent<HTMLFormElement>) => {
-      event.preventDefault();
-      const trimmed = newCategoryName.trim();
-      if (!trimmed) {
-        setNewCategoryError(labels.emptyCategoryError);
-        return;
+  const resetEditingState = useCallback(
+    (discardNewCategory: boolean) => {
+      const pendingId = pendingCategoryId;
+      const currentEditingId = editingCategoryId;
+      setEditingCategoryId(null);
+      setEditingName('');
+      setEditingError(null);
+      setPendingCategoryId(null);
+      if (discardNewCategory && pendingId && currentEditingId === pendingId) {
+        dispatch(deleteCategory(pendingId));
       }
-      const existing = state.categories.find(
-        category => category.name.toLowerCase() === trimmed.toLowerCase(),
-      );
-      const newId = createCategoryId();
-      if (existing) {
-        dispatch(addCategory(newId, trimmed));
-        dispatch(mergeCategories(newId, existing.id));
-        announce(labels.dropOnCategoryAnnouncement.replace('{categoryName}', existing.name));
-      } else {
-        dispatch(addCategory(newId, trimmed));
-        announce(labels.dropOnCategoryAnnouncement.replace('{categoryName}', trimmed));
-      }
-      setNewCategoryName('');
-      setNewCategoryError(null);
     },
-    [announce, dispatch, labels.dropOnCategoryAnnouncement, labels.emptyCategoryError, newCategoryName, state.categories],
+    [dispatch, editingCategoryId, pendingCategoryId],
   );
 
   /**
@@ -132,13 +111,25 @@ export const useSidebarOrganizerActions = ({
   }, []);
 
   /**
+   * Creates a new category entry and immediately opens rename mode so the user can supply a label.
+   */
+  const handleAddCategory = useCallback(() => {
+    if (editingCategoryId !== null || pendingCategoryId !== null) {
+      return;
+    }
+    const newId = createCategoryId();
+    const defaultName = labels.newCategoryDefaultName;
+    dispatch(addCategory(newId, defaultName));
+    setPendingCategoryId(newId);
+    beginRename(newId, defaultName);
+  }, [beginRename, dispatch, editingCategoryId, labels.newCategoryDefaultName, pendingCategoryId]);
+
+  /**
    * Cancels rename mode without persisting modifications.
    */
   const cancelRename = useCallback(() => {
-    setEditingCategoryId(null);
-    setEditingName('');
-    setEditingError(null);
-  }, []);
+    resetEditingState(true);
+  }, [resetEditingState]);
 
   /**
    * Commits rename changes, merging with an existing category when names collide.
@@ -162,8 +153,17 @@ export const useSidebarOrganizerActions = ({
       dispatch(renameCategory(editingCategoryId, trimmed));
       announce(labels.dropOnCategoryAnnouncement.replace('{categoryName}', trimmed));
     }
-    cancelRename();
-  }, [announce, cancelRename, dispatch, editingCategoryId, editingName, labels.dropOnCategoryAnnouncement, labels.emptyCategoryError, state.categories]);
+    resetEditingState(false);
+  }, [
+    announce,
+    dispatch,
+    editingCategoryId,
+    editingName,
+    labels.dropOnCategoryAnnouncement,
+    labels.emptyCategoryError,
+    resetEditingState,
+    state.categories,
+  ]);
 
   /**
    * Handles key interactions within the rename input.
@@ -204,10 +204,15 @@ export const useSidebarOrganizerActions = ({
    */
   const handleDeleteCategory = useCallback(
     (categoryId: string) => {
+      if (editingCategoryId === categoryId) {
+        resetEditingState(false);
+      } else {
+        setPendingCategoryId(prev => (prev === categoryId ? null : prev));
+      }
       dispatch(deleteCategory(categoryId));
       announce(labels.uncategorizedAnnouncement);
     },
-    [announce, dispatch, labels.uncategorizedAnnouncement],
+    [announce, dispatch, editingCategoryId, labels.uncategorizedAnnouncement, resetEditingState],
   );
 
   /**
@@ -405,15 +410,13 @@ export const useSidebarOrganizerActions = ({
   );
 
   return {
-    newCategoryName,
-    newCategoryError,
     editingCategoryId,
     editingName,
     editingError,
+    isCreatingCategory: pendingCategoryId !== null,
     draggingItem,
     featureDropTarget,
     categoryDropTarget,
-    handleNewCategoryChange,
     handleAddCategory,
     beginRename,
     commitRename,

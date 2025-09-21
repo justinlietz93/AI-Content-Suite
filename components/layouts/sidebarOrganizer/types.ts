@@ -88,9 +88,7 @@ export type ModeIconMap = Record<Mode, ElementType>;
 export interface SidebarOrganizerLabels {
   /** Label for the add-category text input. */
   addCategoryLabel: string;
-  /** Placeholder text for the add-category input. */
-  addCategoryPlaceholder: string;
-  /** Text for the add button. */
+  /** Text for the add-category button. */
   addCategoryButton: string;
   /** Accessible label for the rename control. */
   renameCategory: string;
@@ -98,6 +96,8 @@ export interface SidebarOrganizerLabels {
   deleteCategory: string;
   /** Inline validation message for blank category names. */
   emptyCategoryError: string;
+  /** Default name applied when creating a new category before it is renamed. */
+  newCategoryDefaultName: string;
   /** Message shown when persistence fails. */
   persistenceError: string;
   /** Button label that retries persistence. */

@@ -1,7 +1,7 @@
 /* @vitest-environment jsdom */
 import React from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { Sidebar } from '../components/layouts/Sidebar';
 import type { Mode } from '../types';
@@ -20,10 +20,8 @@ afterEach(() => {
 });
 
 describe('Sidebar', () => {
-  it('allows collapsing and expanding navigation sections', () => {
-    console.info(
-      'Verifying sidebar sections toggle their mode lists without affecting the surrounding layout.',
-    );
+  it('collapses and expands a category when the sidebar is expanded', () => {
+    console.info('Ensuring expanded sidebar renders categories that can be collapsed.');
 
     render(
       <Sidebar
@@ -34,22 +32,20 @@ describe('Sidebar', () => {
       />,
     );
 
-    const workspaceSection = screen.getByTestId('sidebar-section-workspace');
-    const workspaceList = within(workspaceSection).getByRole('list');
-    expect(workspaceList).toBeVisible();
+    const collapseButton = screen.getByRole('button', { name: /collapse workspace/i });
+    const featureLabel = screen.getByText('Technical Summarizer');
+    expect(featureLabel).toBeVisible();
 
-    const toggleButton = within(workspaceSection).getByRole('button', { name: /workspace/i });
-    fireEvent.click(toggleButton);
-    expect(workspaceList).not.toBeVisible();
+    fireEvent.click(collapseButton);
+    expect(screen.queryByText('Technical Summarizer')).not.toBeInTheDocument();
 
-    fireEvent.click(toggleButton);
-    expect(workspaceList).toBeVisible();
+    const expandButton = screen.getByRole('button', { name: /expand workspace/i });
+    fireEvent.click(expandButton);
+    expect(screen.getByText('Technical Summarizer')).toBeVisible();
   });
 
-  it('uses compact spacing between icons when collapsed', () => {
-    console.info(
-      'Ensuring collapsed sidebar sections drop extra padding so icon-only mode does not leave unintended gaps.',
-    );
+  it('hides category management controls when collapsed', () => {
+    console.info('Verifying collapsed sidebar hides rename/delete affordances and the add button.');
 
     render(
       <Sidebar
@@ -60,10 +56,9 @@ describe('Sidebar', () => {
       />,
     );
 
-    const workspaceSection = screen.getByTestId('sidebar-section-workspace');
-    expect(workspaceSection).toHaveClass('px-1');
-    expect(workspaceSection).toHaveClass('first:pt-2');
-    expect(workspaceSection).not.toHaveClass('py-2');
-    expect(workspaceSection).not.toHaveClass('py-4');
+    expect(screen.queryByLabelText(/rename category/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/delete category/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /add a new category/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('textbox')).toBeNull();
   });
 });

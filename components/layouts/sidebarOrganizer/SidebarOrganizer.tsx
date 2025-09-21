@@ -73,18 +73,17 @@ export const SidebarOrganizer: React.FC<SidebarOrganizerProps> = ({
   const [liveRegionRef, announce] = useAnnouncement();
 
   const {
-    newCategoryName,
-    newCategoryError,
     editingCategoryId,
     editingName,
     editingError,
+    isCreatingCategory,
     draggingItem,
     featureDropTarget,
     categoryDropTarget,
-    handleNewCategoryChange,
     handleAddCategory,
     beginRename,
     commitRename,
+    cancelRename,
     handleRenameKeyDown,
     handleRenameChange,
     handleDeleteCategory,
@@ -104,6 +103,13 @@ export const SidebarOrganizer: React.FC<SidebarOrganizerProps> = ({
     labels: mergedLabels,
     announce,
   });
+
+  useEffect(() => {
+    if (collapsed) {
+      cancelRename();
+      resetDragState();
+    }
+  }, [cancelRename, collapsed, resetDragState]);
 
   return (
     <div className="flex h-full flex-col" role="navigation" aria-label="Sidebar organizer">
@@ -167,51 +173,47 @@ export const SidebarOrganizer: React.FC<SidebarOrganizerProps> = ({
             onSelectMode={onSelectMode}
           />
         ))}
-        <DropZone
-          active={categoryDropTarget?.targetIndex === state.categories.length}
-          sizeClassName="h-3"
-          onDragOver={event => {
-            const data = parseDragData(event);
-            if (data?.type !== 'category') {
-              return;
-            }
-            event.preventDefault();
-            setCategoryDropTarget({ targetIndex: state.categories.length });
-          }}
-          onDrop={event => {
-            const data = parseDragData(event);
-            if (data?.type !== 'category') {
-              return;
-            }
-            event.preventDefault();
-            dispatch(moveCategory(data.id, state.categories.length));
-            resetDragState();
-          }}
-        />
+        {!collapsed ? (
+          <DropZone
+            active={categoryDropTarget?.targetIndex === state.categories.length}
+            sizeClassName="h-3"
+            onDragOver={event => {
+              const data = parseDragData(event);
+              if (data?.type !== 'category') {
+                return;
+              }
+              event.preventDefault();
+              setCategoryDropTarget({ targetIndex: state.categories.length });
+            }}
+            onDrop={event => {
+              const data = parseDragData(event);
+              if (data?.type !== 'category') {
+                return;
+              }
+              event.preventDefault();
+              dispatch(moveCategory(data.id, state.categories.length));
+              resetDragState();
+            }}
+          />
+        ) : null}
       </div>
 
-      <form onSubmit={handleAddCategory} className="mt-auto border-t border-border-color/60 px-3 py-3">
-        <label className="sr-only" htmlFor="new-category-input">
-          {mergedLabels.addCategoryLabel}
-        </label>
-        <div className="flex gap-2">
-          <input
-            id="new-category-input"
-            type="text"
-            className="flex-1 rounded-md border border-border-color bg-surface px-2 py-1 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            placeholder={mergedLabels.addCategoryPlaceholder}
-            value={newCategoryName}
-            onChange={handleNewCategoryChange}
-          />
+      {!collapsed ? (
+        <div className="mt-auto border-t border-border-color/60 px-3 py-3">
           <button
-            type="submit"
-            className="rounded-md bg-primary px-3 py-1 text-sm font-semibold text-white hover:bg-primary/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            type="button"
+            onClick={handleAddCategory}
+            className="flex w-full items-center justify-center gap-2 rounded-md border border-dashed border-border-color/70 bg-secondary/50 px-3 py-2 text-sm font-semibold text-text-secondary transition-colors hover:border-border-color hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+            aria-label={mergedLabels.addCategoryLabel}
+            disabled={editingCategoryId !== null || isCreatingCategory}
           >
-            {mergedLabels.addCategoryButton}
+            <span className="text-base" aria-hidden="true">
+              +
+            </span>
+            <span>{mergedLabels.addCategoryButton}</span>
           </button>
         </div>
-        {newCategoryError ? <p className="mt-1 text-xs text-red-500">{newCategoryError}</p> : null}
-      </form>
+      ) : null}
     </div>
   );
 };

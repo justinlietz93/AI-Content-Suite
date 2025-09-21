@@ -10,8 +10,6 @@ interface CategoryHeaderProps {
   categoryId: string;
   /** Display label for the category. */
   name: string;
-  /** Whether the sidebar is collapsed. */
-  collapsed: boolean;
   /** Indicates that this category is currently dragged. */
   isDragging: boolean;
   /** Accessibility labels used for tooltips. */
@@ -50,7 +48,6 @@ interface CategoryHeaderProps {
 export const CategoryHeader: React.FC<CategoryHeaderProps> = ({
   categoryId,
   name,
-  collapsed,
   isDragging,
   labels,
   isCollapsed,
@@ -66,67 +63,87 @@ export const CategoryHeader: React.FC<CategoryHeaderProps> = ({
   onDragStart,
   onDragEnd,
   onKeyDown,
-}) => (
-  <div className="px-2">
-    <div
-      className={`group mb-2 flex items-center justify-between rounded-md px-2 py-1 text-[0.65rem] uppercase tracking-widest text-text-secondary/70 ${
-        collapsed ? 'justify-center' : ''
-      }`}
-      draggable
-      onDragStart={onDragStart}
-      onDragEnd={onDragEnd}
-      onKeyDown={onKeyDown}
-      tabIndex={0}
-      role="button"
-      aria-grabbed={isDragging}
-      data-category-id={categoryId}
-    >
-      <div className={`relative flex flex-1 items-center ${collapsed ? 'justify-center' : ''}`}>
-        <span className={collapsed ? 'sr-only' : 'truncate'}>{name}</span>
-        <div className="absolute left-0 flex gap-1 -translate-x-full opacity-0 transition-all duration-200 ease-out group-hover:translate-x-0 group-hover:opacity-100 group-focus-within:translate-x-0 group-focus-within:opacity-100">
-          <button
-            type="button"
-            className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-500 text-white shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            onClick={onBeginRename}
-            aria-label={labels.renameCategory}
-          >
-            🔧
-          </button>
-          <button
-            type="button"
-            className="flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-white shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            onClick={onDelete}
-            aria-label={labels.deleteCategory}
-          >
-            ✕
-          </button>
-        </div>
-      </div>
-      <button
-        type="button"
-        className="ml-2 text-xs text-text-secondary"
-        onClick={onToggleCollapse}
-        aria-label={`${isCollapsed ? 'Expand' : 'Collapse'} ${name}`}
+}) => {
+  const showActions = !isEditing;
+
+  return (
+    <div className="space-y-2">
+      <div
+        className="group mb-2 flex items-center justify-between rounded-md px-2 py-1 text-[0.65rem] uppercase tracking-widest text-text-secondary/70"
+        draggable={!isEditing}
+        onDragStart={event => {
+          if (isEditing) {
+            event.preventDefault();
+            return;
+          }
+          onDragStart(event);
+        }}
+        onDragEnd={onDragEnd}
+        onKeyDown={onKeyDown}
+        tabIndex={isEditing ? -1 : 0}
+        role="button"
+        aria-grabbed={isDragging}
+        data-category-id={categoryId}
       >
-        {isCollapsed ? '▸' : '▾'}
-      </button>
-    </div>
-    {isEditing ? (
-      <div className="mb-3">
-        <label className="sr-only" htmlFor={`rename-${categoryId}`}>
-          {labels.renameCategory}
-        </label>
-        <input
-          id={`rename-${categoryId}`}
-          className="w-full rounded-md border border-border-color bg-surface px-2 py-1 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          value={editingValue}
-          onChange={event => onRenameChange(categoryId, event.target.value)}
-          onKeyDown={onRenameKeyDown}
-          onBlur={onRenameBlur}
-          autoFocus
-        />
-        {editingError ? <p className="mt-1 text-xs text-red-500">{editingError}</p> : null}
+        <div className="flex flex-1 items-center gap-2 overflow-hidden">
+          <div
+            className={`flex items-center gap-1 overflow-hidden transition-[width,opacity] duration-200 ease-out ${
+              showActions
+                ? 'w-0 opacity-0 group-hover:w-[3.5rem] group-hover:opacity-100 group-focus-within:w-[3.5rem] group-focus-within:opacity-100'
+                : 'w-0 opacity-0'
+            }`}
+            aria-hidden={!showActions}
+          >
+            {showActions ? (
+              <>
+                <button
+                  type="button"
+                  className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-500 text-white shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  onClick={onBeginRename}
+                  aria-label={labels.renameCategory}
+                >
+                  🔧
+                </button>
+                <button
+                  type="button"
+                  className="flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-white shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  onClick={onDelete}
+                  aria-label={labels.deleteCategory}
+                >
+                  ✕
+                </button>
+              </>
+            ) : null}
+          </div>
+          <span className="truncate">{name}</span>
+        </div>
+        <button
+          type="button"
+          className="ml-2 text-xs text-text-secondary"
+          onClick={onToggleCollapse}
+          aria-label={`${isCollapsed ? 'Expand' : 'Collapse'} ${name}`}
+        >
+          {isCollapsed ? '▸' : '▾'}
+        </button>
       </div>
-    ) : null}
-  </div>
-);
+      {isEditing ? (
+        <div className="px-2">
+          <label className="sr-only" htmlFor={`rename-${categoryId}`}>
+            {labels.renameCategory}
+          </label>
+          <input
+            id={`rename-${categoryId}`}
+            className="w-full rounded-md border border-border-color bg-surface px-2 py-1 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            value={editingValue}
+            onChange={event => onRenameChange(categoryId, event.target.value)}
+            onKeyDown={onRenameKeyDown}
+            onBlur={onRenameBlur}
+            onFocus={event => event.currentTarget.select()}
+            autoFocus
+          />
+          {editingError ? <p className="mt-1 text-xs text-red-500">{editingError}</p> : null}
+        </div>
+      ) : null}
+    </div>
+  );
+};
