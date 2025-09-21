@@ -141,8 +141,13 @@ export const sidebarOrganizationReducer = (
       }
       const updated = sorted.slice();
       const [removed] = updated.splice(currentIndex, 1);
-      const boundedIndex = Math.max(0, Math.min(targetIndex, updated.length));
-      updated.splice(boundedIndex, 0, removed);
+      const normalizedTarget = Math.max(0, targetIndex);
+      const cappedTarget = Math.min(normalizedTarget, updated.length);
+      const insertionIndex =
+        normalizedTarget > currentIndex
+          ? Math.min(Math.max(0, normalizedTarget - 1), updated.length)
+          : cappedTarget;
+      updated.splice(insertionIndex, 0, removed);
       return withTimestamp({
         ...state,
         categories: updated.map((category, index) => ({ ...category, order: index })),
@@ -167,8 +172,16 @@ export const sidebarOrganizationReducer = (
 
       const destinationKey = targetCategoryId ?? null;
       const destinationBucket = buckets.get(destinationKey) ?? [];
-      const boundedIndex = Math.max(0, Math.min(targetIndex, destinationBucket.length));
-      destinationBucket.splice(boundedIndex, 0, { ...movingFeature, categoryId: destinationKey });
+      const normalizedTarget = Math.max(0, targetIndex);
+      const cappedTarget = Math.min(normalizedTarget, destinationBucket.length);
+      const insertionIndex =
+        destinationKey === sourceKey && normalizedTarget > movingIndex
+          ? Math.min(Math.max(0, normalizedTarget - 1), destinationBucket.length)
+          : cappedTarget;
+      destinationBucket.splice(insertionIndex, 0, {
+        ...movingFeature,
+        categoryId: destinationKey,
+      });
       buckets.set(destinationKey, destinationBucket);
 
       return withTimestamp({
