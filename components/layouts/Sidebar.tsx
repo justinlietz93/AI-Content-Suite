@@ -188,7 +188,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   const layoutClasses = collapsed
                     ? 'justify-center px-0 py-1.5'
                     : 'gap-3 px-2 py-2 text-left';
-                  const iconSizeClasses = collapsed ? 'text-[1.5rem]' : 'text-[1.15rem]';
+                  const iconSizeClasses = collapsed ? 'text-[1.875rem]' : 'text-[1.35rem]';
 
                   return (
                     <li key={mode}>
