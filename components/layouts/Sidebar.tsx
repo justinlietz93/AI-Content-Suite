@@ -183,21 +183,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   const isActive = activeMode === mode;
                   const IconComponent = MODE_ICONS[mode];
                   const buttonStateClasses = isActive
-                    ? 'bg-primary/20 text-text-primary'
-                    : 'text-text-secondary hover:text-text-primary hover:bg-secondary/60';
+                    ? 'bg-primary/20 text-primary'
+                    : 'text-text-secondary hover:text-text-primary hover:bg-secondary/60 focus-visible:text-text-primary';
                   const layoutClasses = collapsed
                     ? 'justify-center px-0 py-3'
                     : 'gap-4 px-2 py-2 text-left';
                   const iconColorClasses = isActive
                     ? 'text-primary'
-                    : 'text-text-secondary group-hover:text-text-primary group-focus:text-text-primary';
+                    : 'text-text-secondary group-hover:text-text-primary group-focus-visible:text-text-primary';
 
                   return (
                     <li key={mode}>
                       <button
                         type="button"
                         onClick={() => onSelectMode?.(mode)}
-                        className={`w-full rounded-md text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 focus:ring-offset-surface flex items-center group ${buttonStateClasses} ${layoutClasses}`}
+                        className={`w-full rounded-md text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-surface flex items-center group ${buttonStateClasses} ${layoutClasses}`}
                         aria-label={collapsed ? tab.label : undefined}
                         title={collapsed ? tab.label : undefined}
                       >
