@@ -183,18 +183,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   const isActive = activeMode === mode;
                   const IconComponent = MODE_ICONS[mode];
                   const buttonStateClasses = isActive
-                    ? 'bg-primary/20 text-text-primary border border-primary/40'
+                    ? 'bg-primary/20 text-text-primary'
                     : 'text-text-secondary hover:text-text-primary hover:bg-secondary/60';
                   const layoutClasses = collapsed
                     ? 'justify-center px-0 py-3'
                     : 'gap-4 px-2 py-2 text-left';
+                  const iconColorClasses = isActive
+                    ? 'text-primary'
+                    : 'text-text-secondary group-hover:text-text-primary group-focus:text-text-primary';
 
                   return (
                     <li key={mode}>
                       <button
                         type="button"
                         onClick={() => onSelectMode?.(mode)}
-                        className={`w-full rounded-md text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 focus:ring-offset-surface flex items-center ${buttonStateClasses} ${layoutClasses}`}
+                        className={`w-full rounded-md text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 focus:ring-offset-surface flex items-center group ${buttonStateClasses} ${layoutClasses}`}
                         aria-label={collapsed ? tab.label : undefined}
                         title={collapsed ? tab.label : undefined}
                       >
@@ -202,7 +205,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           <IconComponent
                             fontSize={collapsed ? 'large' : 'medium'}
                             sx={{ fontSize: collapsed ? '1.95rem' : '1.5rem' }}
-                            className="shrink-0 transition-colors"
+                            className={`shrink-0 transition-colors ${iconColorClasses}`}
                             aria-hidden="true"
                           />
                         ) : null}
