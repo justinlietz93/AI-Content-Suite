@@ -114,11 +114,9 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
             sizeClassName={collapsed ? 'h-4' : 'h-6'}
             className={collapsed ? '' : 'px-2'}
             onDragOver={event => {
-              if (draggingItem?.type !== 'feature') {
-                const data = parseDragData(event);
-                if (data?.type !== 'feature') {
-                  return;
-                }
+              const data = draggingItem ?? parseDragData(event);
+              if (data?.type !== 'feature') {
+                return;
               }
               event.preventDefault();
               if (event.dataTransfer) {
@@ -136,8 +134,7 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
               );
             }}
             onDrop={event => {
-              const data =
-                draggingItem?.type === 'feature' ? draggingItem : parseDragData(event);
+              const data = draggingItem ?? parseDragData(event);
               if (data?.type !== 'feature') {
                 return;
               }
@@ -268,11 +265,9 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
         sizeClassName="h-3"
         className="px-2"
         onDragOver={event => {
-          if (draggingItem?.type !== 'category') {
-            const data = parseDragData(event);
-            if (data?.type !== 'category') {
-              return;
-            }
+          const data = draggingItem ?? parseDragData(event);
+          if (data?.type !== 'category') {
+            return;
           }
           event.preventDefault();
           if (event.dataTransfer) {
@@ -286,8 +281,7 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
           );
         }}
         onDrop={event => {
-          const data =
-            draggingItem?.type === 'category' ? draggingItem : parseDragData(event);
+          const data = draggingItem ?? parseDragData(event);
           if (data?.type !== 'category') {
             return;
           }

@@ -179,11 +179,9 @@ export const SidebarOrganizer: React.FC<SidebarOrganizerProps> = ({
             sizeClassName="h-3"
             className="px-2"
             onDragOver={event => {
-              if (draggingItem?.type !== 'category') {
-                const data = parseDragData(event);
-                if (data?.type !== 'category') {
-                  return;
-                }
+              const data = draggingItem ?? parseDragData(event);
+              if (data?.type !== 'category') {
+                return;
               }
               event.preventDefault();
               if (event.dataTransfer) {
@@ -197,8 +195,7 @@ export const SidebarOrganizer: React.FC<SidebarOrganizerProps> = ({
               );
             }}
             onDrop={event => {
-              const data =
-                draggingItem?.type === 'category' ? draggingItem : parseDragData(event);
+              const data = draggingItem ?? parseDragData(event);
               if (data?.type !== 'category') {
                 return;
               }
