@@ -177,6 +177,7 @@ export const SidebarOrganizer: React.FC<SidebarOrganizerProps> = ({
           <DropZone
             active={categoryDropTarget?.targetIndex === state.categories.length}
             sizeClassName="h-3"
+            className="px-2"
             onDragOver={event => {
               if (draggingItem?.type !== 'category') {
                 const data = parseDragData(event);

@@ -95,6 +95,8 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
             featureDropTarget.index === 0 &&
             featureDropTarget.context === 'zone'
           }
+          sizeClassName={collapsed ? 'h-4' : 'h-6'}
+          className={collapsed ? '' : 'px-2'}
           onDragOver={event => {
             if (draggingItem?.type !== 'feature') {
               const data = parseDragData(event);
@@ -125,6 +127,7 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
             }
             event.preventDefault();
             onFeatureDrop(data.id, null, 0);
+            setFeatureDropTarget(null);
           }}
         />
         <FeatureList
@@ -246,6 +249,7 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
       <DropZone
         active={isCategoryDropTarget}
         sizeClassName="h-3"
+        className="px-2"
         onDragOver={event => {
           if (draggingItem?.type !== 'category') {
             const data = parseDragData(event);

@@ -46,19 +46,42 @@ export const FeatureList: React.FC<FeatureListProps> = ({
   setFeatureDropTarget,
   parseDragData,
 }) => {
-  const isActiveDropTarget = (index: number) =>
+  /**
+   * Determines whether the current drag position should insert a feature before or after
+   * the referenced index by comparing the pointer offset with the element height.
+   */
+  const resolveItemDropPosition = React.useCallback(
+    (event: React.DragEvent<HTMLDivElement>, currentIndex: number) => {
+      const rect = event.currentTarget.getBoundingClientRect();
+      const height = rect.height || 1;
+      const offset = event.clientY - rect.top;
+      const pointerOffset = Number.isFinite(offset) ? offset : 0;
+      const isBefore = pointerOffset <= height / 2;
+
+      return {
+        index: isBefore ? currentIndex : currentIndex + 1,
+        context: isBefore ? 'before-item' : 'after-item',
+      } as const;
+    },
+    [],
+  );
+
+  const isBeforeTarget = (index: number) =>
     featureDropTarget?.categoryId === bucket.categoryId &&
     featureDropTarget.index === index &&
-    featureDropTarget.context === 'item';
+    featureDropTarget.context === 'before-item';
+
+  const isAfterTarget = (index: number) =>
+    featureDropTarget?.categoryId === bucket.categoryId &&
+    featureDropTarget.index === index + 1 &&
+    featureDropTarget.context === 'after-item';
 
   return (
     <ul role="list" className="space-y-1">
       {bucket.features.map((feature, index) => (
         <li key={feature.id}>
           <div
-            className={`rounded-md ${
-              isActiveDropTarget(index) ? 'bg-primary/10 ring-2 ring-primary/60 ring-offset-1 ring-offset-surface' : ''
-            }`}
+            className="relative rounded-md"
             onDragOver={event => {
               if (draggingItem?.type !== 'feature') {
                 const data = parseDragData(event);
@@ -66,14 +89,25 @@ export const FeatureList: React.FC<FeatureListProps> = ({
                   return;
                 }
               }
+
+              const { index: targetIndex, context } = resolveItemDropPosition(event, index);
               event.preventDefault();
               if (event.dataTransfer) {
                 event.dataTransfer.dropEffect = 'move';
               }
-              setFeatureDropTarget({
-                categoryId: bucket.categoryId,
-                index,
-                context: 'item',
+              setFeatureDropTarget(prev => {
+                if (
+                  prev?.categoryId === bucket.categoryId &&
+                  prev.index === targetIndex &&
+                  prev.context === context
+                ) {
+                  return prev;
+                }
+                return {
+                  categoryId: bucket.categoryId,
+                  index: targetIndex,
+                  context,
+                };
               });
             }}
             onDragLeave={event => {
@@ -81,22 +115,40 @@ export const FeatureList: React.FC<FeatureListProps> = ({
               if (related && event.currentTarget.contains(related)) {
                 return;
               }
-              setFeatureDropTarget(prev =>
-                prev?.categoryId === bucket.categoryId && prev.index === index && prev.context === 'item'
-                  ? null
-                  : prev,
-              );
+              setFeatureDropTarget(prev => {
+                if (prev?.categoryId !== bucket.categoryId) {
+                  return prev;
+                }
+                const shouldClear =
+                  (prev.context === 'before-item' && prev.index === index) ||
+                  (prev.context === 'after-item' && prev.index === index + 1);
+                return shouldClear ? null : prev;
+              });
             }}
             onDrop={event => {
               const data = draggingItem?.type === 'feature' ? draggingItem : parseDragData(event);
               if (data?.type !== 'feature') {
                 return;
               }
+              const { index: targetIndex } = resolveItemDropPosition(event, index);
               event.preventDefault();
               event.stopPropagation();
-              onDrop(data.id, bucket.categoryId, index);
+              onDrop(data.id, bucket.categoryId, targetIndex);
+              setFeatureDropTarget(null);
             }}
           >
+            {isBeforeTarget(index) ? (
+              <span
+                aria-hidden
+                className="pointer-events-none absolute inset-x-0 -top-1 h-1 rounded-full bg-primary"
+              />
+            ) : null}
+            {isAfterTarget(index) ? (
+              <span
+                aria-hidden
+                className="pointer-events-none absolute inset-x-0 -bottom-1 h-1 rounded-full bg-primary"
+              />
+            ) : null}
             <FeatureItem
               feature={feature}
               collapsed={collapsed}
@@ -104,7 +156,6 @@ export const FeatureList: React.FC<FeatureListProps> = ({
               iconMap={iconMap}
               tabLabels={tabLabels}
               isDragging={draggingItem?.type === 'feature' && draggingItem.id === feature.id}
-              isDropTarget={isActiveDropTarget(index)}
               onSelectMode={onSelectMode}
               onKeyDown={onKeyDown}
               onDragStart={onDragStart}
@@ -120,6 +171,7 @@ export const FeatureList: React.FC<FeatureListProps> = ({
           featureDropTarget.context === 'zone'
         }
         sizeClassName={bucket.features.length === 0 ? 'h-12' : 'h-3'}
+        className={collapsed ? '' : 'px-2'}
         onDragOver={event => {
           if (draggingItem?.type !== 'feature') {
             const data = parseDragData(event);
@@ -157,6 +209,7 @@ export const FeatureList: React.FC<FeatureListProps> = ({
           }
           event.preventDefault();
           onDrop(data.id, bucket.categoryId, bucket.features.length);
+          setFeatureDropTarget(null);
         }}
       />
     </ul>
