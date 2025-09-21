@@ -3,7 +3,6 @@
 
 import React, { useState, useCallback, useMemo, useEffect, useRef, type CSSProperties } from 'react';
 import { ProgressBar } from './components/ui/ProgressBar';
-import { Tabs } from './components/ui/Tabs';
 import { ReportModal } from './components/modals/ReportModal';
 import { SettingsModal } from './components/modals/SettingsModal';
 import { useStarfield } from './hooks/useStarfield';
@@ -39,6 +38,7 @@ import { useChatSubmission } from './hooks/useChatSubmission';
 import { deepClone } from './utils/deepClone';
 import { XCircleIcon } from './components/icons/XCircleIcon';
 import { MenuBar } from './components/layouts/MenuBar';
+import { Sidebar } from './components/layouts/Sidebar';
 
 // Import new modular components
 import { ChatInterface } from './components/layouts/ChatInterface';
@@ -66,6 +66,7 @@ const App: React.FC = () => {
   const abortControllersRef = useRef<Partial<Record<Mode, AbortController>>>({});
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
   const { chatSettings, setChatSettings } = usePersistentChatSettings();
   const {
@@ -88,6 +89,11 @@ const App: React.FC = () => {
     appliedContentWidth,
     contentWidthLabel,
   } = useLayoutPreferences();
+
+  const activeTabDefinition = useMemo(
+    () => TABS.find(tab => tab.id === activeMode),
+    [activeMode],
+  );
 
   const {
     currentFiles,
@@ -340,16 +346,26 @@ const App: React.FC = () => {
     [setModeValue],
   );
 
+  const openMobileSidebar = useCallback(() => {
+    setIsMobileSidebarOpen(true);
+  }, []);
+
+  const closeMobileSidebar = useCallback(() => {
+    setIsMobileSidebarOpen(false);
+  }, []);
+
   const handleModeChange = useCallback(
     (mode: Mode) => {
       if (mode === activeMode) {
+        closeMobileSidebar();
         return;
       }
       handleReset(mode);
       setActiveMode(mode);
       setIsReportModalOpen(false);
+      closeMobileSidebar();
     },
-    [activeMode, handleReset],
+    [activeMode, closeMobileSidebar, handleReset],
   );
 
   const handleWidthSliderChange = useCallback(
@@ -463,78 +479,144 @@ const App: React.FC = () => {
   return (
     <>
       <MenuBar onOpenSettings={() => setIsSettingsModalOpen(true)} />
-      <div className="min-h-screen bg-transparent flex flex-col items-center justify-center p-4 sm:p-8 transition-all duration-300">
-        <div
-          data-testid="workspace-card"
-          className="w-full max-w-6xl bg-surface shadow-2xl rounded-lg px-6 sm:px-10 pt-6 sm:pt-10 pb-6 sm:pb-8 border border-border-color animate-breathing-glow transition-colors duration-500 ease-in-out flex flex-col min-h-0 overflow-hidden"
-          style={workspaceCardStyle}
-        >
-          <header className="mb-6 text-center">
-            <h1 className="text-3xl sm:text-4xl font-bold text-text-primary">
-              AI Content Suite
-            </h1>
-            <p className="text-text-secondary mt-2 text-sm sm:text-base">
-              {DESCRIPTION_TEXT[activeMode]}
-            </p>
-          </header>
-
-          <div className="mb-6">
-            <Tabs
-              tabs={TABS}
-              activeTabId={activeMode}
-              onTabChange={id => handleModeChange(id as Mode)}
-            />
-          </div>
-
-          <div className="mb-6 bg-secondary/60 border border-border-color rounded-lg px-4 py-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between text-sm">
-            <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 text-text-secondary">
-              <div>
-                <span className="text-text-primary font-semibold">Active AI Provider:</span>{' '}
-                <span className="font-medium text-text-primary">{activeProviderLabel}</span>
-              </div>
-              <span className="hidden sm:inline text-text-secondary">•</span>
-              <div>
-                <span>Model: </span>
-                <span className="font-medium text-text-primary">{activeModelName || 'Select a model'}</span>
-              </div>
-            </div>
-            <span className={`font-medium ${providerStatusTone}`}>{providerStatusText}</span>
-          </div>
-
-          <FeaturePanel
-            footer={panelFooter}
-            footerHeight={panelFooterHeight}
-            className="mb-6 flex-1"
+      <div className="flex min-h-screen bg-transparent transition-all duration-300">
+        <Sidebar
+          collapsed={isSidebarCollapsed}
+          onToggle={toggleSidebar}
+          activeMode={activeMode}
+          onSelectMode={handleModeChange}
+          variant="desktop"
+        />
+        <div className="flex flex-1 flex-col items-center justify-center p-4 sm:p-8">
+          <div
+            className="mx-auto flex w-full flex-1 flex-col gap-4 min-h-0"
+            style={{ width: appliedContentWidth, maxWidth: '100%' }}
           >
-            {panelContent}
-          </FeaturePanel>
-
-          {showError && error && (
-            <div className="mt-8 p-4 bg-red-900 border border-red-700 rounded-lg text-red-100 animate-fade-in-scale" role="alert">
-              <div className="flex items-center mb-2">
-                <XCircleIcon className="w-6 h-6 mr-2" aria-hidden="true" />
-                <h3 className="text-lg font-semibold">Error</h3>
+            <div className="rounded-xl bg-secondary/70 px-4 py-3 shadow-inner">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-xs uppercase tracking-widest text-text-secondary">Workspace width</p>
+                  <p className="text-sm font-medium text-text-primary">{contentWidthLabel}</p>
+                </div>
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <span className="text-xs text-text-secondary">Compact</span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={contentWidthPercent}
+                    onChange={event => handleWidthSliderChange(Number(event.target.value))}
+                    className="flex-1 sm:w-48 accent-primary"
+                    aria-label="Adjust workspace width"
+                  />
+                  <span className="text-xs text-text-secondary">Full</span>
+                </div>
               </div>
-              <p className="text-sm">{error.message}</p>
-              {error.details && (
-                <details className="mt-2 text-xs">
-                  <summary>Show Details</summary>
-                  <pre className="whitespace-pre-wrap break-all bg-red-800 p-2 rounded mt-1">{error.details}</pre>
-                </details>
-              )}
-              <button
-                onClick={() => handleReset()}
-                className="mt-4 w-full px-6 py-2 bg-red-700 text-white font-semibold rounded-lg hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-surface"
-              >
-                Try Again
-              </button>
             </div>
-          )}
+
+            <div
+              data-testid="workspace-card"
+              className="w-full max-w-6xl bg-surface shadow-2xl rounded-lg px-6 sm:px-10 pt-6 sm:pt-10 pb-6 sm:pb-8 border border-border-color animate-breathing-glow transition-colors duration-500 ease-in-out flex flex-col min-h-0 overflow-hidden"
+              style={workspaceCardStyle}
+            >
+              <header className="mb-6 text-center">
+                <p className="text-text-secondary text-sm sm:text-base">
+                  {DESCRIPTION_TEXT[activeMode]}
+                </p>
+                <div className="mt-4 flex flex-col items-center gap-2 md:hidden">
+                  <span className="text-xs uppercase tracking-widest text-text-secondary">
+                    Active tool:{' '}
+                    <span className="font-semibold text-text-primary">{activeTabDefinition?.label ?? ''}</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={openMobileSidebar}
+                    className="rounded-md bg-secondary px-4 py-2 text-sm font-semibold text-text-primary shadow-sm transition-colors duration-150 hover:bg-secondary/80 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-surface"
+                    aria-label="Open feature navigation"
+                  >
+                    Browse tools
+                  </button>
+                </div>
+              </header>
+
+              <div className="mb-6 bg-secondary/60 border border-border-color rounded-lg px-4 py-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between text-sm">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 text-text-secondary">
+                  <div>
+                    <span className="text-text-primary font-semibold">Active AI Provider:</span>{' '}
+                    <span className="font-medium text-text-primary">{activeProviderLabel}</span>
+                  </div>
+                  <span className="hidden sm:inline text-text-secondary">•</span>
+                  <div>
+                    <span>Model: </span>
+                    <span className="font-medium text-text-primary">{activeModelName || 'Select a model'}</span>
+                  </div>
+                </div>
+                <span className={`font-medium ${providerStatusTone}`}>{providerStatusText}</span>
+              </div>
+
+              <FeaturePanel footer={panelFooter} footerHeight={panelFooterHeight} className="mb-6 flex-1">
+                {panelContent}
+              </FeaturePanel>
+
+              {showError && error && (
+                <div className="mt-8 p-4 bg-red-900 border border-red-700 rounded-lg text-red-100 animate-fade-in-scale" role="alert">
+                  <div className="flex items-center mb-2">
+                    <XCircleIcon className="w-6 h-6 mr-2" aria-hidden="true" />
+                    <h3 className="text-lg font-semibold">Error</h3>
+                  </div>
+                  <p className="text-sm">{error.message}</p>
+                  {error.details && (
+                    <details className="mt-2 text-xs">
+                      <summary>Show Details</summary>
+                      <pre className="whitespace-pre-wrap break-all bg-red-800 p-2 rounded mt-1">{error.details}</pre>
+                    </details>
+                  )}
+                  <button
+                    onClick={() => handleReset()}
+                    className="mt-4 w-full px-6 py-2 bg-red-700 text-white font-semibold rounded-lg hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-surface"
+                  >
+                    Try Again
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <footer className="text-center text-text-secondary text-xs">
+              <p>&copy; {new Date().getFullYear()} AI Content Suite. Powered by {providerSummaryText}.</p>
+            </footer>
+          </div>
         </div>
-        <footer className="text-center mt-8 text-text-secondary text-xs">
-          <p>&copy; {new Date().getFullYear()} AI Content Suite. Powered by {providerSummaryText}.</p>
-        </footer>
       </div>
+
+      {isMobileSidebarOpen && (
+        <div className="fixed inset-0 z-50 flex md:hidden" role="dialog" aria-modal="true">
+          <button
+            type="button"
+            className="flex-1 bg-black/60"
+            aria-label="Close feature navigation overlay"
+            onClick={closeMobileSidebar}
+          />
+          <div className="relative h-full">
+            <Sidebar
+              collapsed={false}
+              onToggle={closeMobileSidebar}
+              activeMode={activeMode}
+              onSelectMode={handleModeChange}
+              variant="overlay"
+              showCollapseToggle={false}
+              className="h-full w-64 max-w-[80vw] shadow-2xl"
+            />
+            <button
+              type="button"
+              onClick={closeMobileSidebar}
+              className="absolute right-3 top-3 rounded-full bg-secondary/80 px-3 py-1 text-sm font-semibold text-text-primary shadow transition-colors duration-150 hover:bg-secondary/70 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-surface"
+              aria-label="Close feature navigation"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
 
       <ReportModal
         isOpen={isReportModalOpen}
