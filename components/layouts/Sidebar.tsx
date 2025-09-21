@@ -201,7 +201,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         {IconComponent ? (
                           <IconComponent
                             fontSize={collapsed ? 'large' : 'medium'}
-                            sx={{ fontSize: collapsed ? '3.25rem' : '2.5rem' }}
+                            sx={{ fontSize: collapsed ? '1.95rem' : '1.5rem' }}
                             className="shrink-0 transition-colors"
                             aria-hidden="true"
                           />
