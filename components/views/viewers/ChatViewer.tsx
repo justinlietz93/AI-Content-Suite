@@ -224,8 +224,12 @@ export const ChatViewer: React.FC<ChatViewerProps> = ({ history, isStreaming }) 
                                                 : 'Streaming...'}
                                         </span>
                                     </button>
-                                    {hasThinkingSegments && isThinkingExpanded && (
-                                        <div className="space-y-3 rounded-lg border border-border-color/60 bg-background/80 p-3 shadow-inner">
+                                    {hasThinkingSegments && (
+                                        <div
+                                            hidden={!isThinkingExpanded}
+                                            aria-hidden={!isThinkingExpanded}
+                                            className="space-y-3 rounded-lg border border-border-color/60 bg-background/80 p-3 shadow-inner"
+                                        >
                                             {thinkingSegments.map((segment, segIndex) => {
                                                 const segmentKey = `${index}-thinking-${segIndex}`;
                                                 return (
