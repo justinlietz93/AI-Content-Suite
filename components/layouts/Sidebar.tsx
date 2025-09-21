@@ -10,7 +10,8 @@ import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import ArchitectureIcon from '@mui/icons-material/Architecture';
 import AssistantIcon from '@mui/icons-material/Assistant';
 import type { Mode } from '../../types';
-import { TABS } from '../../constants/uiConstants';
+import { SidebarOrganizer } from './sidebarOrganizer/SidebarOrganizer';
+import type { ModeIconMap } from './sidebarOrganizer/types';
 
 type SidebarProps = {
   collapsed: boolean;
@@ -34,31 +35,7 @@ type SidebarProps = {
   showCollapseToggle?: boolean;
 };
 
-type NavSection = {
-  id: string;
-  title: string;
-  modes: Mode[];
-};
-
-const NAV_SECTIONS: NavSection[] = [
-  {
-    id: 'workspace',
-    title: 'Workspace',
-    modes: ['technical', 'styleExtractor', 'rewriter', 'mathFormatter', 'reasoningStudio', 'scaffolder'] as Mode[],
-  },
-  {
-    id: 'orchestration',
-    title: 'Orchestration',
-    modes: ['requestSplitter', 'promptEnhancer', 'agentDesigner'] as Mode[],
-  },
-  {
-    id: 'interactive',
-    title: 'Interactive',
-    modes: ['chat'] as Mode[],
-  },
-];
-
-const MODE_ICONS: Record<Mode, React.ElementType> = {
+const MODE_ICONS: ModeIconMap = {
   technical: SummarizeIcon,
   styleExtractor: StyleIcon,
   rewriter: EditNoteIcon,
@@ -72,14 +49,14 @@ const MODE_ICONS: Record<Mode, React.ElementType> = {
 };
 
 /**
- * Renders the workspace navigation sidebar, including optional collapse mode and
- * per-section toggles for feature categories. The component does not perform
- * asynchronous work and therefore has no timeout concerns.
+ * Renders the workspace navigation sidebar and delegates mode organization to the
+ * {@link SidebarOrganizer} component. The sidebar itself remains synchronous and
+ * therefore has no timeout considerations.
  *
  * @param props - Sidebar configuration including collapse state, callbacks, and the active mode.
  * @returns The sidebar navigation element.
  * @throws Never throws directly; relies on React error boundaries for rendering issues.
- * @remarks Updates internal React state when section toggle handlers run.
+ * @remarks Adjusts inline width styles when the collapse toggle is activated.
  */
 export const Sidebar: React.FC<SidebarProps> = ({
   collapsed,
@@ -90,28 +67,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   className,
   showCollapseToggle = true,
 }) => {
-  const [collapsedSections, setCollapsedSections] = React.useState<Record<string, boolean>>(() =>
-    NAV_SECTIONS.reduce((acc, section) => {
-      acc[section.id] = false;
-      return acc;
-    }, {} as Record<string, boolean>),
-  );
-
-  /**
-   * Toggles the collapsed state for a sidebar category.
-   *
-   * @param sectionId - Identifier for the navigation section that should change visibility.
-   * @returns void
-   * @throws This handler never throws; it only updates component state.
-   * @remarks Mutates React state to track the collapsed sections map.
-   */
-  const handleSectionToggle = React.useCallback((sectionId: string) => {
-    setCollapsedSections(prev => ({
-      ...prev,
-      [sectionId]: !prev[sectionId],
-    }));
-  }, []);
-
   const baseVisibility = variant === 'overlay' ? 'flex md:hidden' : 'hidden md:flex';
   const widthStyle =
     variant === 'overlay'
@@ -152,84 +107,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
         )}
       </div>
 
-      <div className="flex-1 overflow-y-auto">
-        {NAV_SECTIONS.map(section => {
-          const listId = `${section.id}-nav-list`;
-          const isSectionCollapsed = collapsed ? false : collapsedSections[section.id] ?? false;
-
-          const sectionSpacingClasses = collapsed
-            ? 'px-1 first:pt-2 last:pb-2'
-            : 'px-2 py-4';
-
-          return (
-            <div
-              key={section.id}
-              className={sectionSpacingClasses}
-              data-testid={`sidebar-section-${section.id}`}
-            >
-              {!collapsed && (
-                <button
-                  type="button"
-                  onClick={() => handleSectionToggle(section.id)}
-                  className="mb-3 flex w-full items-center justify-between text-[0.65rem] uppercase tracking-widest text-text-secondary/70"
-                  aria-controls={listId}
-                  aria-expanded={!isSectionCollapsed}
-                >
-                  <span>{section.title}</span>
-                  <span aria-hidden="true">{isSectionCollapsed ? '▸' : '▾'}</span>
-                </button>
-              )}
-              <ul
-                id={listId}
-                aria-hidden={isSectionCollapsed}
-                className={`space-y-1 ${isSectionCollapsed ? 'hidden' : ''}`}
-                hidden={isSectionCollapsed}
-              >
-                {section.modes.map(mode => {
-                  const tab = TABS.find(tabItem => tabItem.id === mode);
-                  if (!tab) return null;
-                  const isActive = activeMode === mode;
-                  const IconComponent = MODE_ICONS[mode];
-                  const buttonStateClasses = isActive
-                    ? 'bg-primary/20 text-primary'
-                    : 'text-text-secondary hover:text-text-primary hover:bg-secondary/60 focus-visible:text-text-primary';
-                  const layoutClasses = collapsed
-                    ? 'justify-center px-0 py-2'
-                    : 'gap-4 px-2 py-2 text-left';
-                  const iconColorClasses = isActive
-                    ? 'text-primary'
-                    : 'text-text-secondary group-hover:text-text-primary group-focus-visible:text-text-primary';
-
-                  return (
-                    <li key={mode}>
-                      <button
-                        type="button"
-                        onClick={() => onSelectMode?.(mode)}
-                        className={`w-full rounded-md text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-surface flex items-center group ${buttonStateClasses} ${layoutClasses}`}
-                        aria-label={collapsed ? tab.label : undefined}
-                        title={collapsed ? tab.label : undefined}
-                      >
-                        {IconComponent ? (
-                          <IconComponent
-                            fontSize={collapsed ? 'large' : 'medium'}
-                            sx={{ fontSize: collapsed ? '1.95rem' : '1.5rem' }}
-                            className={`shrink-0 transition-colors ${iconColorClasses}`}
-                            aria-hidden="true"
-                          />
-                        ) : null}
-                        {collapsed ? (
-                          <span className="sr-only">{tab.label}</span>
-                        ) : (
-                          <span className="truncate">{tab.label}</span>
-                        )}
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          );
-        })}
+      <div className="flex-1 overflow-hidden">
+        <SidebarOrganizer
+          collapsed={collapsed}
+          activeMode={activeMode}
+          onSelectMode={onSelectMode}
+          iconMap={MODE_ICONS}
+        />
       </div>
 
       <div
