@@ -44,6 +44,7 @@ const ThinkingIndicator = () => {
 export const ChatViewer: React.FC<ChatViewerProps> = ({ history, isStreaming }) => {
     const chatContainerRef = useRef<HTMLDivElement>(null);
     const messageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
+    const thinkingRefs = useRef<Map<string, HTMLDivElement>>(new Map());
     const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
     const [copiedThinkingIndex, setCopiedThinkingIndex] = useState<number | null>(null);
     const [expandedThinking, setExpandedThinking] = useState<Record<number, boolean>>({});
@@ -51,22 +52,47 @@ export const ChatViewer: React.FC<ChatViewerProps> = ({ history, isStreaming }) 
     useEffect(() => {
         // Render markdown for new/updated messages
         history.forEach((msg, index) => {
-            if (msg.role === 'model') {
-                const msgRef = messageRefs.current.get(index);
-                if (msgRef) {
-                    try {
-                        const content = msg.parts.map(p => 'text' in p ? p.text : '').join('');
-                         if (content.trim()) {
-                            msgRef.innerHTML = marked.parse(content);
-                            enhanceCodeBlocks(msgRef);
-                        } else {
-                            msgRef.innerHTML = ''; // Clear it if content is empty
-                        }
-                    } catch(e) {
-                        console.error("Markdown parsing error", e);
-                        msgRef.innerText = msg.parts.map(p => 'text' in p ? p.text : '').join('');
+            if (msg.role !== 'model') {
+                return;
+            }
+
+            const msgRef = messageRefs.current.get(index);
+            if (msgRef) {
+                try {
+                    const content = msg.parts.map(p => ('text' in p ? p.text : '')).join('');
+                    if (content.trim()) {
+                        msgRef.innerHTML = marked.parse(content);
+                        enhanceCodeBlocks(msgRef);
+                    } else {
+                        msgRef.innerHTML = '';
                     }
+                } catch (error) {
+                    console.error('Markdown parsing error', error);
+                    msgRef.innerText = msg.parts.map(p => ('text' in p ? p.text : '')).join('');
                 }
+            }
+
+            if (Array.isArray(msg.thinking)) {
+                msg.thinking.forEach((segment, segIndex) => {
+                    const segmentKey = `${index}-thinking-${segIndex}`;
+                    const segmentRef = thinkingRefs.current.get(segmentKey);
+                    if (!segmentRef) {
+                        return;
+                    }
+
+                    try {
+                        const content = segment?.text ?? '';
+                        if (content.trim()) {
+                            segmentRef.innerHTML = marked.parse(content);
+                            enhanceCodeBlocks(segmentRef);
+                        } else {
+                            segmentRef.innerHTML = '';
+                        }
+                    } catch (error) {
+                        console.error('Markdown parsing error (thinking segment)', error);
+                        segmentRef.innerText = segment?.text ?? '';
+                    }
+                });
             }
         });
         
@@ -200,17 +226,27 @@ export const ChatViewer: React.FC<ChatViewerProps> = ({ history, isStreaming }) 
                                     </button>
                                     {hasThinkingSegments && isThinkingExpanded && (
                                         <div className="space-y-3 rounded-lg border border-border-color/60 bg-background/80 p-3 shadow-inner">
-                                            {thinkingSegments.map((segment, segIndex) => (
-                                                <div key={`${index}-thinking-${segIndex}`} className="space-y-2">
-                                                    <div className="flex items-center justify-between text-[11px] uppercase tracking-wide text-muted-foreground">
-                                                        <span>{segment.label || `Step ${segIndex + 1}`}</span>
-                                                        <span className="font-mono text-[10px] text-muted-foreground/70">#{segIndex + 1}</span>
+                                            {thinkingSegments.map((segment, segIndex) => {
+                                                const segmentKey = `${index}-thinking-${segIndex}`;
+                                                return (
+                                                    <div key={segmentKey} className="space-y-2">
+                                                        <div className="flex items-center justify-between text-[11px] uppercase tracking-wide text-muted-foreground">
+                                                            <span>{segment.label || `Step ${segIndex + 1}`}</span>
+                                                            <span className="font-mono text-[10px] text-muted-foreground/70">#{segIndex + 1}</span>
+                                                        </div>
+                                                        <div
+                                                            className="prose prose-sm prose-invert max-w-none rounded-md border border-border-color/40 bg-surface/70 p-3"
+                                                            ref={(el) => {
+                                                                if (el) {
+                                                                    thinkingRefs.current.set(segmentKey, el);
+                                                                } else {
+                                                                    thinkingRefs.current.delete(segmentKey);
+                                                                }
+                                                            }}
+                                                        />
                                                     </div>
-                                                    <div className="rounded-md border border-border-color/40 bg-surface/70 p-3 text-sm leading-relaxed text-muted-foreground whitespace-pre-wrap">
-                                                        {segment.text}
-                                                    </div>
-                                                </div>
-                                            ))}
+                                                );
+                                            })}
                                             <div className="flex justify-end pt-1">
                                                 {copiedThinkingIndex === index ? (
                                                     <div className="flex items-center gap-1 text-xs text-green-400">
