@@ -1,4 +1,6 @@
 
+import type { ReasoningEffortLevel } from './config/generationConfig';
+
 export interface Highlight {
   text: string;
   relevance?: number; // Optional, depends on LLM output
@@ -335,6 +337,7 @@ export interface AIProviderSettings {
   selectedModel: string;
   apiKeys?: Partial<Record<AIProviderId, string>>;
   featureModelPreferences?: FeatureModelPreferences;
+  maxOutputTokens: number;
 }
 
 export interface ModelOption {
@@ -373,8 +376,27 @@ export interface SavedPrompt {
   prompt: string;
 }
 
+export interface ChatGenerationReasoningSettings {
+  enabled: boolean;
+  effort: ReasoningEffortLevel;
+  budgetTokens?: number;
+}
+
+export interface ChatGenerationThinkingSettings {
+  enabled: boolean;
+  budgetTokens?: number;
+}
+
+export interface ChatGenerationSettings {
+  maxOutputTokens: number;
+  temperature: number;
+  reasoning: ChatGenerationReasoningSettings;
+  thinking: ChatGenerationThinkingSettings;
+}
+
 export interface ChatSettings {
   systemInstruction: string;
+  generation: ChatGenerationSettings;
   vectorStore?: VectorStoreSettings;
 }
 

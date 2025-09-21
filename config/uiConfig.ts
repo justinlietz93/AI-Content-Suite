@@ -38,6 +38,10 @@ export const UI_DIMENSIONS = {
     viewerMaxHeightMaxPx: 960,
     heightViewportRatio: 0.75,
   },
+  featurePanel: {
+    footerDefaultRem: 5.5,
+    footerProcessingRem: 12,
+  },
   settingsModal: {
     defaultWidth: 1360,
     defaultHeight: 840,
@@ -80,3 +84,15 @@ export const CHAT_HEIGHT_CLAMP = viewportClamp(
   UI_DIMENSIONS.chat.heightViewportRatio,
   UI_DIMENSIONS.settingsModal.maxHeight,
 );
+
+/**
+ * Default footer reserve height used when a tab renders bottom-aligned actions such as
+ * submit buttons. Expressed as a rem-based token to ensure proportional spacing.
+ */
+export const FEATURE_PANEL_DEFAULT_FOOTER_HEIGHT = `${UI_DIMENSIONS.featurePanel.footerDefaultRem}rem`;
+
+/**
+ * Taller footer reserve for streaming or progress states that require additional
+ * vertical space without collapsing the main content area.
+ */
+export const FEATURE_PANEL_PROCESSING_FOOTER_HEIGHT = `${UI_DIMENSIONS.featurePanel.footerProcessingRem}rem`;

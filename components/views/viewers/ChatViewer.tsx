@@ -44,6 +44,7 @@ const ThinkingIndicator = () => {
 export const ChatViewer: React.FC<ChatViewerProps> = ({ history, isStreaming }) => {
     const chatContainerRef = useRef<HTMLDivElement>(null);
     const messageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
+    const thinkingRefs = useRef<Map<string, HTMLDivElement>>(new Map());
     const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
     const [copiedThinkingIndex, setCopiedThinkingIndex] = useState<number | null>(null);
     const [expandedThinking, setExpandedThinking] = useState<Record<number, boolean>>({});
@@ -51,22 +52,47 @@ export const ChatViewer: React.FC<ChatViewerProps> = ({ history, isStreaming }) 
     useEffect(() => {
         // Render markdown for new/updated messages
         history.forEach((msg, index) => {
-            if (msg.role === 'model') {
-                const msgRef = messageRefs.current.get(index);
-                if (msgRef) {
-                    try {
-                        const content = msg.parts.map(p => 'text' in p ? p.text : '').join('');
-                         if (content.trim()) {
-                            msgRef.innerHTML = marked.parse(content);
-                            enhanceCodeBlocks(msgRef);
-                        } else {
-                            msgRef.innerHTML = ''; // Clear it if content is empty
-                        }
-                    } catch(e) {
-                        console.error("Markdown parsing error", e);
-                        msgRef.innerText = msg.parts.map(p => 'text' in p ? p.text : '').join('');
+            if (msg.role !== 'model') {
+                return;
+            }
+
+            const msgRef = messageRefs.current.get(index);
+            if (msgRef) {
+                try {
+                    const content = msg.parts.map(p => ('text' in p ? p.text : '')).join('');
+                    if (content.trim()) {
+                        msgRef.innerHTML = marked.parse(content);
+                        enhanceCodeBlocks(msgRef);
+                    } else {
+                        msgRef.innerHTML = '';
                     }
+                } catch (error) {
+                    console.error('Markdown parsing error', error);
+                    msgRef.innerText = msg.parts.map(p => ('text' in p ? p.text : '')).join('');
                 }
+            }
+
+            if (Array.isArray(msg.thinking)) {
+                msg.thinking.forEach((segment, segIndex) => {
+                    const segmentKey = `${index}-thinking-${segIndex}`;
+                    const segmentRef = thinkingRefs.current.get(segmentKey);
+                    if (!segmentRef) {
+                        return;
+                    }
+
+                    try {
+                        const content = segment?.text ?? '';
+                        if (content.trim()) {
+                            segmentRef.innerHTML = marked.parse(content);
+                            enhanceCodeBlocks(segmentRef);
+                        } else {
+                            segmentRef.innerHTML = '';
+                        }
+                    } catch (error) {
+                        console.error('Markdown parsing error (thinking segment)', error);
+                        segmentRef.innerText = segment?.text ?? '';
+                    }
+                });
             }
         });
         
@@ -165,9 +191,88 @@ export const ChatViewer: React.FC<ChatViewerProps> = ({ history, isStreaming }) 
                 const hasThinkingSegments = thinkingSegments.length > 0;
                 const isThinkingExpanded = !!expandedThinking[index];
                 const showActiveSpinner = isStreaming && isLastMessage && message.role === 'model';
+                const shouldShowThinkingPanel = message.role === 'model' && (hasThinkingSegments || showActiveSpinner);
 
                 return (
                     <div key={index} className="group">
+                        {shouldShowThinkingPanel && (
+                            <div className={`mb-2 px-3 flex ${messageAlignmentClass}`}>
+                                <div className="w-full max-w-xl space-y-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => toggleThinking(index)}
+                                        className={`w-full flex items-center gap-2 px-3 py-2 rounded-md border border-border-color/60 transition-colors ${isThinkingExpanded ? 'bg-muted/40 text-text-primary' : 'bg-muted/20 text-muted-foreground hover:text-text-primary'} disabled:cursor-not-allowed disabled:opacity-80 disabled:hover:text-muted-foreground`}
+                                        aria-expanded={hasThinkingSegments ? isThinkingExpanded : false}
+                                        disabled={!hasThinkingSegments}
+                                    >
+                                        <span className={`transition-transform duration-200 ${isThinkingExpanded ? 'rotate-90' : ''}`}>
+                                            <ChevronRightIcon className="w-4 h-4" />
+                                        </span>
+                                        <span className="flex items-center gap-2">
+                                            {showActiveSpinner ? (
+                                                <ProcessingIcon className="w-4 h-4 text-primary" />
+                                            ) : (
+                                                <SparklesIcon className="w-4 h-4 text-primary" />
+                                            )}
+                                            <span className="font-medium">Model thinking</span>
+                                        </span>
+                                        <span className="ml-auto text-xs text-muted-foreground">
+                                            {hasThinkingSegments
+                                                ? thinkingSegments.length > 1
+                                                    ? `${thinkingSegments.length} steps`
+                                                    : '1 step'
+                                                : 'Streaming...'}
+                                        </span>
+                                    </button>
+                                    {hasThinkingSegments && (
+                                        <div
+                                            hidden={!isThinkingExpanded}
+                                            aria-hidden={!isThinkingExpanded}
+                                            className="space-y-3 rounded-lg border border-border-color/60 bg-background/80 p-3 shadow-inner"
+                                        >
+                                            {thinkingSegments.map((segment, segIndex) => {
+                                                const segmentKey = `${index}-thinking-${segIndex}`;
+                                                return (
+                                                    <div key={segmentKey} className="space-y-2">
+                                                        <div className="flex items-center justify-between text-[11px] uppercase tracking-wide text-muted-foreground">
+                                                            <span>{segment.label || `Step ${segIndex + 1}`}</span>
+                                                            <span className="font-mono text-[10px] text-muted-foreground/70">#{segIndex + 1}</span>
+                                                        </div>
+                                                        <div
+                                                            className="prose prose-sm prose-invert max-w-none rounded-md border border-border-color/40 bg-surface/70 p-3 text-muted-foreground prose-p:text-muted-foreground prose-li:text-muted-foreground prose-strong:text-text-secondary prose-headings:text-text-secondary prose-code:text-text-secondary"
+                                                            ref={(el) => {
+                                                                if (el) {
+                                                                    thinkingRefs.current.set(segmentKey, el);
+                                                                } else {
+                                                                    thinkingRefs.current.delete(segmentKey);
+                                                                }
+                                                            }}
+                                                        />
+                                                    </div>
+                                                );
+                                            })}
+                                            <div className="flex justify-end pt-1">
+                                                {copiedThinkingIndex === index ? (
+                                                    <div className="flex items-center gap-1 text-xs text-green-400">
+                                                        <CheckCircleIcon className="w-3.5 h-3.5" />
+                                                        <span>Copied thinking!</span>
+                                                    </div>
+                                                ) : (
+                                                    <button
+                                                        onClick={() => handleCopyThinking(thinkingSegments, index)}
+                                                        className="flex items-center gap-1 text-xs text-muted-foreground hover:text-text-primary transition-colors"
+                                                        aria-label="Copy model thinking"
+                                                    >
+                                                        <CopyIcon className="w-3.5 h-3.5" />
+                                                        <span>Copy thinking</span>
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
                         <div className={`flex items-start gap-3 ${isUserMessage ? 'justify-end' : 'justify-start'}`}>
                             {message.role === 'model' && (
                                 <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground">
@@ -227,65 +332,6 @@ export const ChatViewer: React.FC<ChatViewerProps> = ({ history, isStreaming }) 
                                 </button>
                             )}
                         </div>
-                        {hasThinkingSegments && (
-                            <div className={`mt-2 px-3 flex ${messageAlignmentClass}`}>
-                                <div className="w-full max-w-xl space-y-2">
-                                    <button
-                                        type="button"
-                                        onClick={() => toggleThinking(index)}
-                                        className={`w-full flex items-center gap-2 px-3 py-2 rounded-md border border-border-color/60 transition-colors ${isThinkingExpanded ? 'bg-muted/40 text-text-primary' : 'bg-muted/20 text-muted-foreground hover:text-text-primary'}`}
-                                        aria-expanded={isThinkingExpanded}
-                                    >
-                                        <span className={`transition-transform duration-200 ${isThinkingExpanded ? 'rotate-90' : ''}`}>
-                                            <ChevronRightIcon className="w-4 h-4" />
-                                        </span>
-                                        <span className="flex items-center gap-2">
-                                            {showActiveSpinner ? (
-                                                <ProcessingIcon className="w-4 h-4 text-primary" />
-                                            ) : (
-                                                <SparklesIcon className="w-4 h-4 text-primary" />
-                                            )}
-                                            <span className="font-medium">Model thinking</span>
-                                        </span>
-                                        <span className="ml-auto text-xs text-muted-foreground">
-                                            {thinkingSegments.length > 1 ? `${thinkingSegments.length} steps` : '1 step'}
-                                        </span>
-                                    </button>
-                                    {isThinkingExpanded && (
-                                        <div className="space-y-3 rounded-lg border border-border-color/60 bg-background/80 p-3 shadow-inner">
-                                            {thinkingSegments.map((segment, segIndex) => (
-                                                <div key={`${index}-thinking-${segIndex}`} className="space-y-2">
-                                                    <div className="flex items-center justify-between text-[11px] uppercase tracking-wide text-muted-foreground">
-                                                        <span>{segment.label || `Step ${segIndex + 1}`}</span>
-                                                        <span className="font-mono text-[10px] text-muted-foreground/70">#{segIndex + 1}</span>
-                                                    </div>
-                                                    <div className="rounded-md border border-border-color/40 bg-surface/70 p-3 text-sm leading-relaxed text-muted-foreground whitespace-pre-wrap">
-                                                        {segment.text}
-                                                    </div>
-                                                </div>
-                                            ))}
-                                            <div className="flex justify-end pt-1">
-                                                {copiedThinkingIndex === index ? (
-                                                    <div className="flex items-center gap-1 text-xs text-green-400">
-                                                        <CheckCircleIcon className="w-3.5 h-3.5" />
-                                                        <span>Copied thinking!</span>
-                                                    </div>
-                                                ) : (
-                                                    <button
-                                                        onClick={() => handleCopyThinking(thinkingSegments, index)}
-                                                        className="flex items-center gap-1 text-xs text-muted-foreground hover:text-text-primary transition-colors"
-                                                        aria-label="Copy model thinking"
-                                                    >
-                                                        <CopyIcon className="w-3.5 h-3.5" />
-                                                        <span>Copy thinking</span>
-                                                    </button>
-                                                )}
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        )}
                     </div>
                 );
             })}

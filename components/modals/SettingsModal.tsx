@@ -17,7 +17,7 @@ import {
   requiresEmbeddingApiKey,
   getEmbeddingProviderDefaultEndpoint,
 } from '../../services/providerRegistry';
-import { UI_DIMENSIONS, UI_STORAGE_KEYS, SETTINGS_SCROLLBAR_THEME } from '../../config/uiConfig';
+import { UI_DIMENSIONS, SETTINGS_SCROLLBAR_THEME } from '../../config/uiConfig';
 import { sanitizeFeatureModelPreferences } from '../../utils/providerSettings';
 import { GlobalProviderSection } from './settings/GlobalProviderSection';
 import { FeatureOverridesSection } from './settings/FeatureOverridesSection';
@@ -47,15 +47,8 @@ const {
     viewportMarginX: VIEWPORT_MARGIN_X,
     viewportMarginY: VIEWPORT_MARGIN_Y,
   },
-  workspace: {
-    minContentWidth: MIN_WORKSPACE_CONTENT_WIDTH,
-    maxContentWidth: MAX_WORKSPACE_CONTENT_WIDTH,
-    defaultContentWidthPercent: DEFAULT_WORKSPACE_LAYOUT_PERCENT,
-  },
-  chat: { heightViewportRatio: CHAT_HEIGHT_VIEWPORT_RATIO },
 } = UI_DIMENSIONS;
 
-const WORKSPACE_LAYOUT_WIDTH_KEY = UI_STORAGE_KEYS.layoutWidth;
 const WORKSPACE_SCROLLBAR_STYLE_ID = SETTINGS_SCROLLBAR_THEME.styleId;
 const WORKSPACE_SCROLLBAR_CLASS = SETTINGS_SCROLLBAR_THEME.className;
 const RESIZE_OVERLAY_SUPPRESSION_MS = 150;
@@ -419,29 +412,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   }, [onFetchModels, providers]);
 
   /**
-   * Derives a modal footprint that mirrors the active workspace layout so each settings
-   * category opens at the same scale as the LLM chat experience.
+   * Determines the largest modal footprint permitted by viewport constraints so the settings
+   * window opens at the maximum available size on first render.
    */
   const computeWorkspaceAlignedSize = useCallback((): ModalSize => {
-    if (typeof window === 'undefined') {
-      return clampModalSize(DEFAULT_MODAL_WIDTH, DEFAULT_MODAL_HEIGHT);
-    }
-
-    const storedPercentRaw = Number(localStorage.getItem(WORKSPACE_LAYOUT_WIDTH_KEY));
-    const storedPercent = Number.isFinite(storedPercentRaw)
-      ? storedPercentRaw
-      : DEFAULT_WORKSPACE_LAYOUT_PERCENT;
-    const normalizedPercent = Math.min(Math.max(storedPercent, 0), 100);
-
-    const referenceWidth =
-      normalizedPercent >= 100
-        ? Math.min(MAX_WORKSPACE_CONTENT_WIDTH, window.innerWidth - VIEWPORT_MARGIN_X)
-        : MIN_WORKSPACE_CONTENT_WIDTH +
-          ((MAX_WORKSPACE_CONTENT_WIDTH - MIN_WORKSPACE_CONTENT_WIDTH) * normalizedPercent) / 100;
-
-    const referenceHeight = window.innerHeight * CHAT_HEIGHT_VIEWPORT_RATIO;
-
-    return clampModalSize(referenceWidth, referenceHeight);
+    return clampModalSize(MAX_MODAL_WIDTH, MAX_MODAL_HEIGHT);
   }, [clampModalSize]);
 
   useEffect(() => {
@@ -557,6 +532,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       selectedModel: trimmedModel || fallbackModel,
       apiKeys: sanitizedApiKeys,
       featureModelPreferences: finalFeaturePreferences,
+      maxOutputTokens: Math.max(1, Math.round(editedProviderSettings.maxOutputTokens)),
     };
 
     const finalChatSettings: ChatSettings = {
@@ -591,6 +567,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setEditedProviderSettings(prev => ({
       ...prev,
       selectedModel: value,
+    }));
+  };
+
+  const handleMaxOutputTokensChange = (value: number) => {
+    setEditedProviderSettings(prev => ({
+      ...prev,
+      maxOutputTokens: Math.max(1, Math.round(value)),
     }));
   };
 
@@ -729,12 +712,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             selectedProviderId={editedProviderSettings.selectedProvider}
             selectedModel={editedProviderSettings.selectedModel}
             selectedApiKey={selectedApiKey}
+            maxOutputTokens={editedProviderSettings.maxOutputTokens}
             modelOptions={modelOptions}
             modelsLoading={modelsLoading}
             modelsError={modelsError}
             onProviderChange={handleProviderChange}
             onApiKeyChange={handleApiKeyChange}
             onModelChange={handleModelInputChange}
+            onMaxOutputTokensChange={handleMaxOutputTokensChange}
             onRefreshModels={() => loadModels(editedProviderSettings.selectedProvider, selectedApiKey)}
           />
         );
@@ -774,10 +759,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             savedPrompts={savedPrompts}
             selectedPreset={selectedPreset}
             systemInstruction={editedSettings.systemInstruction}
+            generation={editedSettings.generation}
             onSelectPreset={handleLoadPreset}
             onDeletePreset={handleDeletePreset}
             onSystemInstructionChange={value => {
               setEditedSettings({ ...editedSettings, systemInstruction: value });
+              if (selectedPreset) setSelectedPreset('');
+            }}
+            onGenerationChange={updater => {
+              setEditedSettings(prev => ({
+                ...prev,
+                generation: updater(prev.generation),
+              }));
               if (selectedPreset) setSelectedPreset('');
             }}
           />
@@ -798,6 +791,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       aria-labelledby="workspace-settings-modal"
     >
       <div
+        data-testid="settings-modal-window"
         className={`relative flex flex-col overflow-hidden rounded-2xl bg-background/95 border border-border-color shadow-[0_48px_140px_-40px_rgba(0,0,0,0.85)] backdrop-blur-md ${
           isResizing ? 'select-none' : ''
         }`}
@@ -808,7 +802,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           minHeight: `min(${MIN_MODAL_HEIGHT}px, calc(100vh - 4rem))`,
           maxWidth: `min(${MAX_MODAL_WIDTH}px, calc(100vw - 2rem))`,
           maxHeight: `min(${MAX_MODAL_HEIGHT}px, calc(100vh - 2rem))`,
-          transition: isResizing ? 'none' : 'width 220ms ease, height 220ms ease',
+          transition: isResizing ? 'none' : 'box-shadow 220ms ease, opacity 220ms ease',
         }}
       >
         <SettingsModalHeader onClose={onClose} />

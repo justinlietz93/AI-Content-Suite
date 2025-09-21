@@ -3,6 +3,7 @@ import type { FormEvent } from 'react';
 import type { Mode, ChatMessage, ChatSettings, AIProviderSettings } from '../types';
 import type { WorkspaceState } from './useWorkspaceState';
 import type { ProviderInfo } from '../services/providerRegistry';
+import type { ProviderTextResponse } from '../services/providerClient';
 import { getProviderLabel, requiresApiKey } from '../services/providerRegistry';
 import type { SetModeValue } from './useMainFormProps';
 import { sendChatMessage } from '../services/geminiService';
@@ -43,6 +44,50 @@ export const useChatSubmission = ({
 
     return { providerId, model: resolvedModel };
   }, [aiProviderSettings]);
+
+  const mergeProviderUpdate = useCallback(
+    (history: ChatMessage[], update: ProviderTextResponse): ChatMessage[] => {
+      if (history.length === 0) {
+        return history;
+      }
+
+      const lastIndex = history.length - 1;
+      const lastMessage = history[lastIndex];
+      if (!lastMessage || lastMessage.role !== 'model') {
+        return history;
+      }
+
+      const existingParts = Array.isArray(lastMessage.parts) ? lastMessage.parts : [];
+      let nextParts: ChatMessage['parts'];
+
+      if (existingParts.length > 0 && 'text' in existingParts[0]) {
+        nextParts = existingParts.map((part, index) => {
+          if (index === 0 && 'text' in part) {
+            return { ...part, text: update.text };
+          }
+          return part;
+        });
+      } else {
+        nextParts = [{ text: update.text }];
+      }
+
+      const nextMessage: ChatMessage = {
+        ...lastMessage,
+        parts: nextParts,
+      };
+
+      if (update.thinking && update.thinking.length > 0) {
+        nextMessage.thinking = update.thinking.map((segment) => ({ ...segment }));
+      } else if (nextMessage.thinking) {
+        delete nextMessage.thinking;
+      }
+
+      const updatedHistory = [...history];
+      updatedHistory[lastIndex] = nextMessage;
+      return updatedHistory;
+    },
+    [],
+  );
 
   return useCallback(
     async (event?: FormEvent<HTMLFormElement>) => {
@@ -96,29 +141,19 @@ export const useChatSubmission = ({
           userMessage: userMessageParts,
           systemInstruction: chatSettings.systemInstruction,
           vectorStoreSettings: chatSettings.vectorStore,
+          generation: chatSettings.generation,
+          onUpdate: (partial) => {
+            setModeValue(
+              'chatHistory',
+              (prev) => mergeProviderUpdate(prev, partial),
+              modeAtSubmit,
+            );
+          },
         });
 
         setModeValue(
           'chatHistory',
-          prev => {
-            if (prev.length === 0) return prev;
-            const updated = [...prev];
-            const lastIndex = updated.length - 1;
-            const lastMessage = updated[lastIndex];
-            if (lastMessage && lastMessage.role === 'model') {
-              const thinkingSegments = response.thinking.length > 0 ? [...response.thinking] : undefined;
-              const finalText = response.text;
-              const firstPart = lastMessage.parts[0];
-
-              if (firstPart && 'text' in firstPart) {
-                firstPart.text = finalText;
-                lastMessage.thinking = thinkingSegments;
-              } else {
-                updated[lastIndex] = { role: 'model', parts: [{ text: finalText }], thinking: thinkingSegments };
-              }
-            }
-            return updated;
-          },
+          prev => mergeProviderUpdate(prev, response),
           modeAtSubmit,
         );
       } catch (err) {
@@ -140,11 +175,13 @@ export const useChatSubmission = ({
       aiProviderSettings,
       chatSettings.systemInstruction,
       chatSettings.vectorStore,
+      chatSettings.generation,
       canSubmit,
       chatInput,
       chatFiles,
       getStateForMode,
       resolveChatProviderConfig,
+      mergeProviderUpdate,
       setModeValue,
     ],
   );

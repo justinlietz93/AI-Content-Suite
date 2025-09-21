@@ -11,6 +11,10 @@
     "test": "vitest run --coverage"
   },
   "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@mui/icons-material": "^7.3.2",
+    "@mui/material": "^7.3.2",
     "pdfjs-dist": "4.4.168",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
@@ -22,10 +26,10 @@
     "@testing-library/react": "^16.2.0",
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",
+    "@vitest/coverage-v8": "^2.1.6",
     "jsdom": "^25.0.1",
     "typescript": "~5.8.2",
     "vite": "^6.2.0",
-    "vitest": "^2.1.6",
-    "@vitest/coverage-v8": "^2.1.6"
+    "vitest": "^2.1.6"
   }
 }

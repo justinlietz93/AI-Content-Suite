@@ -3,7 +3,7 @@
  */
 export const GENERATION_DEFAULTS = {
   temperature: 0.7,
-  maxOutputTokens: 1024,
+  maxOutputTokens: 8192,
   reasoningEffort: 'medium' as const,
 };
 
