@@ -97,8 +97,12 @@ export const CategoryHeader: React.FC<CategoryHeaderProps> = ({
   const dropAfterActive = categoryDropPosition === 'after';
   const isDropTarget = hasCategoryDrop || isFeatureDropTarget;
   const containerClasses = [
-    'group flex items-center justify-between rounded-md px-2 py-1 text-[0.65rem] uppercase tracking-widest text-text-secondary/70 transition-colors',
-    isFeatureDropTarget ? 'bg-primary/10 ring-2 ring-primary/60' : '',
+    'group flex items-center justify-between rounded-md px-2 py-1 text-[0.65rem] uppercase tracking-widest text-text-secondary/70 transition-colors transition-transform',
+    isDragging
+      ? 'scale-[1.01] ring-2 ring-primary/70 shadow-lg'
+      : isFeatureDropTarget
+        ? 'bg-primary/10 ring-2 ring-primary/60'
+        : '',
   ]
     .filter(Boolean)
     .join(' ');

@@ -77,53 +77,23 @@ export const useSidebarOrganizerActions = ({
   const [featureDropTarget, setFeatureDropTarget] = useState<FeatureDropTarget>(null);
   const [categoryDropTarget, setCategoryDropTarget] = useState<CategoryDropTarget>(null);
   const draggingItemRef = useRef<DraggingItem | null>(null);
-  const dragPreviewRef = useRef<HTMLElement | null>(null);
-
   /**
-   * Removes the currently mounted drag preview element from the DOM, if present.
+   * Aligns the native drag preview so the cursor stays centered on the dragged element.
    */
-  const removeDragPreview = useCallback(() => {
-    const preview = dragPreviewRef.current;
-    if (preview && preview.parentNode) {
-      preview.parentNode.removeChild(preview);
+  const applyDragImage = useCallback((event: DragEvent, handle: HTMLElement | null) => {
+    if (!handle || !event.dataTransfer) {
+      return;
     }
-    dragPreviewRef.current = null;
+    const rect = handle.getBoundingClientRect();
+    const offsetX = rect.width / 2;
+    const offsetY = rect.height / 2;
+    try {
+      event.dataTransfer.setDragImage(handle, offsetX, offsetY);
+    } catch (error) {
+      // Some browsers may throw when reusing DOM elements for drag images; fall back silently.
+      console.warn('Unable to set custom drag image for sidebar organizer handle.', error);
+    }
   }, []);
-
-  /**
-   * Builds a floating clone of the provided element to serve as the drag image.
-   */
-  const buildDragPreview = useCallback(
-    (element: HTMLElement | null) => {
-      if (typeof document === 'undefined' || !element) {
-        return null;
-      }
-      removeDragPreview();
-      const rect = element.getBoundingClientRect();
-      const clone = element.cloneNode(true) as HTMLElement;
-      clone.style.boxSizing = 'border-box';
-      clone.style.position = 'fixed';
-      clone.style.top = '-9999px';
-      clone.style.left = '-9999px';
-      clone.style.width = `${rect.width}px`;
-      clone.style.height = `${rect.height}px`;
-      clone.style.pointerEvents = 'none';
-      clone.style.margin = '0';
-      clone.style.opacity = '0.92';
-      clone.style.transform = 'scale(1.05)';
-      clone.style.filter = 'brightness(1.05)';
-      clone.style.boxShadow = '0 18px 42px rgba(15, 23, 42, 0.35)';
-      if (typeof window !== 'undefined') {
-        const computed = window.getComputedStyle(element);
-        clone.style.borderRadius = computed.borderRadius;
-        clone.style.background = computed.backgroundColor;
-      }
-      document.body.appendChild(clone);
-      dragPreviewRef.current = clone;
-      return { element: clone, offsetX: rect.width / 2, offsetY: rect.height / 2 };
-    },
-    [removeDragPreview],
-  );
 
   /**
    * Keeps the latest drag payload available synchronously for DOM drag events while still updating React state.
@@ -140,8 +110,7 @@ export const useSidebarOrganizerActions = ({
     setDraggingItem(null);
     setFeatureDropTarget(null);
     setCategoryDropTarget(null);
-    removeDragPreview();
-  }, [removeDragPreview, setDraggingItem]);
+  }, [setDraggingItem]);
 
   /**
    * Clears rename state and optionally removes a newly created category that was never finalized.
@@ -494,18 +463,12 @@ export const useSidebarOrganizerActions = ({
           `${DRAG_DATA_TEXT_FEATURE_PREFIX}${featureId}`,
         );
         event.dataTransfer.effectAllowed = 'move';
-        const preview = buildDragPreview(dragHandle);
-        if (preview) {
-          event.dataTransfer.setDragImage(preview.element, preview.offsetX, preview.offsetY);
-        } else {
-          const rect = dragHandle.getBoundingClientRect();
-          event.dataTransfer.setDragImage(dragHandle, rect.width / 2, rect.height / 2);
-        }
+        applyDragImage(event, dragHandle);
       }
       setDraggingItem({ type: 'feature', id: featureId, viaKeyboard: false });
       announce(labels.featureGrabAnnouncement);
     },
-    [announce, buildDragPreview, labels.featureGrabAnnouncement, setDraggingItem],
+    [announce, applyDragImage, labels.featureGrabAnnouncement, setDraggingItem],
   );
 
   /**
@@ -525,18 +488,12 @@ export const useSidebarOrganizerActions = ({
           `${DRAG_DATA_TEXT_CATEGORY_PREFIX}${categoryId}`,
         );
         event.dataTransfer.effectAllowed = 'move';
-        const preview = buildDragPreview(dragHandle);
-        if (preview) {
-          event.dataTransfer.setDragImage(preview.element, preview.offsetX, preview.offsetY);
-        } else {
-          const rect = dragHandle.getBoundingClientRect();
-          event.dataTransfer.setDragImage(dragHandle, rect.width / 2, rect.height / 2);
-        }
+        applyDragImage(event, dragHandle);
       }
       setDraggingItem({ type: 'category', id: categoryId, viaKeyboard: false });
       announce(labels.categoryGrabAnnouncement);
     },
-    [announce, buildDragPreview, labels.categoryGrabAnnouncement, setDraggingItem],
+    [announce, applyDragImage, labels.categoryGrabAnnouncement, setDraggingItem],
   );
 
   return {

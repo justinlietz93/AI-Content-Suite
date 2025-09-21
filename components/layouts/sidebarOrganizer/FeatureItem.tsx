@@ -57,11 +57,12 @@ export const FeatureItem: React.FC<FeatureItemProps> = ({
     onDragEnd();
   }, [onDragEnd]);
   const buttonClasses = [
-    'group flex w-full items-center gap-3 rounded-md px-2 py-2 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-surface',
+    'group flex w-full items-center gap-3 rounded-md px-2 py-2 text-left transition-colors transition-transform focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-surface',
     isActive
       ? 'bg-primary/20 text-primary'
       : 'text-text-secondary hover:bg-secondary/60 hover:text-text-primary focus-visible:text-text-primary',
     collapsed ? 'justify-center px-0' : '',
+    isDragging ? 'scale-[1.02] ring-2 ring-primary/70 shadow-lg' : '',
   ]
     .filter(Boolean)
     .join(' ');
