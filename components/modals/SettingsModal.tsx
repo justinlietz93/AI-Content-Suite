@@ -557,6 +557,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       selectedModel: trimmedModel || fallbackModel,
       apiKeys: sanitizedApiKeys,
       featureModelPreferences: finalFeaturePreferences,
+      maxOutputTokens: Math.max(1, Math.round(editedProviderSettings.maxOutputTokens)),
     };
 
     const finalChatSettings: ChatSettings = {
@@ -591,6 +592,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setEditedProviderSettings(prev => ({
       ...prev,
       selectedModel: value,
+    }));
+  };
+
+  const handleMaxOutputTokensChange = (value: number) => {
+    setEditedProviderSettings(prev => ({
+      ...prev,
+      maxOutputTokens: Math.max(1, Math.round(value)),
     }));
   };
 
@@ -729,12 +737,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             selectedProviderId={editedProviderSettings.selectedProvider}
             selectedModel={editedProviderSettings.selectedModel}
             selectedApiKey={selectedApiKey}
+            maxOutputTokens={editedProviderSettings.maxOutputTokens}
             modelOptions={modelOptions}
             modelsLoading={modelsLoading}
             modelsError={modelsError}
             onProviderChange={handleProviderChange}
             onApiKeyChange={handleApiKeyChange}
             onModelChange={handleModelInputChange}
+            onMaxOutputTokensChange={handleMaxOutputTokensChange}
             onRefreshModels={() => loadModels(editedProviderSettings.selectedProvider, selectedApiKey)}
           />
         );
@@ -774,10 +784,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             savedPrompts={savedPrompts}
             selectedPreset={selectedPreset}
             systemInstruction={editedSettings.systemInstruction}
+            generation={editedSettings.generation}
             onSelectPreset={handleLoadPreset}
             onDeletePreset={handleDeletePreset}
             onSystemInstructionChange={value => {
               setEditedSettings({ ...editedSettings, systemInstruction: value });
+              if (selectedPreset) setSelectedPreset('');
+            }}
+            onGenerationChange={updater => {
+              setEditedSettings(prev => ({
+                ...prev,
+                generation: updater(prev.generation),
+              }));
               if (selectedPreset) setSelectedPreset('');
             }}
           />

@@ -4,6 +4,7 @@ import { render, fireEvent, screen, act, cleanup } from '@testing-library/react'
 import '@testing-library/jest-dom/vitest';
 import { SettingsModal } from '../components/modals/SettingsModal';
 import { INITIAL_CHAT_SETTINGS } from '../constants';
+import { GENERATION_DEFAULTS } from '../config/generationConfig';
 import type { AIProviderSettings, ChatSettings, ProviderInfo } from '../types';
 
 if (typeof window !== 'undefined' && !window.PointerEvent) {
@@ -22,6 +23,8 @@ const baseProviderSettings: AIProviderSettings = {
   selectedProvider: 'openai',
   selectedModel: 'gpt-4o-mini',
   apiKeys: { openai: 'test-key' },
+  featureModelPreferences: undefined,
+  maxOutputTokens: GENERATION_DEFAULTS.maxOutputTokens,
 };
 
 const providers: ProviderInfo[] = [

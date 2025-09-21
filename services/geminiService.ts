@@ -1,4 +1,11 @@
-import type { Highlight, Mode, ChatMessage, ChatMessagePart, VectorStoreSettings } from '../types';
+import type {
+  Highlight,
+  Mode,
+  ChatGenerationSettings,
+  ChatMessage,
+  ChatMessagePart,
+  VectorStoreSettings,
+} from '../types';
 import {
   HIGHLIGHT_EXTRACTION_PROMPT_TEMPLATE,
   NEXT_STEPS_TECHNICAL_SUMMARY_PROMPT_TEMPLATE,
@@ -190,16 +197,59 @@ export const generateSuggestions = async (
   }
 };
 
+/**
+ * Calculates the reasoning or thinking token allowance that should accompany a
+ * chat generation request. The helper enforces positive integer budgets, clamps
+ * user-provided values to the available response token ceiling, and applies a
+ * proportional fallback when the caller omits an explicit budget so providers
+ * still receive a meaningful allowance.
+ *
+ * @param requested - Explicit budget requested by the user or persisted settings.
+ * @param maxTokens - Maximum number of output tokens configured for the
+ *   generation call; used to clamp derived budgets.
+ * @param ratioFallback - Decimal ratio (for example `0.5` for 50%) indicating
+ *   what portion of the max token budget should be reserved when no explicit
+ *   budget is provided.
+ * @returns The sanitized positive integer budget to send to the provider, or
+ *   `undefined` when a budget should not be transmitted.
+ * @throws This helper does not throw. Invalid inputs fall back to sanitized
+ *   defaults instead of propagating errors.
+ * @remarks Side effects: none. Timeout or retry semantics: not applicable
+ *   because the helper performs synchronous arithmetic only.
+ */
+const deriveBudget = (
+  requested: number | undefined,
+  maxTokens: number | undefined,
+  ratioFallback: number,
+): number | undefined => {
+  const sanitizedMax = typeof maxTokens === 'number' && Number.isFinite(maxTokens)
+    ? Math.max(1, Math.round(maxTokens))
+    : undefined;
+
+  if (typeof requested === 'number' && Number.isFinite(requested)) {
+    const clamped = Math.max(1, Math.round(requested));
+    return sanitizedMax ? Math.min(clamped, sanitizedMax) : clamped;
+  }
+
+  if (!sanitizedMax) {
+    return undefined;
+  }
+
+  const fallback = Math.max(1, Math.round(sanitizedMax * ratioFallback));
+  return Math.min(fallback, sanitizedMax);
+};
+
 export const sendChatMessage = async (
   args: {
     history: ChatMessage[];
     userMessage: ChatMessagePart[];
     systemInstruction: string;
     vectorStoreSettings?: VectorStoreSettings;
+    generation?: ChatGenerationSettings;
     signal?: AbortSignal;
   },
 ): Promise<ProviderTextResponse> => {
-  const { history, userMessage, systemInstruction, vectorStoreSettings, signal } = args;
+  const { history, userMessage, systemInstruction, vectorStoreSettings, generation, signal } = args;
 
   let contextSections: string[] | undefined;
   if (vectorStoreSettings?.enabled) {
@@ -226,5 +276,42 @@ export const sendChatMessage = async (
   }
 
   const messages = buildMessages(history, userMessage, systemInstruction, contextSections);
-  return callProvider({ messages, signal });
+
+  const normalizedMaxTokens = generation
+    ? Math.max(1, Math.round(generation.maxOutputTokens))
+    : undefined;
+  const normalizedTemperature = generation
+    ? Math.min(Math.max(generation.temperature, 0), 2)
+    : undefined;
+
+  const reasoningBudget = generation?.reasoning.enabled
+    ? deriveBudget(generation.reasoning.budgetTokens, normalizedMaxTokens, 0.5)
+    : undefined;
+  const thinkingBudget = generation?.thinking.enabled
+    ? deriveBudget(generation.thinking.budgetTokens, normalizedMaxTokens, 0.35)
+    : undefined;
+
+  const reasoningBehavior = generation
+    ? {
+        enabled: generation.reasoning.enabled,
+        effort: generation.reasoning.effort,
+        ...(generation.reasoning.enabled && reasoningBudget ? { budgetTokens: reasoningBudget } : {}),
+      }
+    : undefined;
+
+  const thinkingBehavior = generation
+    ? {
+        enabled: generation.thinking.enabled,
+        ...(generation.thinking.enabled && thinkingBudget ? { budgetTokens: thinkingBudget } : {}),
+      }
+    : undefined;
+
+  return callProvider({
+    messages,
+    signal,
+    maxOutputTokens: normalizedMaxTokens,
+    temperature: normalizedTemperature,
+    reasoning: reasoningBehavior,
+    thinking: thinkingBehavior,
+  });
 };

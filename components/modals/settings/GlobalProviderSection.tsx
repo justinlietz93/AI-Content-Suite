@@ -7,12 +7,14 @@ interface GlobalProviderSectionProps {
   selectedProviderId: AIProviderId;
   selectedModel: string;
   selectedApiKey: string;
+  maxOutputTokens: number;
   modelOptions: ModelOption[];
   modelsLoading: boolean;
   modelsError: string | null;
   onProviderChange: (providerId: AIProviderId) => void;
   onApiKeyChange: (providerId: AIProviderId, value: string) => void;
   onModelChange: (value: string) => void;
+  onMaxOutputTokensChange: (value: number) => void;
   onRefreshModels: () => void;
 }
 
@@ -21,12 +23,14 @@ export const GlobalProviderSection: React.FC<GlobalProviderSectionProps> = ({
   selectedProviderId,
   selectedModel,
   selectedApiKey,
+  maxOutputTokens,
   modelOptions,
   modelsLoading,
   modelsError,
   onProviderChange,
   onApiKeyChange,
   onModelChange,
+  onMaxOutputTokensChange,
   onRefreshModels,
 }) => {
   const providerInfo = providers.find(provider => provider.id === selectedProviderId);
@@ -120,6 +124,30 @@ export const GlobalProviderSection: React.FC<GlobalProviderSectionProps> = ({
           ) : (
             <p className="mt-1 text-xs text-text-secondary">Enter a model name or refresh to fetch available options.</p>
           )}
+        </div>
+
+        <div className="sm:col-span-2">
+          <label htmlFor="provider-max-output" className="block text-sm font-medium text-text-secondary mb-2">
+            Max output tokens
+          </label>
+          <input
+            id="provider-max-output"
+            type="number"
+            min={1}
+            step={1}
+            value={maxOutputTokens}
+            onChange={event => {
+              const parsedValue = Number(event.target.value);
+              const sanitizedValue = Number.isFinite(parsedValue)
+                ? Math.max(1, Math.round(parsedValue))
+                : maxOutputTokens;
+              onMaxOutputTokensChange(sanitizedValue);
+            }}
+            className="w-full px-3 py-2 bg-input border border-border-color rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-ring text-text-primary placeholder-text-secondary text-sm"
+          />
+          <p className="mt-1 text-xs text-text-secondary">
+            Sets the default completion length for all tools. Individual features may still apply stricter limits.
+          </p>
         </div>
       </div>
     </section>

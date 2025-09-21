@@ -35,6 +35,7 @@ interface ActiveProviderConfig {
   providerId: AIProviderId;
   model: string;
   apiKey?: string;
+  maxOutputTokens: number;
 }
 
 export interface ProviderTextResponse {
@@ -46,6 +47,7 @@ let activeConfig: ActiveProviderConfig = {
   providerId: 'openai',
   model: DEFAULT_PROVIDER_MODELS.openai,
   apiKey: undefined,
+  maxOutputTokens: GENERATION_DEFAULTS.maxOutputTokens,
 };
 
 const ensureConfig = (): ActiveProviderConfig => {
@@ -56,18 +58,33 @@ const ensureConfig = (): ActiveProviderConfig => {
     }
     activeConfig = { ...activeConfig, model: fallbackModel };
   }
+  const sanitizedMaxTokens = Number.isFinite(activeConfig.maxOutputTokens)
+    ? Math.max(1, Math.round(activeConfig.maxOutputTokens))
+    : GENERATION_DEFAULTS.maxOutputTokens;
+  if (sanitizedMaxTokens !== activeConfig.maxOutputTokens) {
+    activeConfig = { ...activeConfig, maxOutputTokens: sanitizedMaxTokens };
+  }
   return activeConfig;
 };
 
-export const setActiveProviderConfig = (config: { providerId: AIProviderId; model?: string; apiKey?: string }) => {
+export const setActiveProviderConfig = (config: {
+  providerId: AIProviderId;
+  model?: string;
+  apiKey?: string;
+  maxOutputTokens?: number;
+}) => {
   activeConfig = {
     providerId: config.providerId,
     model: config.model && config.model.trim() !== '' ? config.model.trim() : DEFAULT_PROVIDER_MODELS[config.providerId],
     apiKey: config.apiKey && config.apiKey.trim() !== '' ? config.apiKey.trim() : undefined,
+    maxOutputTokens:
+      typeof config.maxOutputTokens === 'number' && Number.isFinite(config.maxOutputTokens)
+        ? Math.max(1, Math.round(config.maxOutputTokens))
+        : GENERATION_DEFAULTS.maxOutputTokens,
   };
 };
 
-export const getActiveProviderConfig = (): ActiveProviderConfig => ({ ...activeConfig });
+export const getActiveProviderConfig = (): ActiveProviderConfig => ({ ...ensureConfig() });
 
 export const getActiveProviderLabel = (): string => getProviderLabel(activeConfig.providerId);
 
@@ -368,7 +385,7 @@ const callOpenAICompatible = async (
   { messages, maxOutputTokens, responseFormat, temperature, reasoning, thinking, signal }: ProviderCallArgs,
   extraHeaders: Record<string, string> = {},
 ): Promise<ProviderTextResponse> => {
-  const { model } = ensureConfig();
+  const { model, maxOutputTokens: defaultMaxTokens } = ensureConfig();
   const requestBody: Record<string, unknown> = {
     model,
     messages: toOpenAIMessage(messages),
@@ -378,7 +395,7 @@ const callOpenAICompatible = async (
   const resolvedTemperature = typeof temperature === 'number' ? temperature : GENERATION_DEFAULTS.temperature;
   const resolvedMaxOutputTokens = typeof maxOutputTokens === 'number'
     ? Math.max(1, Math.round(maxOutputTokens))
-    : GENERATION_DEFAULTS.maxOutputTokens;
+    : defaultMaxTokens;
   const isReasoningModel = isReasoningModelId(model);
 
   if (isReasoningModel) {
@@ -458,9 +475,10 @@ const callAnthropic = async (
     content: [{ type: 'text', text: msg.content }],
   }));
 
+  const { model, maxOutputTokens: defaultMaxTokens } = ensureConfig();
   const body: Record<string, unknown> = {
-    model: ensureConfig().model,
-    max_tokens: typeof maxOutputTokens === 'number' ? maxOutputTokens : GENERATION_DEFAULTS.maxOutputTokens,
+    model,
+    max_tokens: typeof maxOutputTokens === 'number' ? maxOutputTokens : defaultMaxTokens,
     temperature: typeof temperature === 'number' ? temperature : GENERATION_DEFAULTS.temperature,
     messages: conversation,
   };
@@ -504,6 +522,7 @@ const callAnthropic = async (
 const callOllama = async ({ messages, maxOutputTokens, temperature, signal }: ProviderCallArgs): Promise<ProviderTextResponse> => {
   const systemMessages = messages.filter((msg) => msg.role === 'system');
   const conversation = messages.filter((msg) => msg.role !== 'system');
+  const { maxOutputTokens: defaultMaxTokens } = ensureConfig();
 
   const promptSections: string[] = [];
   if (systemMessages.length > 0) {
@@ -522,14 +541,15 @@ const callOllama = async ({ messages, maxOutputTokens, temperature, signal }: Pr
     stream: false,
   };
 
-  if (typeof maxOutputTokens === 'number' || typeof temperature === 'number') {
-    const options: Record<string, unknown> = {};
-    if (typeof maxOutputTokens === 'number') {
-      options.num_predict = maxOutputTokens;
-    }
-    if (typeof temperature === 'number') {
-      options.temperature = temperature;
-    }
+  const options: Record<string, unknown> = {};
+  const resolvedMaxPredict = typeof maxOutputTokens === 'number' ? maxOutputTokens : defaultMaxTokens;
+  if (Number.isFinite(resolvedMaxPredict)) {
+    options.num_predict = resolvedMaxPredict;
+  }
+  if (typeof temperature === 'number') {
+    options.temperature = temperature;
+  }
+  if (Object.keys(options).length > 0) {
     body.options = options;
   }
 

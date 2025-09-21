@@ -96,6 +96,7 @@ export const useChatSubmission = ({
           userMessage: userMessageParts,
           systemInstruction: chatSettings.systemInstruction,
           vectorStoreSettings: chatSettings.vectorStore,
+          generation: chatSettings.generation,
         });
 
         setModeValue(
@@ -140,6 +141,7 @@ export const useChatSubmission = ({
       aiProviderSettings,
       chatSettings.systemInstruction,
       chatSettings.vectorStore,
+      chatSettings.generation,
       canSubmit,
       chatInput,
       chatFiles,

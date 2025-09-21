@@ -139,6 +139,7 @@ const App: React.FC = () => {
       providerId: resolvedProviderId,
       model: resolvedModel,
       apiKey,
+      maxOutputTokens: aiProviderSettings.maxOutputTokens,
     });
   }, [activeMode, aiProviderSettings, resolveProviderForMode]);
 

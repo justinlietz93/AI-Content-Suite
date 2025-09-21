@@ -13,6 +13,7 @@ import type {
   AIProviderSettings,
 } from './types';
 import { DEFAULT_PROVIDER_MODELS, DEFAULT_EMBEDDING_MODELS } from './config/providerConfig';
+import { GENERATION_DEFAULTS } from './config/generationConfig';
 
 // Import all summary prompts from the new modular structure
 import * as summaryPrompts from './prompts/summaries';
@@ -38,6 +39,7 @@ export const INITIAL_AI_PROVIDER_SETTINGS: AIProviderSettings = {
   selectedModel: DEFAULT_PROVIDER_MODELS.openai,
   apiKeys: {},
   featureModelPreferences: undefined,
+  maxOutputTokens: GENERATION_DEFAULTS.maxOutputTokens,
 };
 
 
@@ -121,6 +123,19 @@ export const INITIAL_AGENT_DESIGNER_SETTINGS: AgentDesignerSettings = {
 
 export const INITIAL_CHAT_SETTINGS: ChatSettings = {
     systemInstruction: 'You are a helpful and friendly AI assistant. Answer the user\'s questions clearly and concisely.',
+    generation: {
+        maxOutputTokens: GENERATION_DEFAULTS.maxOutputTokens,
+        temperature: GENERATION_DEFAULTS.temperature,
+        reasoning: {
+            enabled: true,
+            effort: GENERATION_DEFAULTS.reasoningEffort,
+            budgetTokens: undefined,
+        },
+        thinking: {
+            enabled: true,
+            budgetTokens: undefined,
+        },
+    },
     vectorStore: {
         enabled: false,
         url: '',
