@@ -7,6 +7,9 @@ import HandymanIcon from '@mui/icons-material/Handyman';
 import HighlightOffIcon from '@mui/icons-material/HighlightOff';
 import type { SidebarOrganizerLabels } from './types';
 
+/** Pixel distance from the left edge that activates the category action tray. */
+const ACTION_ZONE_THRESHOLD_PX = 60;
+
 interface CategoryHeaderProps {
   /** Unique category identifier. */
   categoryId: string;
@@ -81,6 +84,11 @@ export const CategoryHeader: React.FC<CategoryHeaderProps> = ({
   onHeaderDragLeave,
   onHeaderDrop,
 }) => {
+  const actionContainerRef = React.useRef<HTMLDivElement | null>(null);
+  const [isPointerInActionZone, setPointerInActionZone] = React.useState(false);
+  const [isActionFocused, setActionFocused] = React.useState(false);
+  const [isHeaderFocused, setHeaderFocused] = React.useState(false);
+
   const showActions = !isEditing;
   const errorId = editingError ? `rename-${categoryId}-error` : undefined;
   const isDropTarget = isCategoryDropTarget || isFeatureDropTarget;
@@ -90,6 +98,102 @@ export const CategoryHeader: React.FC<CategoryHeaderProps> = ({
   ]
     .filter(Boolean)
     .join(' ');
+
+  const shouldRevealActions = showActions && (isPointerInActionZone || isActionFocused || isHeaderFocused);
+
+  React.useEffect(() => {
+    if (isEditing) {
+      setPointerInActionZone(false);
+      setActionFocused(false);
+      setHeaderFocused(false);
+    }
+  }, [isEditing]);
+
+  /**
+   * Reveals category actions when the pointer hovers near the title's leading edge.
+   */
+  const handleHeaderMouseMove = React.useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      if (!showActions) {
+        return;
+      }
+
+      const { left } = event.currentTarget.getBoundingClientRect();
+      const offset = event.clientX - left;
+      const withinZone = offset <= ACTION_ZONE_THRESHOLD_PX;
+
+      setPointerInActionZone(previous => (previous === withinZone ? previous : withinZone));
+    },
+    [showActions],
+  );
+
+  /**
+   * Hides the action tray once the pointer leaves the header region.
+   */
+  const handleHeaderMouseLeave = React.useCallback(() => {
+    setPointerInActionZone(false);
+  }, []);
+
+  /**
+   * Ensures keyboard users reveal the action tray when the header gains focus.
+   */
+  const handleHeaderFocus = React.useCallback(() => {
+    if (showActions) {
+      setHeaderFocused(true);
+    }
+  }, [showActions]);
+
+  /**
+   * Hides the action tray when focus leaves the header entirely.
+   */
+  const handleHeaderBlur = React.useCallback(
+    (event: React.FocusEvent<HTMLDivElement>) => {
+      const nextFocus = event.relatedTarget as Node | null;
+      if (actionContainerRef.current && nextFocus && actionContainerRef.current.contains(nextFocus)) {
+        return;
+      }
+
+      setHeaderFocused(false);
+    },
+    [],
+  );
+
+  /**
+   * Maintains visibility of actions while the pointer rests on the tray.
+   */
+  const handleActionMouseEnter = React.useCallback(() => {
+    if (showActions) {
+      setPointerInActionZone(true);
+    }
+  }, [showActions]);
+
+  /**
+   * Conceals the tray when pointer leaves the actions container.
+   */
+  const handleActionMouseLeave = React.useCallback(() => {
+    setPointerInActionZone(false);
+  }, []);
+
+  /**
+   * Shows actions when a control inside the tray receives focus.
+   */
+  const handleActionFocusCapture = React.useCallback(() => {
+    setActionFocused(true);
+    setPointerInActionZone(true);
+  }, []);
+
+  /**
+   * Clears the action focus state when keyboard focus exits the tray.
+   */
+  const handleActionBlurCapture = React.useCallback((event: React.FocusEvent<HTMLDivElement>) => {
+    const nextFocus = event.relatedTarget as Node | null;
+    if (event.currentTarget.contains(nextFocus)) {
+      return;
+    }
+
+    setActionFocused(false);
+    setPointerInActionZone(false);
+  }, []);
 
   return (
     <div className="space-y-1">
@@ -108,6 +212,10 @@ export const CategoryHeader: React.FC<CategoryHeaderProps> = ({
         onDragOver={onHeaderDragOver}
         onDragLeave={onHeaderDragLeave}
         onDrop={onHeaderDrop}
+        onMouseMove={handleHeaderMouseMove}
+        onMouseLeave={handleHeaderMouseLeave}
+        onFocus={handleHeaderFocus}
+        onBlur={handleHeaderBlur}
         tabIndex={isEditing ? -1 : 0}
         role="button"
         aria-grabbed={isDragging}
@@ -116,12 +224,15 @@ export const CategoryHeader: React.FC<CategoryHeaderProps> = ({
       >
         <div className="flex flex-1 items-center gap-2 overflow-hidden">
           <div
+            ref={actionContainerRef}
             className={`flex flex-shrink-0 items-center gap-1 overflow-hidden transition-[width,opacity] duration-200 ease-out ${
-              showActions
-                ? 'w-0 opacity-0 group-hover:w-[3.5rem] group-hover:opacity-100 group-focus-within:w-[3.5rem] group-focus-within:opacity-100'
-                : 'w-0 opacity-0'
+              shouldRevealActions ? 'w-[3.5rem] opacity-100' : 'w-0 opacity-0'
             }`}
-            aria-hidden={!showActions}
+            aria-hidden={!shouldRevealActions}
+            onMouseEnter={handleActionMouseEnter}
+            onMouseLeave={handleActionMouseLeave}
+            onFocusCapture={handleActionFocusCapture}
+            onBlurCapture={handleActionBlurCapture}
           >
             {showActions ? (
               <>
