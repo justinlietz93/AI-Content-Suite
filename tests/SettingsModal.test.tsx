@@ -1,10 +1,11 @@
 /* @vitest-environment jsdom */
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, fireEvent, screen, act, cleanup } from '@testing-library/react';
+import { render, fireEvent, screen, act, cleanup, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { SettingsModal } from '../components/modals/SettingsModal';
 import { INITIAL_CHAT_SETTINGS } from '../constants';
 import { GENERATION_DEFAULTS } from '../config/generationConfig';
+import { UI_DIMENSIONS } from '../config/uiConfig';
 import type { AIProviderSettings, ChatSettings, ProviderInfo } from '../types';
 
 if (typeof window !== 'undefined' && !window.PointerEvent) {
@@ -100,5 +101,37 @@ describe('SettingsModal', () => {
     expect(modalWindow.style.transition).toBe('box-shadow 220ms ease, opacity 220ms ease');
     expect(modalWindow.style.transition.includes('width')).toBe(false);
     expect(modalWindow.style.transition.includes('height')).toBe(false);
+  });
+
+  it('initializes to the maximum allowed modal size when opened', async () => {
+    const widthSpy = vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(1800);
+    const heightSpy = vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(1200);
+
+    try {
+      render(
+        <SettingsModal
+          isOpen
+          onClose={vi.fn()}
+          currentSettings={createChatSettings()}
+          providerSettings={baseProviderSettings}
+          providers={providers}
+          onSave={vi.fn()}
+          onFetchModels={async () => []}
+          savedPrompts={[]}
+          onSavePreset={vi.fn()}
+          onDeletePreset={vi.fn()}
+        />,
+      );
+
+      const modalWindow = await screen.findByTestId('settings-modal-window');
+
+      await waitFor(() => {
+        expect(modalWindow.style.width).toBe(`${UI_DIMENSIONS.settingsModal.maxWidth}px`);
+        expect(modalWindow.style.height).toBe(`${UI_DIMENSIONS.settingsModal.maxHeight}px`);
+      });
+    } finally {
+      widthSpy.mockRestore();
+      heightSpy.mockRestore();
+    }
   });
 });
