@@ -70,6 +70,14 @@ export const SidebarOrganizer: React.FC<SidebarOrganizerProps> = ({
     useSidebarOrganizationState(labels);
   const tabLabels = useTabLabelMap();
   const layoutBuckets = useLayoutBuckets(state.features, state.categories, state.collapsedCategoryIds);
+  const orderedCategoryIds = React.useMemo(
+    () =>
+      state.categories
+        .slice()
+        .sort((a, b) => a.order - b.order)
+        .map(category => category.id),
+    [state.categories],
+  );
   const [liveRegionRef, announce] = useAnnouncement();
 
   const {
@@ -143,6 +151,7 @@ export const SidebarOrganizer: React.FC<SidebarOrganizerProps> = ({
             categoryDropTarget={categoryDropTarget}
             mergedLabels={mergedLabels}
             collapsedCategoryIds={state.collapsedCategoryIds}
+            orderedCategoryIds={orderedCategoryIds}
             editingCategoryId={editingCategoryId}
             editingName={editingName}
             editingError={editingError}
@@ -175,7 +184,11 @@ export const SidebarOrganizer: React.FC<SidebarOrganizerProps> = ({
         ))}
         {!collapsed ? (
           <DropZone
-            active={categoryDropTarget?.targetIndex === state.categories.length}
+            active={
+              categoryDropTarget?.targetIndex === state.categories.length &&
+              categoryDropTarget.position === 'after' &&
+              categoryDropTarget.hoveredCategoryId === null
+            }
             sizeClassName="h-3"
             className="px-2"
             onDragOver={event => {
@@ -187,12 +200,24 @@ export const SidebarOrganizer: React.FC<SidebarOrganizerProps> = ({
               if (event.dataTransfer) {
                 event.dataTransfer.dropEffect = 'move';
               }
-              setCategoryDropTarget({ targetIndex: state.categories.length });
+              setCategoryDropTarget({
+                targetIndex: state.categories.length,
+                position: 'after',
+                hoveredCategoryId: null,
+              });
             }}
             onDragLeave={() => {
-              setCategoryDropTarget(prev =>
-                prev?.targetIndex === state.categories.length ? null : prev,
-              );
+              setCategoryDropTarget(prev => {
+                if (
+                  prev &&
+                  prev.targetIndex === state.categories.length &&
+                  prev.position === 'after' &&
+                  prev.hoveredCategoryId === null
+                ) {
+                  return null;
+                }
+                return prev;
+              });
             }}
             onDrop={event => {
               const data = draggingItem ?? parseDragData(event);
@@ -202,6 +227,7 @@ export const SidebarOrganizer: React.FC<SidebarOrganizerProps> = ({
               event.preventDefault();
               dispatch(moveCategory(data.id, state.categories.length));
               resetDragState();
+              setCategoryDropTarget(null);
             }}
           />
         ) : null}

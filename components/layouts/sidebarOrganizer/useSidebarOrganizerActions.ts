@@ -3,7 +3,7 @@
  * The hook manages local UI state such as rename fields, drag indicators, and persistence events.
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import type { DragEvent, KeyboardEvent, Dispatch, SetStateAction } from 'react';
 import type { SidebarOrganizerLabels, SidebarOrganizationState } from './types';
 import type { SidebarOrganizationAction } from './types';
@@ -70,9 +70,18 @@ export const useSidebarOrganizerActions = ({
   const [editingName, setEditingName] = useState('');
   const [editingError, setEditingError] = useState<string | null>(null);
   const [pendingCategoryId, setPendingCategoryId] = useState<string | null>(null);
-  const [draggingItem, setDraggingItem] = useState<DraggingItem | null>(null);
+  const [draggingItem, setDraggingItemState] = useState<DraggingItem | null>(null);
   const [featureDropTarget, setFeatureDropTarget] = useState<FeatureDropTarget>(null);
   const [categoryDropTarget, setCategoryDropTarget] = useState<CategoryDropTarget>(null);
+  const draggingItemRef = useRef<DraggingItem | null>(null);
+
+  /**
+   * Keeps the latest drag payload available synchronously for DOM drag events while still updating React state.
+   */
+  const setDraggingItem = useCallback((item: DraggingItem | null) => {
+    draggingItemRef.current = item;
+    setDraggingItemState(item);
+  }, []);
 
   /**
    * Clears drag state for both features and categories.
@@ -81,7 +90,7 @@ export const useSidebarOrganizerActions = ({
     setDraggingItem(null);
     setFeatureDropTarget(null);
     setCategoryDropTarget(null);
-  }, []);
+  }, [setDraggingItem]);
 
   /**
    * Clears rename state and optionally removes a newly created category that was never finalized.
@@ -283,7 +292,8 @@ export const useSidebarOrganizerActions = ({
     (event: KeyboardEvent<HTMLButtonElement>, featureId: string) => {
       if (event.key === ' ' || event.key === 'Enter') {
         event.preventDefault();
-        const isDragging = draggingItem?.type === 'feature' && draggingItem.id === featureId;
+        const currentItem = draggingItemRef.current;
+        const isDragging = currentItem?.type === 'feature' && currentItem.id === featureId;
         setDraggingItem(isDragging ? null : { type: 'feature', id: featureId, viaKeyboard: true });
         announce(labels.featureGrabAnnouncement);
         return;
@@ -296,7 +306,14 @@ export const useSidebarOrganizerActions = ({
         resetDragState();
       }
     },
-    [announce, draggingItem, labels.featureGrabAnnouncement, moveFeatureByOffset, resetDragState],
+    [
+      announce,
+      draggingItem,
+      labels.featureGrabAnnouncement,
+      moveFeatureByOffset,
+      resetDragState,
+      setDraggingItem,
+    ],
   );
 
   /**
@@ -326,7 +343,8 @@ export const useSidebarOrganizerActions = ({
     (event: KeyboardEvent<HTMLDivElement>, categoryId: string) => {
       if (event.key === ' ' || event.key === 'Enter') {
         event.preventDefault();
-        const isDragging = draggingItem?.type === 'category' && draggingItem.id === categoryId;
+        const currentItem = draggingItemRef.current;
+        const isDragging = currentItem?.type === 'category' && currentItem.id === categoryId;
         setDraggingItem(isDragging ? null : { type: 'category', id: categoryId, viaKeyboard: true });
         announce(labels.categoryGrabAnnouncement);
         return;
@@ -339,7 +357,14 @@ export const useSidebarOrganizerActions = ({
         resetDragState();
       }
     },
-    [announce, draggingItem, labels.categoryGrabAnnouncement, moveCategoryByOffset, resetDragState],
+    [
+      announce,
+      draggingItem,
+      labels.categoryGrabAnnouncement,
+      moveCategoryByOffset,
+      resetDragState,
+      setDraggingItem,
+    ],
   );
 
   /**
@@ -365,16 +390,22 @@ export const useSidebarOrganizerActions = ({
    * Safely parses drag payload metadata.
    */
   const parseDragData = useCallback((event: DragEvent) => {
+    if (draggingItemRef.current) {
+      return draggingItemRef.current;
+    }
     try {
       const data = event.dataTransfer?.getData(DRAG_DATA_MIME);
       if (!data) {
         return null;
       }
-      return JSON.parse(data) as DraggingItem;
+      const parsed = JSON.parse(data) as DraggingItem;
+      draggingItemRef.current = parsed;
+      setDraggingItemState(parsed);
+      return parsed;
     } catch {
       return null;
     }
-  }, []);
+  }, [setDraggingItemState]);
 
   /**
    * Configures drag payloads for feature items.
@@ -390,7 +421,7 @@ export const useSidebarOrganizerActions = ({
       setDraggingItem({ type: 'feature', id: featureId, viaKeyboard: false });
       announce(labels.featureGrabAnnouncement);
     },
-    [announce, labels.featureGrabAnnouncement],
+    [announce, labels.featureGrabAnnouncement, setDraggingItem],
   );
 
   /**
@@ -406,7 +437,7 @@ export const useSidebarOrganizerActions = ({
       setDraggingItem({ type: 'category', id: categoryId, viaKeyboard: false });
       announce(labels.categoryGrabAnnouncement);
     },
-    [announce, labels.categoryGrabAnnouncement],
+    [announce, labels.categoryGrabAnnouncement, setDraggingItem],
   );
 
   return {

@@ -17,6 +17,8 @@ interface DropZoneProps {
   sizeClassName?: string;
   /** Additional custom classes for the container. */
   className?: string;
+  /** Optional test identifier to aid automated queries. */
+  testId?: string;
 }
 
 /**
@@ -29,12 +31,14 @@ export const DropZone: React.FC<DropZoneProps> = ({
   onDrop,
   sizeClassName = 'h-2',
   className = '',
+  testId,
 }) => (
   <div
     className={`relative flex items-center ${sizeClassName} ${className}`}
     onDragOver={onDragOver}
     onDragLeave={onDragLeave}
     onDrop={onDrop}
+    data-testid={testId}
   >
     <span
       aria-hidden
