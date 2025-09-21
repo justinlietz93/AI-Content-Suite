@@ -1,8 +1,22 @@
 
+import type { ReasoningEffortLevel } from './config/generationConfig';
+
 export interface Highlight {
   text: string;
   relevance?: number; // Optional, depends on LLM output
 }
+
+export type Mode =
+  | 'technical'
+  | 'styleExtractor'
+  | 'rewriter'
+  | 'mathFormatter'
+  | 'reasoningStudio'
+  | 'scaffolder'
+  | 'requestSplitter'
+  | 'promptEnhancer'
+  | 'agentDesigner'
+  | 'chat';
 
 export type SummaryFormat = 'default' | 'sessionHandoff' | 'readme' | 'solutionFinder' | 'timeline' | 'decisionMatrix' | 'pitchGenerator' | 'causeEffectChain' | 'swotAnalysis' | 'checklist' | 'dialogCondensation' | 'graphTreeOutline' | 'entityRelationshipDigest' | 'rulesDistiller' | 'metricsDashboard' | 'qaPairs' | 'processFlow' | 'raciSnapshot' | 'riskRegister' | 'milestoneTracker' | 'glossaryTermMap' | 'hierarchyOfNeeds' | 'stakeholderMap' | 'constraintList' | 'prosConsTable' | 'priorityRanking' | 'agentSystemInstructions' | 'reverseEngineering' | 'systemWalkthrough';
 
@@ -311,10 +325,19 @@ export interface AgentDesignerOutput {
 // --- New types for Provider & Embedding settings ---
 export type AIProviderId = 'openai' | 'openrouter' | 'xai' | 'deepseek' | 'anthropic' | 'ollama';
 
+export interface FeatureModelPreference {
+  provider: AIProviderId;
+  model: string;
+}
+
+export type FeatureModelPreferences = Partial<Record<Mode, FeatureModelPreference>>;
+
 export interface AIProviderSettings {
   selectedProvider: AIProviderId;
   selectedModel: string;
   apiKeys?: Partial<Record<AIProviderId, string>>;
+  featureModelPreferences?: FeatureModelPreferences;
+  maxOutputTokens: number;
 }
 
 export interface ModelOption {
@@ -353,8 +376,27 @@ export interface SavedPrompt {
   prompt: string;
 }
 
+export interface ChatGenerationReasoningSettings {
+  enabled: boolean;
+  effort: ReasoningEffortLevel;
+  budgetTokens?: number;
+}
+
+export interface ChatGenerationThinkingSettings {
+  enabled: boolean;
+  budgetTokens?: number;
+}
+
+export interface ChatGenerationSettings {
+  maxOutputTokens: number;
+  temperature: number;
+  reasoning: ChatGenerationReasoningSettings;
+  thinking: ChatGenerationThinkingSettings;
+}
+
 export interface ChatSettings {
   systemInstruction: string;
+  generation: ChatGenerationSettings;
   vectorStore?: VectorStoreSettings;
 }
 
@@ -391,7 +433,6 @@ export interface ProgressUpdate {
 }
 
 export type AppState = 'idle' | 'fileSelected' | 'processing' | 'completed' | 'error' | 'cancelled';
-export type Mode = 'technical' | 'styleExtractor' | 'rewriter' | 'mathFormatter' | 'reasoningStudio' | 'scaffolder' | 'requestSplitter' | 'promptEnhancer' | 'agentDesigner' | 'chat';
 export type RewriteLength = 'short' | 'medium' | 'long';
 
 

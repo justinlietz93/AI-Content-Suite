@@ -98,8 +98,10 @@ export const MainForm: React.FC<MainFormProps> = (props) => {
     }
 
     return (
-        <div className="animate-fade-in-scale">
-            {renderControls()}
+        <div className="animate-fade-in-scale flex h-full flex-col flex-1 min-h-0 gap-6">
+            <div className="flex-1 min-h-0 overflow-y-auto space-y-6 pr-1">
+                {renderControls()}
+            </div>
             <FileLoader onFileSelect={props.onFileSelect} selectedFiles={props.currentFiles} mode={props.activeMode} />
         </div>
     );

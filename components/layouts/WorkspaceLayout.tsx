@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { type CSSProperties } from 'react';
 import type { Mode, ProcessingError } from '../../types';
 import type { AppState, ProgressUpdate } from '../../types';
 import { Sidebar } from './Sidebar';
@@ -9,7 +9,13 @@ import { SubmitButton } from '../ui/SubmitButton';
 import { StopButton } from '../ui/StopButton';
 import { ResultsViewer, ResultsViewerProps } from './ResultsViewer';
 import { ProgressBar } from '../ui/ProgressBar';
+import { FeaturePanel } from './FeaturePanel';
 import { DESCRIPTION_TEXT, TABS } from '../../constants/uiConstants';
+import {
+  FEATURE_PANEL_DEFAULT_FOOTER_HEIGHT,
+  FEATURE_PANEL_PROCESSING_FOOTER_HEIGHT,
+  WORKSPACE_CARD_MIN_HEIGHT,
+} from '../../config/uiConfig';
 import { XCircleIcon } from '../icons/XCircleIcon';
 
 interface WorkspaceLayoutProps {
@@ -21,12 +27,6 @@ interface WorkspaceLayoutProps {
     onToggleSidebar: () => void;
     activeProviderLabel: string;
     activeModelName: string;
-  };
-  layoutControls: {
-    contentWidthLabel: string;
-    contentWidthPercent: number;
-    onWidthPercentChange: (value: number) => void;
-    appliedContentWidth: string;
   };
   providerBanner: {
     activeProviderLabel: string;
@@ -58,7 +58,6 @@ export const WorkspaceLayout: React.FC<WorkspaceLayoutProps> = ({
   sidebarProps,
   onModeChange,
   headerProps,
-  layoutControls,
   providerBanner,
   showChat,
   chatProps,
@@ -79,17 +78,70 @@ export const WorkspaceLayout: React.FC<WorkspaceLayoutProps> = ({
 }) => {
   const description = DESCRIPTION_TEXT[activeMode];
   const isProcessing = appState === 'processing';
+  const workspaceCardStyle = {
+    minHeight: WORKSPACE_CARD_MIN_HEIGHT,
+    maxHeight: WORKSPACE_CARD_MIN_HEIGHT,
+    height: WORKSPACE_CARD_MIN_HEIGHT,
+    '--feature-panel-footer-default': FEATURE_PANEL_DEFAULT_FOOTER_HEIGHT,
+    '--feature-panel-footer-processing': FEATURE_PANEL_PROCESSING_FOOTER_HEIGHT,
+  } as CSSProperties & {
+    '--feature-panel-footer-default': string;
+    '--feature-panel-footer-processing': string;
+  };
+
+  const featurePanelContent = showChat && chatProps
+    ? <ChatInterface {...chatProps} />
+    : showMainForm && mainFormProps
+      ? <MainForm {...mainFormProps} />
+      : null;
+
+  const shouldShowResultsInPanel = showResults && !!resultsProps;
+
+  const panelContent = shouldShowResultsInPanel && resultsProps ? (
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto pr-1">
+      <ResultsViewer {...resultsProps} />
+    </div>
+  ) : (
+    featurePanelContent
+  );
+
+  const panelFooter = isProcessing
+    ? (
+        <div className="flex h-full w-full flex-col justify-center gap-4">
+          <ProgressBar progress={progress} />
+          <StopButton onClick={onStop} wrapperClassName="text-center" />
+        </div>
+      )
+    : showSubmitButton
+      ? (
+          <div className="flex h-full w-full items-center justify-center">
+            <SubmitButton
+              onClick={onSubmit}
+              disabled={isProcessing}
+              appState={appState}
+              buttonText={buttonText}
+              wrapperClassName="text-center"
+            />
+          </div>
+        )
+      : null;
+
+  const panelFooterHeight = isProcessing
+    ? 'var(--feature-panel-footer-processing)'
+    : showSubmitButton
+      ? 'var(--feature-panel-footer-default)'
+      : '0px';
 
   return (
     <div className="relative min-h-screen flex bg-transparent text-text-primary">
       <Sidebar {...sidebarProps} />
       <div className="flex-1 flex flex-col">
-        <header className="flex items-center justify-between border-b border-border-color/70 bg-surface/70 px-4 py-3 sm:px-6">
+        <header className="flex items-center justify-between bg-surface/75 px-4 py-3 sm:px-6 shadow-sm">
           <div className="flex items-center gap-3">
             <button
               type="button"
               onClick={headerProps.onToggleSidebar}
-              className="md:hidden rounded-md border border-border-color/60 px-3 py-2 text-xs font-semibold uppercase tracking-widest text-text-secondary hover:text-text-primary"
+              className="md:hidden rounded-md bg-secondary/70 px-3 py-2 text-xs font-semibold uppercase tracking-widest text-text-secondary hover:text-text-primary hover:bg-secondary/80 transition-colors"
               aria-label={headerProps.isSidebarCollapsed ? 'Show sidebar' : 'Hide sidebar'}
             >
               Menu
@@ -110,30 +162,12 @@ export const WorkspaceLayout: React.FC<WorkspaceLayoutProps> = ({
         </header>
 
         <main className="flex-1 overflow-y-auto px-4 sm:px-6 lg:px-10 py-6">
-          <div className="mx-auto flex flex-col gap-4" style={{ width: layoutControls.appliedContentWidth, maxWidth: '100%' }}>
-            <div className="rounded-lg border border-border-color/60 bg-secondary/60 px-4 py-3">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-xs uppercase tracking-widest text-text-secondary">Workspace width</p>
-                  <p className="text-sm font-medium text-text-primary">{layoutControls.contentWidthLabel}</p>
-                </div>
-                <div className="flex items-center gap-2 w-full sm:w-auto">
-                  <span className="text-xs text-text-secondary">Compact</span>
-                  <input
-                    type="range"
-                    min={0}
-                    max={100}
-                    value={layoutControls.contentWidthPercent}
-                    onChange={event => layoutControls.onWidthPercentChange(Number(event.target.value))}
-                    className="flex-1 sm:w-48 accent-primary"
-                    aria-label="Adjust workspace width"
-                  />
-                  <span className="text-xs text-text-secondary">Full</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-surface shadow-2xl rounded-lg border border-border-color animate-breathing-glow p-6 sm:p-8">
+          <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 flex-1 min-h-0">
+            <div
+              data-testid="workspace-card"
+              className="w-full max-w-6xl bg-surface/95 shadow-2xl rounded-2xl animate-breathing-glow p-6 sm:p-8 backdrop-blur-sm flex flex-col min-h-0 overflow-hidden"
+              style={workspaceCardStyle}
+            >
               <header className="mb-6 text-center">
                 <h2 className="text-3xl sm:text-4xl font-bold text-text-primary">AI Content Suite</h2>
                 <p className="text-text-secondary mt-2 text-sm sm:text-base">{description}</p>
@@ -143,7 +177,7 @@ export const WorkspaceLayout: React.FC<WorkspaceLayoutProps> = ({
                 <Tabs tabs={TABS} activeTabId={activeMode} onTabChange={id => onModeChange(id as Mode)} />
               </div>
 
-              <div className="mb-6 bg-secondary/60 border border-border-color rounded-lg px-4 py-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between text-sm">
+              <div className="mb-6 bg-secondary/70 rounded-xl px-4 py-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between text-sm shadow-sm">
                 <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 text-text-secondary">
                   <span className="text-text-primary font-semibold">Active provider:</span>
                   <span className="text-text-primary font-medium">{providerBanner.activeProviderLabel}</span>
@@ -162,26 +196,13 @@ export const WorkspaceLayout: React.FC<WorkspaceLayoutProps> = ({
                 </div>
               </div>
 
-              {showChat && chatProps ? (
-                <ChatInterface {...chatProps} />
-              ) : showMainForm && mainFormProps ? (
-                <MainForm {...mainFormProps} />
-              ) : null}
-
-              {showSubmitButton && (
-                <SubmitButton onClick={onSubmit} disabled={isProcessing} appState={appState} buttonText={buttonText} />
-              )}
-
-              {isProcessing && (
-                <div className="mt-8">
-                  <ProgressBar progress={progress} />
-                  <StopButton onClick={onStop} />
-                </div>
-              )}
-
-              {showResults && resultsProps && (
-                <ResultsViewer {...resultsProps} />
-              )}
+              <FeaturePanel
+                footer={panelFooter}
+                footerHeight={panelFooterHeight}
+                className="flex-1"
+              >
+                {panelContent}
+              </FeaturePanel>
 
               {showError && error && (
                 <div className="mt-8 p-4 bg-red-900 border border-red-700 rounded-lg text-red-100 animate-fade-in-scale" role="alert">

@@ -6,12 +6,14 @@ import type { WorkspaceState } from '../hooks/useWorkspaceState';
 import type { SetModeValue } from '../hooks/useMainFormProps';
 import {
   INITIAL_AGENT_DESIGNER_SETTINGS,
+  INITIAL_CHAT_SETTINGS,
   INITIAL_PROMPT_ENHANCER_SETTINGS,
   INITIAL_PROGRESS,
   INITIAL_REASONING_SETTINGS,
   INITIAL_REQUEST_SPLITTER_SETTINGS,
   INITIAL_SCAFFOLDER_SETTINGS,
 } from '../constants';
+import { GENERATION_DEFAULTS } from '../config/generationConfig';
 import { deepClone } from '../utils/deepClone';
 import type { AIProviderSettings, ChatSettings, Mode } from '../types';
 import type { ProviderInfo } from '../services/providerRegistry';
@@ -74,17 +76,26 @@ const createParams = (
   state: WorkspaceState,
   overrides: Partial<HookParams> = {},
 ): HookParams & { setModeValue: ReturnType<typeof createSetModeValue>; getStateForMode: ReturnType<typeof vi.fn> } => {
-  const aiProviderSettings: AIProviderSettings = overrides.aiProviderSettings ?? {
+  const aiProviderSettings: AIProviderSettings = {
     selectedProvider: 'openai',
     selectedModel: 'gpt-4o-mini',
     apiKeys: { openai: 'sk-test-key' },
+    featureModelPreferences: undefined,
+    maxOutputTokens: GENERATION_DEFAULTS.maxOutputTokens,
+    ...(overrides.aiProviderSettings ?? {}),
   };
-  const chatSettings: ChatSettings = overrides.chatSettings ?? { systemInstruction: 'Be helpful' };
-  const activeProviderInfo: ProviderInfo | undefined = overrides.activeProviderInfo ?? {
-    id: 'openai',
-    label: 'OpenAI',
-    requiresApiKey: true,
-  };
+
+  const defaultChatSettings = deepClone(INITIAL_CHAT_SETTINGS);
+  defaultChatSettings.systemInstruction = 'Be helpful';
+  const chatSettings: ChatSettings = overrides.chatSettings ?? defaultChatSettings;
+  const activeProviderInfo: ProviderInfo | undefined =
+    'activeProviderInfo' in overrides
+      ? overrides.activeProviderInfo
+      : {
+          id: 'openai',
+          label: 'OpenAI',
+          requiresApiKey: true,
+        };
   const setModeValue = createSetModeValue(state);
   const getStateForMode = vi.fn(() => state);
 
@@ -129,6 +140,8 @@ describe('useChatSubmission', () => {
         selectedProvider: 'openai',
         selectedModel: 'gpt-4o-mini',
         apiKeys: {},
+        featureModelPreferences: undefined,
+        maxOutputTokens: GENERATION_DEFAULTS.maxOutputTokens,
       },
       chatInput: 'Hello world',
     });
@@ -144,6 +157,92 @@ describe('useChatSubmission', () => {
       message: 'OpenAI requires an API key. Please add it in settings before starting a chat.',
     });
     expect(state.chatHistory).toEqual([]);
+  });
+
+  it('checks API key requirements against per-feature overrides', async () => {
+    const state = createWorkspaceState();
+    const params = createParams(state, {
+      aiProviderSettings: {
+        selectedProvider: 'openai',
+        selectedModel: 'gpt-4o-mini',
+        apiKeys: { openai: 'sk-test-key' },
+        featureModelPreferences: {
+          chat: { provider: 'openrouter', model: 'openrouter/auto' },
+        },
+        maxOutputTokens: GENERATION_DEFAULTS.maxOutputTokens,
+      },
+      activeProviderInfo: {
+        id: 'openrouter',
+        label: 'OpenRouter',
+        requiresApiKey: true,
+      },
+      chatInput: 'Hello override',
+    });
+
+    const { result } = renderHook(() => useChatSubmission(params));
+
+    await act(async () => {
+      await result.current();
+    });
+
+    expect(sendChatMessageMock).not.toHaveBeenCalled();
+    expect(state.error).toEqual({
+      message: 'OpenRouter requires an API key. Please add it in settings before starting a chat.',
+    });
+    expect(state.chatHistory).toEqual([]);
+  });
+
+  it('falls back to registry metadata when active provider info is unavailable', async () => {
+    const state = createWorkspaceState();
+    const params = createParams(state, {
+      aiProviderSettings: {
+        selectedProvider: 'openrouter',
+        selectedModel: 'openrouter/auto',
+        apiKeys: {},
+        featureModelPreferences: undefined,
+        maxOutputTokens: GENERATION_DEFAULTS.maxOutputTokens,
+      },
+      activeProviderInfo: undefined,
+      chatInput: 'Need credentials',
+    });
+
+    const { result } = renderHook(() => useChatSubmission(params));
+
+    await act(async () => {
+      await result.current();
+    });
+
+    expect(sendChatMessageMock).not.toHaveBeenCalled();
+    expect(state.error).toEqual({
+      message: 'OpenRouter requires an API key. Please add it in settings before starting a chat.',
+    });
+  });
+
+  it('uses provider defaults when override model is blank', async () => {
+    const state = createWorkspaceState();
+    const params = createParams(state, {
+      aiProviderSettings: {
+        selectedProvider: 'openai',
+        selectedModel: '   ',
+        apiKeys: { xai: 'xai-key' },
+        featureModelPreferences: {
+          chat: { provider: 'xai', model: '   ' },
+        },
+        maxOutputTokens: GENERATION_DEFAULTS.maxOutputTokens,
+      },
+      activeProviderInfo: { id: 'xai', label: 'xAI (Grok)', requiresApiKey: true },
+      chatInput: 'Use fallback model',
+    });
+
+    sendChatMessageMock.mockResolvedValue({ text: 'fallback response', thinking: [] });
+
+    const { result } = renderHook(() => useChatSubmission(params));
+
+    await act(async () => {
+      await result.current();
+    });
+
+    expect(sendChatMessageMock).toHaveBeenCalled();
   });
 
   it('returns early when no text or files are provided', async () => {
@@ -179,7 +278,9 @@ describe('useChatSubmission', () => {
       history: [],
       userMessage: [{ text: 'Hello model' }],
       systemInstruction: 'Be helpful',
-      vectorStoreSettings: undefined,
+      vectorStoreSettings: params.chatSettings.vectorStore,
+      generation: params.chatSettings.generation,
+      onUpdate: expect.any(Function),
     });
     expect(state.chatHistory).toHaveLength(2);
     expect(state.chatHistory[0]).toEqual({ role: 'user', parts: [{ text: 'Hello model' }] });
@@ -197,6 +298,98 @@ describe('useChatSubmission', () => {
     expect(fileToGenerativePartMock).not.toHaveBeenCalled();
   });
 
+  it('applies streaming updates to the placeholder message', async () => {
+    const state = createWorkspaceState();
+    const params = createParams(state, { chatInput: 'Stream please' });
+
+    sendChatMessageMock.mockImplementation(async (args) => {
+      expect(typeof args.onUpdate).toBe('function');
+      args.onUpdate?.({
+        text: 'Partial chunk',
+        thinking: [
+          { label: 'Reasoning', text: 'Step 1', type: 'reasoning' },
+        ],
+      });
+
+      const placeholder = state.chatHistory[state.chatHistory.length - 1];
+      expect(placeholder.parts[0]).toEqual({ text: 'Partial chunk' });
+      expect(placeholder.thinking).toEqual([
+        { label: 'Reasoning', text: 'Step 1', type: 'reasoning' },
+      ]);
+
+      return {
+        text: 'Final chunk',
+        thinking: [
+          { label: 'Reasoning', text: 'Step 1', type: 'reasoning' },
+        ],
+      };
+    });
+
+    const { result } = renderHook(() => useChatSubmission(params));
+
+    await act(async () => {
+      await result.current();
+    });
+
+    expect(sendChatMessageMock).toHaveBeenCalledTimes(1);
+    const modelMessage = state.chatHistory[state.chatHistory.length - 1];
+    expect(modelMessage.parts[0]).toEqual({ text: 'Final chunk' });
+    expect(modelMessage.thinking).toEqual([
+      { label: 'Reasoning', text: 'Step 1', type: 'reasoning' },
+    ]);
+  });
+
+  it('ignores streaming updates when the last message is not a model', async () => {
+    const state = createWorkspaceState();
+    const params = createParams(state, { chatInput: 'Ensure ignore' });
+
+    sendChatMessageMock.mockImplementation(async (args) => {
+      const placeholderIndex = state.chatHistory.length - 1;
+      const originalPlaceholder = state.chatHistory[placeholderIndex];
+      state.chatHistory[placeholderIndex] = { role: 'user', parts: [{ text: 'detour' }] } as any;
+      args.onUpdate?.({ text: 'Should be ignored', thinking: [] });
+      expect(state.chatHistory[placeholderIndex]).toEqual({ role: 'user', parts: [{ text: 'detour' }] });
+      state.chatHistory[placeholderIndex] = originalPlaceholder;
+      return { text: 'Final answer', thinking: [] };
+    });
+
+    const { result } = renderHook(() => useChatSubmission(params));
+
+    await act(async () => {
+      await result.current();
+    });
+
+    const modelMessage = state.chatHistory[state.chatHistory.length - 1];
+    expect(modelMessage.parts[0]).toEqual({ text: 'Final answer' });
+  });
+
+  it('preserves additional parts when updating model responses', async () => {
+    const state = createWorkspaceState();
+    const params = createParams(state, { chatInput: 'Keep attachments' });
+
+    sendChatMessageMock.mockImplementation(async (args) => {
+      const placeholder = state.chatHistory[state.chatHistory.length - 1];
+      placeholder.parts = [
+        { text: '' },
+        { inlineData: { mimeType: 'text/plain', data: 'ZGF0YQ==' } },
+      ];
+      args.onUpdate?.({ text: 'Partial text', thinking: [] });
+      return { text: 'Complete text', thinking: [] };
+    });
+
+    const { result } = renderHook(() => useChatSubmission(params));
+
+    await act(async () => {
+      await result.current();
+    });
+
+    const modelMessage = state.chatHistory[state.chatHistory.length - 1];
+    expect(modelMessage.parts).toEqual([
+      { text: 'Complete text' },
+      { inlineData: { mimeType: 'text/plain', data: 'ZGF0YQ==' } },
+    ]);
+  });
+
   it('converts attached files to generative parts before sending', async () => {
     const state = createWorkspaceState();
     const file = new File(['binary'], 'diagram.png', { type: 'image/png' });
@@ -211,6 +404,8 @@ describe('useChatSubmission', () => {
         selectedProvider: 'ollama',
         selectedModel: 'llama3.1:8b',
         apiKeys: {},
+        featureModelPreferences: undefined,
+        maxOutputTokens: GENERATION_DEFAULTS.maxOutputTokens,
       },
     });
     const { result } = renderHook(() => useChatSubmission(params));
@@ -225,7 +420,9 @@ describe('useChatSubmission', () => {
       history: [],
       userMessage: [{ inlineData: { mimeType: 'image/png', data: 'base64-data' } }],
       systemInstruction: 'Be helpful',
-      vectorStoreSettings: undefined,
+      vectorStoreSettings: params.chatSettings.vectorStore,
+      generation: params.chatSettings.generation,
+      onUpdate: expect.any(Function),
     });
     expect(state.chatFiles).toBeNull();
   });
@@ -256,8 +453,9 @@ describe('useChatSubmission', () => {
   it('skips response updates when chat history was cleared mid-flight', async () => {
     const state = createWorkspaceState();
     const params = createParams(state, { chatInput: 'History cleared' });
-    sendChatMessageMock.mockImplementation(async () => {
+    sendChatMessageMock.mockImplementation(async (args) => {
       state.chatHistory = [];
+      args.onUpdate?.({ text: 'Ignored', thinking: [] });
       return { text: 'Irrelevant', thinking: [] };
     });
 

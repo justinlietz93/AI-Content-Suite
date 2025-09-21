@@ -1,0 +1,268 @@
+/* @vitest-environment jsdom */
+import React from 'react';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import '@testing-library/jest-dom/vitest';
+import { Sidebar } from '../components/layouts/Sidebar';
+import type { Mode } from '../types';
+
+/**
+ * Lightweight helper used to satisfy callback props that are irrelevant for a given test run.
+ *
+ * @returns void
+ * @throws Never throws; intentionally left blank to serve as a benign placeholder.
+ * @remarks Produces no side effects and does not participate in timeout logic.
+ */
+const noop = () => {};
+
+/**
+ * Builds a minimal DataTransfer stub sufficient for jsdom drag-and-drop simulations.
+ *
+ * @returns A DataTransfer-like object storing payload data for the simulated drag.
+ */
+const createDataTransfer = (): DataTransfer => {
+  const data: Record<string, string> = {};
+  return {
+    dropEffect: 'move',
+    effectAllowed: 'all',
+    files: [] as unknown as FileList,
+    items: [] as unknown as DataTransferItemList,
+    types: [],
+    setData: (format: string, value: string) => {
+      data[format] = value;
+    },
+    getData: (format: string) => data[format] ?? '',
+    clearData: (format?: string) => {
+      if (typeof format === 'string') {
+        delete data[format];
+      } else {
+        Object.keys(data).forEach(key => delete data[key]);
+      }
+    },
+    setDragImage: () => {},
+  } as unknown as DataTransfer;
+};
+
+/**
+ * Extracts the ordered feature identifiers within a rendered category section.
+ *
+ * @param section - The DOM element representing the category container.
+ * @returns Ordered list of feature ids.
+ */
+const getFeatureOrder = (section: HTMLElement): string[] =>
+  Array.from(section.querySelectorAll('[data-feature-id]')).map(element =>
+    element.getAttribute('data-feature-id') ?? '',
+  );
+
+afterEach(() => {
+  cleanup();
+});
+
+beforeEach(() => {
+  window.localStorage.clear();
+});
+
+describe('Sidebar', () => {
+  it('collapses and expands a category when the sidebar is expanded', () => {
+    console.info('Ensuring expanded sidebar renders categories that can be collapsed.');
+
+    render(
+      <Sidebar
+        collapsed={false}
+        onToggle={noop}
+        activeMode={'technical' as Mode}
+        onSelectMode={noop}
+      />,
+    );
+
+    const collapseButton = screen.getByRole('button', { name: /collapse workspace/i });
+    const featureLabel = screen.getByText('Technical Summarizer');
+    expect(featureLabel).toBeVisible();
+
+    fireEvent.click(collapseButton);
+    expect(screen.queryByText('Technical Summarizer')).not.toBeInTheDocument();
+
+    const expandButton = screen.getByRole('button', { name: /expand workspace/i });
+    fireEvent.click(expandButton);
+    expect(screen.getByText('Technical Summarizer')).toBeVisible();
+  });
+
+  it('collapses a category when clicking the header body without revealing actions', async () => {
+    console.info('Validating that clicking a category header toggles collapse without exposing inline actions.');
+
+    render(
+      <Sidebar
+        collapsed={false}
+        onToggle={noop}
+        activeMode={'technical' as Mode}
+        onSelectMode={noop}
+      />,
+    );
+
+    await screen.findByTestId('category-section-workspace');
+    const header = document.querySelector('[data-category-id="workspace"]') as HTMLElement;
+    expect(header).toBeTruthy();
+
+    const initialActions = header.querySelector('[data-testid="category-actions-workspace"]') as HTMLElement;
+    expect(initialActions).toHaveAttribute('aria-hidden', 'true');
+
+    fireEvent.click(header);
+
+    await waitFor(() => {
+      expect(screen.queryByText('Technical Summarizer')).not.toBeInTheDocument();
+    });
+
+    const collapsedHeader = document.querySelector('[data-category-id="workspace"]') as HTMLElement;
+    expect(collapsedHeader).toBeTruthy();
+    const collapsedActions = collapsedHeader.querySelector('[data-testid="category-actions-workspace"]') as HTMLElement;
+    expect(collapsedActions).toHaveAttribute('aria-hidden', 'true');
+
+    fireEvent.click(collapsedHeader);
+    await screen.findByText('Technical Summarizer');
+
+    const expandedHeader = document.querySelector('[data-category-id="workspace"]') as HTMLElement;
+    const expandedActions = expandedHeader.querySelector('[data-testid="category-actions-workspace"]') as HTMLElement;
+    expect(expandedActions).toHaveAttribute('aria-hidden', 'true');
+  });
+
+  it('hides category management controls when collapsed', () => {
+    console.info('Verifying collapsed sidebar hides rename/delete affordances and the add button.');
+
+    render(
+      <Sidebar
+        collapsed={true}
+        onToggle={noop}
+        activeMode={'technical' as Mode}
+        onSelectMode={noop}
+      />,
+    );
+
+    expect(screen.queryByLabelText(/rename category/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/delete category/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /add a new category/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('textbox')).toBeNull();
+  });
+
+  it('collapses the uncategorized placeholder when no items exist', async () => {
+    console.info('Ensuring the uncategorized drop area stays hidden until features populate it.');
+
+    render(
+      <Sidebar
+        collapsed={false}
+        onToggle={noop}
+        activeMode={'technical' as Mode}
+        onSelectMode={noop}
+      />,
+    );
+
+    const uncategorizedSection = await screen.findByTestId('category-section-uncategorized');
+    expect(uncategorizedSection.children).toHaveLength(1);
+    expect(uncategorizedSection.querySelector('ul')).toBeTruthy();
+  });
+
+  it('moves a feature into another category when dropped on the header', async () => {
+    console.info('Verifying dropping a feature on a category header reassigns it.');
+
+    render(
+      <Sidebar
+        collapsed={false}
+        onToggle={noop}
+        activeMode={'technical' as Mode}
+        onSelectMode={noop}
+      />,
+    );
+
+    await screen.findByTestId('category-section-workspace');
+    const summarizer = document.querySelector(
+      '[data-feature-id="technical"]',
+    ) as HTMLButtonElement;
+    expect(summarizer).toBeTruthy();
+    const orchestrationHeader = document.querySelector(
+      '[data-category-id="orchestration"]',
+    ) as HTMLElement;
+    expect(orchestrationHeader).toBeTruthy();
+    const transfer = createDataTransfer();
+
+    fireEvent.dragStart(summarizer, { dataTransfer: transfer });
+    fireEvent.dragOver(orchestrationHeader, { dataTransfer: transfer });
+    fireEvent.drop(orchestrationHeader, { dataTransfer: transfer });
+
+    const workspaceSection = screen.getByTestId('category-section-workspace');
+    const orchestrationSection = screen.getByTestId('category-section-orchestration');
+
+    await waitFor(() => {
+      expect(within(workspaceSection).queryByText('Technical Summarizer')).not.toBeInTheDocument();
+      expect(within(orchestrationSection).getByText('Technical Summarizer')).toBeVisible();
+    });
+  });
+
+  it('reorders features within a category when dropping onto a feature row', async () => {
+    console.info('Ensuring dropping onto a feature row changes ordering within the category.');
+
+    render(
+      <Sidebar
+        collapsed={false}
+        onToggle={noop}
+        activeMode={'technical' as Mode}
+        onSelectMode={noop}
+      />,
+    );
+
+    await screen.findByTestId('category-section-workspace');
+    const scaffolder = document.querySelector(
+      '[data-feature-id="scaffolder"]',
+    ) as HTMLButtonElement;
+    const summarizer = document.querySelector(
+      '[data-feature-id="technical"]',
+    ) as HTMLButtonElement;
+    expect(scaffolder).toBeTruthy();
+    expect(summarizer).toBeTruthy();
+    const targetRow = summarizer.parentElement as HTMLElement;
+    expect(targetRow).toBeTruthy();
+    const transfer = createDataTransfer();
+
+    fireEvent.dragStart(scaffolder, { dataTransfer: transfer });
+    fireEvent.dragOver(targetRow, { dataTransfer: transfer });
+    fireEvent.drop(targetRow, { dataTransfer: transfer });
+
+    const workspaceSection = screen.getByTestId('category-section-workspace');
+
+    await waitFor(() => {
+      const order = getFeatureOrder(workspaceSection);
+      expect(order.indexOf('scaffolder')).toBeLessThan(order.indexOf('technical'));
+    });
+  });
+
+  it('reorders categories when dropping onto another category header', async () => {
+    console.info('Confirming dropping a category on another header updates category order.');
+
+    render(
+      <Sidebar
+        collapsed={false}
+        onToggle={noop}
+        activeMode={'technical' as Mode}
+        onSelectMode={noop}
+      />,
+    );
+
+    const interactiveHeader = document.querySelector('[data-category-id="interactive"]') as HTMLElement;
+    const workspaceHeader = document.querySelector('[data-category-id="workspace"]') as HTMLElement;
+    expect(interactiveHeader).toBeTruthy();
+    expect(workspaceHeader).toBeTruthy();
+    const transfer = createDataTransfer();
+
+    fireEvent.dragStart(interactiveHeader, { dataTransfer: transfer });
+    fireEvent.dragOver(workspaceHeader, { dataTransfer: transfer });
+    fireEvent.drop(workspaceHeader, { dataTransfer: transfer });
+
+    await waitFor(() => {
+      const orderedIds = Array.from(
+        document.querySelectorAll('[data-testid^="category-section-"]'),
+      )
+        .map(element => element.getAttribute('data-testid')?.replace('category-section-', '') ?? '')
+        .filter(id => id && id !== 'uncategorized');
+
+      expect(orderedIds.slice(0, 3)).toEqual(['interactive', 'workspace', 'orchestration']);
+    });
+  });
+});

@@ -1,0 +1,861 @@
+import React, { useState, useEffect, useCallback, useRef, MouseEvent } from 'react';
+import type {
+  ChatSettings,
+  SavedPrompt,
+  AIProviderSettings,
+  AIProviderId,
+  ModelOption,
+  VectorStoreSettings,
+  EmbeddingProviderId,
+  FeatureModelPreferences,
+  Mode,
+} from '../../types';
+import type { ProviderInfo, EmbeddingProviderInfo } from '../../services/providerRegistry';
+import { DEFAULT_PROVIDER_MODELS, DEFAULT_EMBEDDING_MODELS } from '../../constants';
+import {
+  EMBEDDING_PROVIDERS,
+  requiresEmbeddingApiKey,
+  getEmbeddingProviderDefaultEndpoint,
+} from '../../services/providerRegistry';
+import { UI_DIMENSIONS, SETTINGS_SCROLLBAR_THEME } from '../../config/uiConfig';
+import { sanitizeFeatureModelPreferences } from '../../utils/providerSettings';
+import { GlobalProviderSection } from './settings/GlobalProviderSection';
+import { FeatureOverridesSection } from './settings/FeatureOverridesSection';
+import { VectorStoreSection } from './settings/VectorStoreSection';
+import { ChatPresetsSection } from './settings/ChatPresetsSection';
+import { SettingsModalHeader } from './settings/SettingsModalHeader';
+import { SettingsModalFooter } from './settings/SettingsModalFooter';
+import {
+  ensureVectorStoreSettings,
+  withDefaults,
+  featurePreferenceCount,
+  sanitizeVectorStoreSettings,
+} from './settings/helpers';
+import type { SettingsCategoryId } from './settings/categories';
+import { SETTINGS_CATEGORIES } from './settings/categories';
+import { SettingsCategoryTabs } from './settings/SettingsCategoryTabs';
+import { SettingsCategorySidebar } from './settings/SettingsCategorySidebar';
+
+const {
+  settingsModal: {
+    defaultWidth: DEFAULT_MODAL_WIDTH,
+    defaultHeight: DEFAULT_MODAL_HEIGHT,
+    minWidth: MIN_MODAL_WIDTH,
+    minHeight: MIN_MODAL_HEIGHT,
+    maxWidth: MAX_MODAL_WIDTH,
+    maxHeight: MAX_MODAL_HEIGHT,
+    viewportMarginX: VIEWPORT_MARGIN_X,
+    viewportMarginY: VIEWPORT_MARGIN_Y,
+  },
+} = UI_DIMENSIONS;
+
+const WORKSPACE_SCROLLBAR_STYLE_ID = SETTINGS_SCROLLBAR_THEME.styleId;
+const WORKSPACE_SCROLLBAR_CLASS = SETTINGS_SCROLLBAR_THEME.className;
+const RESIZE_OVERLAY_SUPPRESSION_MS = 150;
+
+interface ModalSize {
+  width: number;
+  height: number;
+}
+
+interface SettingsModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  currentSettings: ChatSettings;
+  providerSettings: AIProviderSettings;
+  providers: ProviderInfo[];
+  onSave: (newSettings: ChatSettings, providerSettings: AIProviderSettings) => void;
+  onFetchModels: (
+    providerId: AIProviderId,
+    apiKey?: string,
+    options?: { signal?: AbortSignal; forceRefresh?: boolean },
+  ) => Promise<ModelOption[]>;
+  savedPrompts: SavedPrompt[];
+  onSavePreset: (name: string, prompt: string) => void;
+  onDeletePreset: (name: string) => void;
+}
+
+/**
+ * Presents the workspace settings experience inside a full-featured, resizable modal window.
+ *
+ * @param props - Collection of event handlers and the current workspace configuration state.
+ * @returns A rendered modal tree bound to the provided state values.
+ */
+export const SettingsModal: React.FC<SettingsModalProps> = ({
+  isOpen,
+  onClose,
+  currentSettings,
+  providerSettings,
+  providers,
+  onSave,
+  onFetchModels,
+  savedPrompts,
+  onSavePreset,
+  onDeletePreset,
+}) => {
+  const [editedSettings, setEditedSettings] = useState<ChatSettings>(() => withDefaults(currentSettings));
+  const [editedProviderSettings, setEditedProviderSettings] = useState<AIProviderSettings>(providerSettings);
+  const [modelOptions, setModelOptions] = useState<ModelOption[]>([]);
+  const [modelsLoading, setModelsLoading] = useState(false);
+  const [modelsError, setModelsError] = useState<string | null>(null);
+  const [selectedPreset, setSelectedPreset] = useState<string>('');
+  const [activeCategory, setActiveCategory] = useState<SettingsCategoryId>('global');
+  const [modalSize, setModalSize] = useState<ModalSize>({
+    width: DEFAULT_MODAL_WIDTH,
+    height: DEFAULT_MODAL_HEIGHT,
+  });
+  const [isResizing, setIsResizing] = useState(false);
+  const isResizingRef = useRef(false);
+  const loadRequestIdRef = useRef(0);
+  const initialSizeAppliedRef = useRef(false);
+  const resizeStateRef = useRef<{
+    startX: number;
+    startY: number;
+    startWidth: number;
+    startHeight: number;
+  } | null>(null);
+  const resizeHandlersRef = useRef<{
+    move: (event: PointerEvent) => void;
+    end: (event: PointerEvent) => void;
+  } | null>(null);
+  const previousBodyStylesRef = useRef<{ cursor: string; userSelect: string } | null>(null);
+  const ignoreOverlayClickRef = useRef(false);
+  const suppressOverlayClickTimeoutRef = useRef<number | null>(null);
+
+  const setResizingState = useCallback((value: boolean) => {
+    isResizingRef.current = value;
+    setIsResizing(value);
+  }, []);
+
+  /**
+   * Constrains the requested modal dimensions so the window remains within the viewport bounds
+   * while respecting the design minimum and maximum breakpoints.
+   *
+   * @param width - Proposed modal width in pixels.
+   * @param height - Proposed modal height in pixels.
+   * @returns A sanitized pair of width and height values that fit the viewport.
+   */
+  const clampModalSize = useCallback(
+    (width: number, height: number): ModalSize => {
+      if (typeof window === 'undefined') {
+        return { width, height };
+      }
+
+      const availableWidth = Math.max(
+        window.innerWidth - VIEWPORT_MARGIN_X,
+        Math.min(window.innerWidth, 320),
+      );
+      const availableHeight = Math.max(
+        window.innerHeight - VIEWPORT_MARGIN_Y,
+        Math.min(window.innerHeight, 360),
+      );
+      const minWidth = Math.min(MIN_MODAL_WIDTH, availableWidth);
+      const minHeight = Math.min(MIN_MODAL_HEIGHT, availableHeight);
+      const maxWidth = Math.min(MAX_MODAL_WIDTH, availableWidth);
+      const maxHeight = Math.min(MAX_MODAL_HEIGHT, availableHeight);
+
+      const clampedWidth = Math.min(Math.max(width, minWidth), maxWidth);
+      const clampedHeight = Math.min(Math.max(height, minHeight), maxHeight);
+
+      return { width: clampedWidth, height: clampedHeight };
+    },
+    [],
+  );
+
+  /**
+   * Ensures the workspace-themed scrollbar styling is present so modal scroll regions
+   * inherit the darker treatment that matches the rest of the application chrome.
+   */
+  const ensureScrollbarTheme = useCallback(() => {
+    if (typeof document === 'undefined') {
+      return;
+    }
+
+    if (document.getElementById(WORKSPACE_SCROLLBAR_STYLE_ID)) {
+      return;
+    }
+
+    const styleElement = document.createElement('style');
+    styleElement.id = WORKSPACE_SCROLLBAR_STYLE_ID;
+    styleElement.textContent = `
+.${WORKSPACE_SCROLLBAR_CLASS} {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+.${WORKSPACE_SCROLLBAR_CLASS}::-webkit-scrollbar {
+  width: 12px;
+}
+.${WORKSPACE_SCROLLBAR_CLASS}::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+.${WORKSPACE_SCROLLBAR_CLASS}::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb);
+  border-radius: 9999px;
+  border: 2px solid var(--scrollbar-track);
+}
+.${WORKSPACE_SCROLLBAR_CLASS}::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-thumb-hover);
+}
+`;
+    document.head.appendChild(styleElement);
+  }, []);
+
+  /**
+   * Cleans up any active resize gesture by removing event listeners and restoring the document
+   * cursor and selection styles.
+   */
+  const endResize = useCallback(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const handlers = resizeHandlersRef.current;
+    if (handlers) {
+      window.removeEventListener('pointermove', handlers.move);
+      window.removeEventListener('pointerup', handlers.end);
+      window.removeEventListener('pointercancel', handlers.end);
+      resizeHandlersRef.current = null;
+    }
+
+    resizeStateRef.current = null;
+    setResizingState(false);
+
+    if (previousBodyStylesRef.current) {
+      document.body.style.cursor = previousBodyStylesRef.current.cursor;
+      document.body.style.userSelect = previousBodyStylesRef.current.userSelect;
+      previousBodyStylesRef.current = null;
+    }
+
+    if (suppressOverlayClickTimeoutRef.current !== null) {
+      window.clearTimeout(suppressOverlayClickTimeoutRef.current);
+      suppressOverlayClickTimeoutRef.current = null;
+    }
+
+    ignoreOverlayClickRef.current = true;
+
+    suppressOverlayClickTimeoutRef.current = window.setTimeout(() => {
+      ignoreOverlayClickRef.current = false;
+      suppressOverlayClickTimeoutRef.current = null;
+    }, RESIZE_OVERLAY_SUPPRESSION_MS);
+  }, [setResizingState]);
+
+  /**
+   * Begins a resize gesture when the resize affordance is activated, tracking pointer movement
+   * to update the modal dimensions in real time.
+   *
+   * @param event - Pointer event emitted from the resize affordance.
+   */
+  const handleResizePointerDown = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (typeof window === 'undefined') {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (suppressOverlayClickTimeoutRef.current !== null) {
+        window.clearTimeout(suppressOverlayClickTimeoutRef.current);
+        suppressOverlayClickTimeoutRef.current = null;
+      }
+      ignoreOverlayClickRef.current = true;
+
+      resizeStateRef.current = {
+        startX: event.clientX,
+        startY: event.clientY,
+        startWidth: modalSize.width,
+        startHeight: modalSize.height,
+      };
+
+      setResizingState(true);
+
+      if (!previousBodyStylesRef.current) {
+        previousBodyStylesRef.current = {
+          cursor: document.body.style.cursor,
+          userSelect: document.body.style.userSelect,
+        };
+      }
+
+      document.body.style.cursor = 'nwse-resize';
+      document.body.style.userSelect = 'none';
+
+      const handlePointerMove = (moveEvent: PointerEvent) => {
+        const resizeState = resizeStateRef.current;
+        if (!resizeState) {
+          return;
+        }
+
+        const nextWidth = resizeState.startWidth + (moveEvent.clientX - resizeState.startX);
+        const nextHeight = resizeState.startHeight + (moveEvent.clientY - resizeState.startY);
+
+        setModalSize(prevSize => {
+          const constrainedSize = clampModalSize(nextWidth, nextHeight);
+          if (
+            constrainedSize.width === prevSize.width &&
+            constrainedSize.height === prevSize.height
+          ) {
+            return prevSize;
+          }
+          return constrainedSize;
+        });
+      };
+
+      const handlePointerEnd = () => {
+        endResize();
+      };
+
+      resizeHandlersRef.current = {
+        move: handlePointerMove,
+        end: handlePointerEnd,
+      };
+
+      window.addEventListener('pointermove', handlePointerMove);
+      window.addEventListener('pointerup', handlePointerEnd);
+      window.addEventListener('pointercancel', handlePointerEnd);
+    },
+    [clampModalSize, endResize, modalSize.height, modalSize.width, setResizingState],
+  );
+
+  const updateVectorStore = useCallback((updater: (prev: VectorStoreSettings) => VectorStoreSettings) => {
+    setEditedSettings(prev => {
+      const currentVector = ensureVectorStoreSettings(prev.vectorStore);
+      return {
+        ...prev,
+        vectorStore: updater(currentVector),
+      };
+    });
+  }, []);
+
+  const enableFeatureOverride = useCallback((mode: Mode, enabled: boolean) => {
+    setEditedProviderSettings(prev => {
+      const nextPreferences: FeatureModelPreferences = { ...(prev.featureModelPreferences ?? {}) };
+      if (enabled) {
+        const globalModel = prev.selectedModel?.trim() || DEFAULT_PROVIDER_MODELS[prev.selectedProvider] || '';
+        nextPreferences[mode] = {
+          provider: prev.selectedProvider,
+          model: globalModel,
+        };
+      } else {
+        delete nextPreferences[mode];
+      }
+
+      return {
+        ...prev,
+        featureModelPreferences: featurePreferenceCount(nextPreferences) > 0 ? nextPreferences : undefined,
+      };
+    });
+  }, []);
+
+  const updateFeaturePreference = useCallback((mode: Mode, updater: (prev: { provider: AIProviderId; model: string }) => {
+    provider: AIProviderId;
+    model: string;
+  }) => {
+    setEditedProviderSettings(prev => {
+      const existing = prev.featureModelPreferences?.[mode] ?? {
+        provider: prev.selectedProvider,
+        model: prev.selectedModel?.trim() || DEFAULT_PROVIDER_MODELS[prev.selectedProvider] || '',
+      };
+      const nextPreferences: FeatureModelPreferences = {
+        ...(prev.featureModelPreferences ?? {}),
+        [mode]: updater(existing),
+      };
+      return {
+        ...prev,
+        featureModelPreferences: nextPreferences,
+      };
+    });
+  }, []);
+
+  const loadModels = useCallback(async (providerId: AIProviderId, apiKey?: string) => {
+    const providerInfo = providers.find(p => p.id === providerId);
+    const trimmedKey = apiKey?.trim();
+
+    if (providerInfo?.requiresApiKey && !trimmedKey) {
+      setModelOptions([]);
+      setModelsError(`${providerInfo.label} requires an API key to load models.`);
+      setModelsLoading(false);
+      return;
+    }
+
+    const requestId = ++loadRequestIdRef.current;
+    setModelsLoading(true);
+    setModelsError(null);
+    setModelOptions([]);
+
+    try {
+      const models = await onFetchModels(providerId, trimmedKey, { forceRefresh: true });
+      if (loadRequestIdRef.current !== requestId) {
+        return;
+      }
+      setModelOptions(models);
+      if (models.length > 0) {
+        setEditedProviderSettings(prev => {
+          if (prev.selectedProvider !== providerId) return prev;
+          if (models.some(model => model.id === prev.selectedModel)) {
+            return prev;
+          }
+          return { ...prev, selectedModel: models[0].id };
+        });
+      }
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        return;
+      }
+      const message = error instanceof Error ? error.message : String(error);
+      setModelsError(message);
+      setModelOptions([]);
+    } finally {
+      if (loadRequestIdRef.current === requestId) {
+        setModelsLoading(false);
+      }
+    }
+  }, [onFetchModels, providers]);
+
+  /**
+   * Determines the largest modal footprint permitted by viewport constraints so the settings
+   * window opens at the maximum available size on first render.
+   */
+  const computeWorkspaceAlignedSize = useCallback((): ModalSize => {
+    return clampModalSize(MAX_MODAL_WIDTH, MAX_MODAL_HEIGHT);
+  }, [clampModalSize]);
+
+  useEffect(() => {
+    ensureScrollbarTheme();
+  }, [ensureScrollbarTheme]);
+
+  useEffect(() => {
+
+    if (!isOpen) {
+      initialSizeAppliedRef.current = false;
+      return;
+    }
+
+    if (!initialSizeAppliedRef.current) {
+      const defaultSize = computeWorkspaceAlignedSize();
+      setModalSize(prevSize => {
+        if (prevSize.width === defaultSize.width && prevSize.height === defaultSize.height) {
+          return prevSize;
+        }
+        return defaultSize;
+      });
+      initialSizeAppliedRef.current = true;
+    } else {
+      setModalSize(prevSize => {
+        const constrainedSize = clampModalSize(prevSize.width, prevSize.height);
+        if (
+          constrainedSize.width === prevSize.width &&
+          constrainedSize.height === prevSize.height
+        ) {
+          return prevSize;
+        }
+        return constrainedSize;
+      });
+    }
+
+    setEditedSettings(withDefaults(currentSettings));
+    setEditedProviderSettings(providerSettings);
+    setModelOptions([]);
+    setModelsError(null);
+    setModelsLoading(false);
+    setSelectedPreset('');
+    setActiveCategory('global');
+  }, [
+    isOpen,
+    currentSettings,
+    providerSettings,
+    clampModalSize,
+    computeWorkspaceAlignedSize,
+  ]);
+
+  useEffect(() => {
+    if (!isOpen || typeof window === 'undefined') {
+      return;
+    }
+
+    const handleWindowResize = () => {
+      setModalSize(prevSize => {
+        const constrainedSize = clampModalSize(prevSize.width, prevSize.height);
+        if (
+          constrainedSize.width === prevSize.width &&
+          constrainedSize.height === prevSize.height
+        ) {
+          return prevSize;
+        }
+        return constrainedSize;
+      });
+    };
+
+    window.addEventListener('resize', handleWindowResize);
+    return () => {
+      window.removeEventListener('resize', handleWindowResize);
+    };
+  }, [isOpen, clampModalSize]);
+
+  useEffect(() => () => {
+    if (typeof window !== 'undefined' && suppressOverlayClickTimeoutRef.current !== null) {
+      window.clearTimeout(suppressOverlayClickTimeoutRef.current);
+      suppressOverlayClickTimeoutRef.current = null;
+    }
+    endResize();
+  }, [endResize]);
+
+  useEffect(() => {
+    if (isOpen) {
+      const providerId = providerSettings.selectedProvider;
+      const apiKey = providerSettings.apiKeys?.[providerId];
+      loadModels(providerId, apiKey);
+    }
+  }, [isOpen, providerSettings, loadModels]);
+
+  const handleSave = () => {
+    const providerId = editedProviderSettings.selectedProvider;
+    const trimmedModel = editedProviderSettings.selectedModel.trim();
+    const fallbackModel = DEFAULT_PROVIDER_MODELS[providerId] ?? DEFAULT_PROVIDER_MODELS[providerSettings.selectedProvider];
+
+    const sanitizedApiKeys = Object.entries(editedProviderSettings.apiKeys || {}).reduce<AIProviderSettings['apiKeys']>((acc, [key, value]) => {
+      const trimmed = typeof value === 'string' ? value.trim() : '';
+      if (trimmed) {
+        acc[key as AIProviderId] = trimmed;
+      }
+      return acc;
+    }, {});
+
+    const sanitizedVectorStore = sanitizeVectorStoreSettings(editedSettings.vectorStore);
+
+    const sanitizedFeaturePreferences = sanitizeFeatureModelPreferences(editedProviderSettings.featureModelPreferences);
+    const finalFeaturePreferences = featurePreferenceCount(sanitizedFeaturePreferences) > 0
+      ? sanitizedFeaturePreferences
+      : undefined;
+
+    const finalProviderSettings: AIProviderSettings = {
+      selectedProvider: providerId,
+      selectedModel: trimmedModel || fallbackModel,
+      apiKeys: sanitizedApiKeys,
+      featureModelPreferences: finalFeaturePreferences,
+      maxOutputTokens: Math.max(1, Math.round(editedProviderSettings.maxOutputTokens)),
+    };
+
+    const finalChatSettings: ChatSettings = {
+      ...editedSettings,
+      vectorStore: sanitizedVectorStore,
+    };
+
+    onSave(finalChatSettings, finalProviderSettings);
+  };
+
+  const handleProviderChange = (providerId: AIProviderId) => {
+    setEditedProviderSettings(prev => {
+      const fallbackModel = DEFAULT_PROVIDER_MODELS[providerId] ?? prev.selectedModel;
+      return {
+        ...prev,
+        selectedProvider: providerId,
+        selectedModel: fallbackModel,
+      };
+    });
+    const apiKey = editedProviderSettings.apiKeys?.[providerId];
+    loadModels(providerId, apiKey);
+  };
+
+  const handleApiKeyChange = (providerId: AIProviderId, value: string) => {
+    setEditedProviderSettings(prev => ({
+      ...prev,
+      apiKeys: { ...prev.apiKeys, [providerId]: value },
+    }));
+  };
+
+  const handleModelInputChange = (value: string) => {
+    setEditedProviderSettings(prev => ({
+      ...prev,
+      selectedModel: value,
+    }));
+  };
+
+  const handleMaxOutputTokensChange = (value: number) => {
+    setEditedProviderSettings(prev => ({
+      ...prev,
+      maxOutputTokens: Math.max(1, Math.round(value)),
+    }));
+  };
+
+  const handleVectorStoreEnabledChange = (enabled: boolean) => {
+    updateVectorStore(prev => ({ ...prev, enabled }));
+  };
+
+  const handleVectorStoreUrlChange = (value: string) => {
+    updateVectorStore(prev => ({ ...prev, url: value }));
+  };
+
+  const handleVectorStoreCollectionChange = (value: string) => {
+    updateVectorStore(prev => ({ ...prev, collection: value }));
+  };
+
+  const handleVectorStoreApiKeyChange = (value: string) => {
+    updateVectorStore(prev => ({ ...prev, apiKey: value }));
+  };
+
+  const handleVectorStoreTopKChange = (value: string) => {
+    const numericValue = Number(value);
+    updateVectorStore(prev => ({
+      ...prev,
+      topK: value === '' ? 0 : Number.isFinite(numericValue) ? numericValue : prev.topK,
+    }));
+  };
+
+  const handleEmbeddingProviderChange = (providerId: EmbeddingProviderId) => {
+    updateVectorStore(prev => {
+      if (prev.embedding.provider === providerId) {
+        return { ...prev, embedding: { ...prev.embedding, provider: providerId } };
+      }
+      const defaultModel = DEFAULT_EMBEDDING_MODELS[providerId] ?? '';
+      const defaultEndpoint = getEmbeddingProviderDefaultEndpoint(providerId) ?? '';
+      return {
+        ...prev,
+        embedding: {
+          ...prev.embedding,
+          provider: providerId,
+          model: defaultModel,
+          baseUrl: providerId === 'custom' ? '' : defaultEndpoint,
+        },
+      };
+    });
+  };
+
+  const handleEmbeddingModelChange = (value: string) => {
+    updateVectorStore(prev => ({
+      ...prev,
+      embedding: { ...prev.embedding, model: value },
+    }));
+  };
+
+  const handleEmbeddingApiKeyChange = (value: string) => {
+    updateVectorStore(prev => ({
+      ...prev,
+      embedding: { ...prev.embedding, apiKey: value },
+    }));
+  };
+
+  const handleEmbeddingBaseUrlChange = (value: string) => {
+    updateVectorStore(prev => ({
+      ...prev,
+      embedding: { ...prev.embedding, baseUrl: value },
+    }));
+  };
+
+  const handleLoadPreset = (name: string) => {
+    const preset = savedPrompts.find(p => p.name === name);
+    if (preset) {
+      setEditedSettings({ ...editedSettings, systemInstruction: preset.prompt });
+      setSelectedPreset(name);
+    } else {
+      setSelectedPreset('');
+    }
+  };
+
+  const handleSaveAsPreset = () => {
+    const name = window.prompt('Enter a name for this preset:', selectedPreset || 'New Preset');
+    if (name && name.trim() !== '') {
+      onSavePreset(name.trim(), editedSettings.systemInstruction);
+      setSelectedPreset(name.trim());
+    }
+  };
+
+  const handleDeletePreset = () => {
+    if (selectedPreset && window.confirm(`Are you sure you want to delete the preset "${selectedPreset}"?`)) {
+      onDeletePreset(selectedPreset);
+      setSelectedPreset('');
+    }
+  };
+
+  const handleOverlayClick = useCallback(
+    (event: MouseEvent<HTMLDivElement>) => {
+      if (isResizingRef.current) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+      if (ignoreOverlayClickRef.current) {
+        ignoreOverlayClickRef.current = false;
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+      if (event.target === event.currentTarget) {
+        onClose();
+      }
+    },
+    [onClose],
+  );
+
+  const selectedProviderInfo = providers.find(p => p.id === editedProviderSettings.selectedProvider);
+  const globalProviderLabel = selectedProviderInfo?.label ?? 'Selected provider';
+  const selectedApiKey = editedProviderSettings.apiKeys?.[editedProviderSettings.selectedProvider] ?? '';
+  const vectorStoreSettings = ensureVectorStoreSettings(editedSettings.vectorStore);
+  const embeddingSettings = vectorStoreSettings.embedding;
+  const selectedEmbeddingProviderInfo = EMBEDDING_PROVIDERS.find(
+    provider => provider.id === embeddingSettings.provider,
+  ) as EmbeddingProviderInfo | undefined;
+  const embeddingEndpointPlaceholder =
+    embeddingSettings.provider === 'custom'
+      ? 'https://your-embedding-endpoint/v1/embeddings'
+      : getEmbeddingProviderDefaultEndpoint(embeddingSettings.provider) ?? '';
+  const embeddingRequiresApiKey = requiresEmbeddingApiKey(embeddingSettings.provider);
+  const featurePreferences = editedProviderSettings.featureModelPreferences ?? {};
+  const globalModelName = editedProviderSettings.selectedModel?.trim() || DEFAULT_PROVIDER_MODELS[editedProviderSettings.selectedProvider] || '';
+  const activeCategoryConfig = SETTINGS_CATEGORIES.find(category => category.id === activeCategory);
+
+  const renderCategoryContent = () => {
+    switch (activeCategory) {
+      case 'global':
+        return (
+          <GlobalProviderSection
+            providers={providers}
+            selectedProviderId={editedProviderSettings.selectedProvider}
+            selectedModel={editedProviderSettings.selectedModel}
+            selectedApiKey={selectedApiKey}
+            maxOutputTokens={editedProviderSettings.maxOutputTokens}
+            modelOptions={modelOptions}
+            modelsLoading={modelsLoading}
+            modelsError={modelsError}
+            onProviderChange={handleProviderChange}
+            onApiKeyChange={handleApiKeyChange}
+            onModelChange={handleModelInputChange}
+            onMaxOutputTokensChange={handleMaxOutputTokensChange}
+            onRefreshModels={() => loadModels(editedProviderSettings.selectedProvider, selectedApiKey)}
+          />
+        );
+      case 'feature-overrides':
+        return (
+          <FeatureOverridesSection
+            providers={providers}
+            featurePreferences={featurePreferences}
+            globalProviderLabel={globalProviderLabel}
+            globalModelName={globalModelName}
+            selectedProviderId={editedProviderSettings.selectedProvider}
+            onToggleOverride={enableFeatureOverride}
+            onUpdatePreference={updateFeaturePreference}
+          />
+        );
+      case 'vector-store':
+        return (
+          <VectorStoreSection
+            vectorStoreSettings={vectorStoreSettings}
+            embeddingEndpointPlaceholder={embeddingEndpointPlaceholder}
+            embeddingRequiresApiKey={embeddingRequiresApiKey}
+            selectedEmbeddingProviderInfo={selectedEmbeddingProviderInfo}
+            onEnabledChange={handleVectorStoreEnabledChange}
+            onUrlChange={handleVectorStoreUrlChange}
+            onCollectionChange={handleVectorStoreCollectionChange}
+            onApiKeyChange={handleVectorStoreApiKeyChange}
+            onTopKChange={handleVectorStoreTopKChange}
+            onEmbeddingProviderChange={handleEmbeddingProviderChange}
+            onEmbeddingModelChange={handleEmbeddingModelChange}
+            onEmbeddingApiKeyChange={handleEmbeddingApiKeyChange}
+            onEmbeddingBaseUrlChange={handleEmbeddingBaseUrlChange}
+          />
+        );
+      case 'chat-presets':
+        return (
+          <ChatPresetsSection
+            savedPrompts={savedPrompts}
+            selectedPreset={selectedPreset}
+            systemInstruction={editedSettings.systemInstruction}
+            generation={editedSettings.generation}
+            onSelectPreset={handleLoadPreset}
+            onDeletePreset={handleDeletePreset}
+            onSystemInstructionChange={value => {
+              setEditedSettings({ ...editedSettings, systemInstruction: value });
+              if (selectedPreset) setSelectedPreset('');
+            }}
+            onGenerationChange={updater => {
+              setEditedSettings(prev => ({
+                ...prev,
+                generation: updater(prev.generation),
+              }));
+              if (selectedPreset) setSelectedPreset('');
+            }}
+          />
+        );
+      default:
+        return null;
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 sm:p-10 z-50 transition-opacity duration-300 animate-fade-in-scale"
+      onClick={handleOverlayClick}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="workspace-settings-modal"
+    >
+      <div
+        data-testid="settings-modal-window"
+        className={`relative flex flex-col overflow-hidden rounded-2xl bg-background/95 border border-border-color shadow-[0_48px_140px_-40px_rgba(0,0,0,0.85)] backdrop-blur-md ${
+          isResizing ? 'select-none' : ''
+        }`}
+        style={{
+          width: modalSize.width,
+          height: modalSize.height,
+          minWidth: `min(${MIN_MODAL_WIDTH}px, calc(100vw - 3rem))`,
+          minHeight: `min(${MIN_MODAL_HEIGHT}px, calc(100vh - 4rem))`,
+          maxWidth: `min(${MAX_MODAL_WIDTH}px, calc(100vw - 2rem))`,
+          maxHeight: `min(${MAX_MODAL_HEIGHT}px, calc(100vh - 2rem))`,
+          transition: isResizing ? 'none' : 'box-shadow 220ms ease, opacity 220ms ease',
+        }}
+      >
+        <SettingsModalHeader onClose={onClose} />
+        <SettingsCategoryTabs
+          categories={SETTINGS_CATEGORIES}
+          activeCategory={activeCategory}
+          onSelect={categoryId => setActiveCategory(categoryId)}
+        />
+
+        <div className="flex flex-1 overflow-hidden">
+          <SettingsCategorySidebar
+            categories={SETTINGS_CATEGORIES}
+            activeCategory={activeCategory}
+            onSelect={categoryId => setActiveCategory(categoryId)}
+            scrollbarClassName={WORKSPACE_SCROLLBAR_CLASS}
+          />
+
+          <div
+            className="relative flex-1 bg-background/85"
+            role="tabpanel"
+            id={`settings-panel-${activeCategory}`}
+            aria-labelledby={`settings-tab-${activeCategory}`}
+          >
+            <div
+              key={activeCategory}
+              className={`h-full overflow-y-auto ${WORKSPACE_SCROLLBAR_CLASS} px-6 py-6 sm:px-9 sm:py-8 transition-opacity duration-200 ease-out`}
+            >
+              {activeCategoryConfig && (
+                <div className="mb-6 hidden sm:block">
+                  <h3 className="text-lg font-semibold text-text-primary">{activeCategoryConfig.label}</h3>
+                  <p className="mt-1 text-sm text-text-secondary/80">{activeCategoryConfig.description}</p>
+                </div>
+              )}
+              {renderCategoryContent()}
+            </div>
+          </div>
+        </div>
+
+        <SettingsModalFooter onClose={onClose} onSave={handleSave} onSaveAsPreset={handleSaveAsPreset} />
+        <div
+          className="absolute bottom-0 right-0 p-3 cursor-nwse-resize text-text-secondary/70 hover:text-primary transition-colors duration-150"
+          onPointerDown={handleResizePointerDown}
+          role="presentation"
+          aria-hidden="true"
+          data-testid="settings-modal-resize-handle"
+        >
+          <div
+            className={`pointer-events-none h-3 w-3 border-b border-r border-current ${
+              isResizing ? 'opacity-100' : 'opacity-70'
+            }`}
+          />
+        </div>
+      </div>
+    </div>
+  );
+};

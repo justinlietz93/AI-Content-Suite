@@ -2,6 +2,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import { applyThemeTokens } from './config/themeConfig';
 
 declare var marked: any;
 declare var hljs: any;
@@ -35,6 +36,8 @@ if (!process.env.API_KEY) {
   console.warn("API_KEY environment variable is not set. Configure provider keys from the AI Settings dialog before using AI features.");
 }
 
+
+applyThemeTokens();
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {

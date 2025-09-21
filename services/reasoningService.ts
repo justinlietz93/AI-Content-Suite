@@ -1,11 +1,12 @@
 
 
 import type { ProgressUpdate, ReasoningOutput, ReasoningSettings, ReasoningNode, ReasoningNodeType, ReasoningTree } from '../types';
-import { generateText, getActiveModelName } from './geminiService';
+import { generateText, getActiveModelName, type GenerateTextConfig } from './geminiService';
 // FIX: Corrected import path for reasoning prompts
 import * as Prompts from '../prompts/reasoning/index';
 import { processTranscript } from './summarizationService';
 import { MAX_CONTENT_CHAR_SIZE } from '../constants';
+import { GENERATION_DEFAULTS, type ReasoningEffortLevel } from '../config/generationConfig';
 
 /**
  * Implements an iterative, multi-step reasoning process to solve a complex goal.
@@ -70,6 +71,45 @@ export const processReasoningRequest = async (
     let nodeCounter = 0;
     const nodes: ReasoningNode[] = [];
 
+    const resolveReasoningEffort = (): ReasoningEffortLevel => {
+        if (settings.criticRounds >= 2 || settings.depth >= 4) {
+            return 'high';
+        }
+        if (settings.depth <= 1 && settings.criticRounds === 0) {
+            return 'low';
+        }
+        return 'medium';
+    };
+
+    const buildReasoningConfig = (overrides?: Partial<GenerateTextConfig>): GenerateTextConfig => {
+        const maxTokens = overrides?.maxOutputTokens ?? GENERATION_DEFAULTS.maxOutputTokens;
+        const reasoningOverride = overrides?.reasoning;
+        const thinkingOverride = overrides?.thinking;
+        const reasoningEnabled = reasoningOverride?.enabled ?? true;
+        const inferredThinkingBudget = settings.budget > 0 ? Math.max(1, Math.round(maxTokens * settings.budget)) : undefined;
+        const thinkingEnabled = thinkingOverride?.enabled ?? (inferredThinkingBudget !== undefined);
+
+        return {
+            maxOutputTokens: maxTokens,
+            responseMimeType: overrides?.responseMimeType,
+            systemInstruction: overrides?.systemInstruction,
+            temperature: overrides?.temperature ?? settings.temperature,
+            reasoning: reasoningEnabled
+                ? {
+                    enabled: true,
+                    effort: reasoningOverride?.effort ?? resolveReasoningEffort(),
+                    budgetTokens: reasoningOverride?.budgetTokens,
+                }
+                : { enabled: false },
+            thinking: thinkingEnabled
+                ? {
+                    enabled: true,
+                    budgetTokens: thinkingOverride?.budgetTokens ?? inferredThinkingBudget,
+                }
+                : (thinkingOverride && thinkingOverride.enabled === false ? { enabled: false } : undefined),
+        };
+    };
+
     // Helper to create and add nodes to our tree
     const createNode = (type: ReasoningNodeType, title: string, content: string, parentId?: string): ReasoningNode => {
         const id = `${type.charAt(0)}${++nodeCounter}`;
@@ -108,7 +148,7 @@ export const processReasoningRequest = async (
             });
 
             const expandPrompt = Prompts.generateExpandStepPrompt(initialGoal, previousStepNode.content, settings);
-            let currentContent = await generateText(expandPrompt, undefined, signal);
+            let currentContent = await generateText(expandPrompt, buildReasoningConfig(), signal);
             
             const altNode = createNode('step', `Alternative ${b + 1}`, currentContent, taskNode.id);
             let parentForCritique = altNode.id;
@@ -124,7 +164,7 @@ export const processReasoningRequest = async (
                 });
 
                 const critiquePrompt = Prompts.generateCritiquePrompt(initialGoal, currentContent, settings);
-                const critiqueContent = await generateText(critiquePrompt, undefined, signal);
+                const critiqueContent = await generateText(critiquePrompt, buildReasoningConfig(), signal);
                 const critiqueNode = createNode('validate', `Critique ${c + 1}`, critiqueContent, parentForCritique);
                 critiqueNode.result = { status: 'fail', confidence: 0.5 }; // Mark as a critique for visualization
                 
@@ -137,7 +177,7 @@ export const processReasoningRequest = async (
                 });
 
                 const refinePrompt = Prompts.generateRefinePrompt(initialGoal, currentContent, critiqueContent, settings);
-                const refinedContent = await generateText(refinePrompt, undefined, signal);
+                const refinedContent = await generateText(refinePrompt, buildReasoningConfig(), signal);
                 const correctionNode = createNode('correction', `Refinement ${c + 1}`, refinedContent, critiqueNode.id);
                 
                 currentContent = refinedContent;
@@ -153,7 +193,7 @@ export const processReasoningRequest = async (
         const synthesizeNode = createNode('task', `Task ${d + 1}: Synthesize`, `Combining ${refinedContents.length} refined alternatives into a single path forward.`, mainPhaseNode.id);
 
         const synthesizePrompt = Prompts.generateSynthesizePrompt(initialGoal, refinedContents, settings);
-        const synthesizedContent = await generateText(synthesizePrompt, undefined, signal);
+        const synthesizedContent = await generateText(synthesizePrompt, buildReasoningConfig(), signal);
 
         const synthesizedStepNode = createNode('step', `Synthesized Step ${d + 1}`, synthesizedContent, synthesizeNode.id);
         previousStepNode = synthesizedStepNode; // Update for the next depth iteration
@@ -164,7 +204,7 @@ export const processReasoningRequest = async (
     onProgress({ stage: 'Generating Report', percentage: 90, message: 'Generating final markdown report...' });
     const fullTraceForReport = nodes.map(n => `[Node: ${n.id} | Type: ${n.type} | Title: ${n.title}]\n${n.content}`).join('\n\n---\n\n');
     const finalReportPrompt = Prompts.generateFinalReportPrompt(initialGoal, fullTraceForReport, settings);
-    const finalResponseMd = await generateText(finalReportPrompt, { maxOutputTokens: 16384 }, signal);
+    const finalResponseMd = await generateText(finalReportPrompt, buildReasoningConfig({ maxOutputTokens: 16384 }), signal);
 
     // 7. Assemble Final Tree
     const reasoningTreeJson: ReasoningTree = {

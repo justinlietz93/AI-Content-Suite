@@ -1,5 +1,6 @@
 import type { AIProviderId, ThinkingSegment } from '../types';
 import { DEFAULT_PROVIDER_MODELS } from '../constants';
+import { GENERATION_DEFAULTS, ReasoningEffortLevel } from '../config/generationConfig';
 import { getProviderLabel, requiresApiKey, ANTHROPIC_API_VERSION } from './providerRegistry';
 
 export type ResponseFormat = 'text' | 'json';
@@ -9,17 +10,33 @@ export type ProviderMessages = Array<{
   content: string;
 }>;
 
+export interface ReasoningBehavior {
+  enabled?: boolean;
+  effort?: ReasoningEffortLevel;
+  budgetTokens?: number;
+}
+
+export interface ThinkingBehavior {
+  enabled?: boolean;
+  budgetTokens?: number;
+}
+
 export type ProviderCallArgs = {
   messages: ProviderMessages;
   maxOutputTokens?: number;
   responseFormat?: ResponseFormat;
+  temperature?: number;
+  reasoning?: ReasoningBehavior;
+  thinking?: ThinkingBehavior;
   signal?: AbortSignal;
+  onUpdate?: (update: ProviderTextResponse) => void;
 };
 
 interface ActiveProviderConfig {
   providerId: AIProviderId;
   model: string;
   apiKey?: string;
+  maxOutputTokens: number;
 }
 
 export interface ProviderTextResponse {
@@ -31,6 +48,7 @@ let activeConfig: ActiveProviderConfig = {
   providerId: 'openai',
   model: DEFAULT_PROVIDER_MODELS.openai,
   apiKey: undefined,
+  maxOutputTokens: GENERATION_DEFAULTS.maxOutputTokens,
 };
 
 const ensureConfig = (): ActiveProviderConfig => {
@@ -41,18 +59,33 @@ const ensureConfig = (): ActiveProviderConfig => {
     }
     activeConfig = { ...activeConfig, model: fallbackModel };
   }
+  const sanitizedMaxTokens = Number.isFinite(activeConfig.maxOutputTokens)
+    ? Math.max(1, Math.round(activeConfig.maxOutputTokens))
+    : GENERATION_DEFAULTS.maxOutputTokens;
+  if (sanitizedMaxTokens !== activeConfig.maxOutputTokens) {
+    activeConfig = { ...activeConfig, maxOutputTokens: sanitizedMaxTokens };
+  }
   return activeConfig;
 };
 
-export const setActiveProviderConfig = (config: { providerId: AIProviderId; model?: string; apiKey?: string }) => {
+export const setActiveProviderConfig = (config: {
+  providerId: AIProviderId;
+  model?: string;
+  apiKey?: string;
+  maxOutputTokens?: number;
+}) => {
   activeConfig = {
     providerId: config.providerId,
     model: config.model && config.model.trim() !== '' ? config.model.trim() : DEFAULT_PROVIDER_MODELS[config.providerId],
     apiKey: config.apiKey && config.apiKey.trim() !== '' ? config.apiKey.trim() : undefined,
+    maxOutputTokens:
+      typeof config.maxOutputTokens === 'number' && Number.isFinite(config.maxOutputTokens)
+        ? Math.max(1, Math.round(config.maxOutputTokens))
+        : GENERATION_DEFAULTS.maxOutputTokens,
   };
 };
 
-export const getActiveProviderConfig = (): ActiveProviderConfig => ({ ...activeConfig });
+export const getActiveProviderConfig = (): ActiveProviderConfig => ({ ...ensureConfig() });
 
 export const getActiveProviderLabel = (): string => getProviderLabel(activeConfig.providerId);
 
@@ -64,7 +97,19 @@ const toOpenAIMessage = (messages: ProviderMessages) =>
     content: message.content,
   }));
 
+const REASONING_MODEL_PREFIXES = ['gpt-5', 'o1', 'o3', 'o4'];
+const REASONING_MODEL_KEYWORDS = ['reason', 'thinking', 'r1'];
+
+const isReasoningModelId = (modelId: string): boolean => {
+  const normalized = modelId.toLowerCase();
+  return (
+    REASONING_MODEL_PREFIXES.some(prefix => normalized.startsWith(prefix)) ||
+    REASONING_MODEL_KEYWORDS.some(keyword => normalized.includes(keyword))
+  );
+};
+
 const THINKING_HINT_KEYWORDS = ['reason', 'think', 'analysis', 'chain', 'deliberat', 'scratchpad', 'plan', 'inner', 'cot', 'reflect'];
+const JSON_HINT_KEYWORDS = ['json', 'schema', 'structured'];
 const THINKING_LABEL_ALIASES: Record<string, string> = {
   cot: 'Chain of Thought',
   'chain_of_thought': 'Chain of Thought',
@@ -92,6 +137,14 @@ const isThinkingHint = (value?: string): boolean => {
   if (!value) return false;
   const normalized = value.toLowerCase();
   return THINKING_HINT_KEYWORDS.some((keyword) => normalized.includes(keyword));
+};
+
+const isJsonHint = (value?: string): boolean => {
+  if (!value) {
+    return false;
+  }
+  const normalized = value.toLowerCase();
+  return JSON_HINT_KEYWORDS.some((keyword) => normalized.includes(keyword));
 };
 
 const formatThinkingLabel = (hint?: string): string => {
@@ -130,6 +183,26 @@ const pushThinking = (collector: NormalizedCollector, value: unknown, hint?: str
   });
 };
 
+const pushJsonLike = (collector: NormalizedCollector, value: unknown): boolean => {
+  if (value == null) {
+    return false;
+  }
+  if (typeof value === 'string') {
+    pushText(collector, value);
+    return true;
+  }
+  try {
+    const serialized = JSON.stringify(value);
+    if (typeof serialized !== 'string' || serialized.trim() === '') {
+      return false;
+    }
+    pushText(collector, serialized);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 const SKIP_OBJECT_KEYS = new Set([
   'id',
   'index',
@@ -165,6 +238,9 @@ const collectNormalizedParts = (value: unknown, collector: NormalizedCollector, 
   }
 
   if (Array.isArray(value)) {
+    if (isJsonHint(hint) && pushJsonLike(collector, value)) {
+      return;
+    }
     value.forEach((item) => collectNormalizedParts(item, collector, hint));
     return;
   }
@@ -172,6 +248,19 @@ const collectNormalizedParts = (value: unknown, collector: NormalizedCollector, 
   if (typeof value === 'object') {
     const objectValue = value as Record<string, unknown>;
     const typeHint = typeof objectValue.type === 'string' ? (objectValue.type as string) : hint;
+    const handledKeys = new Set<string>(['type']);
+
+    const hasStructuredPayload =
+      Object.prototype.hasOwnProperty.call(objectValue, 'json') ||
+      Object.prototype.hasOwnProperty.call(objectValue, 'parsed') ||
+      Object.prototype.hasOwnProperty.call(objectValue, 'response_json') ||
+      Object.prototype.hasOwnProperty.call(objectValue, 'arguments');
+
+    if (isJsonHint(typeHint) && !hasStructuredPayload) {
+      if (pushJsonLike(collector, objectValue)) {
+        return;
+      }
+    }
 
     if (typeof objectValue.text === 'string') {
       if (isThinkingHint(typeHint)) {
@@ -179,6 +268,7 @@ const collectNormalizedParts = (value: unknown, collector: NormalizedCollector, 
       } else {
         pushText(collector, objectValue.text);
       }
+      handledKeys.add('text');
     }
 
     if (typeof objectValue.output_text === 'string') {
@@ -187,6 +277,7 @@ const collectNormalizedParts = (value: unknown, collector: NormalizedCollector, 
       } else {
         pushText(collector, objectValue.output_text);
       }
+      handledKeys.add('output_text');
     }
 
     if (typeof objectValue.message === 'string') {
@@ -195,13 +286,35 @@ const collectNormalizedParts = (value: unknown, collector: NormalizedCollector, 
       } else {
         pushText(collector, objectValue.message);
       }
+      handledKeys.add('message');
+    }
+
+    if (Object.prototype.hasOwnProperty.call(objectValue, 'json')) {
+      if (pushJsonLike(collector, objectValue.json)) {
+        handledKeys.add('json');
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(objectValue, 'parsed')) {
+      if (pushJsonLike(collector, objectValue.parsed)) {
+        handledKeys.add('parsed');
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(objectValue, 'response_json')) {
+      if (pushJsonLike(collector, objectValue.response_json)) {
+        handledKeys.add('response_json');
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(objectValue, 'arguments')) {
+      if (pushJsonLike(collector, objectValue.arguments)) {
+        handledKeys.add('arguments');
+      }
     }
 
     Object.entries(objectValue).forEach(([key, nestedValue]) => {
-      if (key === 'type' || key === 'text' || key === 'output_text' || key === 'message') {
-        return;
-      }
-      if (SKIP_OBJECT_KEYS.has(key)) {
+      if (handledKeys.has(key) || SKIP_OBJECT_KEYS.has(key)) {
         return;
       }
       const nextHint = isThinkingHint(key) ? key : typeHint;
@@ -234,6 +347,251 @@ const finalizeCollector = (collector: NormalizedCollector, fallback?: string): P
     thinking: dedupeThinkingSegments(collector.thinkingSegments),
   };
 };
+
+type StreamingSegmentState = {
+  key: string;
+  type?: string;
+  label: string;
+  text: string;
+};
+
+type StreamingAccumulator = {
+  text: string;
+  thinking: Map<string, StreamingSegmentState>;
+  order: string[];
+  sequence: number;
+};
+
+const createStreamingAccumulator = (): StreamingAccumulator => ({
+  text: '',
+  thinking: new Map(),
+  order: [],
+  sequence: 0,
+});
+
+const appendStreamingText = (accumulator: StreamingAccumulator, value: unknown) => {
+  if (typeof value !== 'string') {
+    return;
+  }
+  accumulator.text += value;
+};
+
+const appendStreamingJson = (accumulator: StreamingAccumulator, value: unknown): boolean => {
+  if (value == null) {
+    return false;
+  }
+  if (typeof value === 'string') {
+    appendStreamingText(accumulator, value);
+    return true;
+  }
+  try {
+    const serialized = JSON.stringify(value);
+    if (typeof serialized === 'string' && serialized) {
+      appendStreamingText(accumulator, serialized);
+      return true;
+    }
+  } catch {
+    return false;
+  }
+  return false;
+};
+
+const ensureStreamingSegment = (
+  accumulator: StreamingAccumulator,
+  hint?: string,
+  source?: Record<string, unknown>,
+): StreamingSegmentState => {
+  const normalizedHint = typeof hint === 'string' ? hint : undefined;
+  const labelHint = typeof source?.label === 'string' ? (source.label as string) : undefined;
+  const label = formatThinkingLabel(normalizedHint ?? labelHint);
+
+  const identifier =
+    (typeof source?.id === 'string' ? (source.id as string) : undefined) ??
+    (typeof source?.key === 'string' ? (source.key as string) : undefined) ??
+    (Number.isFinite(source?.index) ? String(source?.index) : undefined) ??
+    (typeof source?.name === 'string' ? (source.name as string) : undefined);
+
+  const baseKey = `${normalizedHint ?? 'thinking'}::`;
+  let key = identifier ? `${baseKey}${identifier}` : undefined;
+
+  if (!key && accumulator.order.length > 0) {
+    const lastKey = accumulator.order[accumulator.order.length - 1];
+    const lastSegment = accumulator.thinking.get(lastKey);
+    if (lastSegment && lastSegment.type === normalizedHint) {
+      key = lastKey;
+    }
+  }
+
+  if (!key) {
+    key = `${baseKey}${accumulator.sequence++}`;
+  }
+
+  if (!accumulator.thinking.has(key)) {
+    accumulator.thinking.set(key, {
+      key,
+      type: normalizedHint,
+      label,
+      text: '',
+    });
+    if (!accumulator.order.includes(key)) {
+      accumulator.order.push(key);
+    }
+  }
+
+  return accumulator.thinking.get(key)!;
+};
+
+const appendStreamingThinking = (
+  accumulator: StreamingAccumulator,
+  value: unknown,
+  hint?: string,
+  source?: Record<string, unknown>,
+) => {
+  if (typeof value !== 'string') {
+    return;
+  }
+  const segment = ensureStreamingSegment(accumulator, hint, source);
+  segment.text += value;
+};
+
+const collectStreamingParts = (
+  value: unknown,
+  accumulator: StreamingAccumulator,
+  hint?: string,
+  source?: Record<string, unknown>,
+) => {
+  if (value == null) {
+    return;
+  }
+
+  if (typeof value === 'string') {
+    if (isThinkingHint(hint)) {
+      appendStreamingThinking(accumulator, value, hint, source);
+    } else {
+      appendStreamingText(accumulator, value);
+    }
+    return;
+  }
+
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    if (!isThinkingHint(hint)) {
+      appendStreamingText(accumulator, String(value));
+    }
+    return;
+  }
+
+  if (Array.isArray(value)) {
+    if (isJsonHint(hint) && appendStreamingJson(accumulator, value)) {
+      return;
+    }
+    value.forEach((item) => {
+      const nestedSource =
+        item && typeof item === 'object' ? (item as Record<string, unknown>) : undefined;
+      collectStreamingParts(item, accumulator, hint, nestedSource);
+    });
+    return;
+  }
+
+  if (typeof value === 'object') {
+    const objectValue = value as Record<string, unknown>;
+    const typeHint = typeof objectValue.type === 'string' ? (objectValue.type as string) : hint;
+    const handledKeys = new Set<string>(['type']);
+
+    const hasStructuredPayload =
+      Object.prototype.hasOwnProperty.call(objectValue, 'json') ||
+      Object.prototype.hasOwnProperty.call(objectValue, 'parsed') ||
+      Object.prototype.hasOwnProperty.call(objectValue, 'response_json') ||
+      Object.prototype.hasOwnProperty.call(objectValue, 'arguments');
+
+    if (isJsonHint(typeHint) && !hasStructuredPayload) {
+      if (appendStreamingJson(accumulator, objectValue)) {
+        return;
+      }
+    }
+
+    if (typeof objectValue.text === 'string') {
+      if (isThinkingHint(typeHint)) {
+        appendStreamingThinking(accumulator, objectValue.text, typeHint, objectValue);
+      } else {
+        appendStreamingText(accumulator, objectValue.text);
+      }
+      handledKeys.add('text');
+    }
+
+    if (typeof objectValue.output_text === 'string') {
+      if (isThinkingHint(typeHint)) {
+        appendStreamingThinking(accumulator, objectValue.output_text, typeHint, objectValue);
+      } else {
+        appendStreamingText(accumulator, objectValue.output_text);
+      }
+      handledKeys.add('output_text');
+    }
+
+    if (typeof objectValue.message === 'string') {
+      if (isThinkingHint(typeHint)) {
+        appendStreamingThinking(accumulator, objectValue.message, typeHint, objectValue);
+      } else {
+        appendStreamingText(accumulator, objectValue.message);
+      }
+      handledKeys.add('message');
+    }
+
+    if (Object.prototype.hasOwnProperty.call(objectValue, 'json')) {
+      if (appendStreamingJson(accumulator, objectValue.json)) {
+        handledKeys.add('json');
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(objectValue, 'parsed')) {
+      if (appendStreamingJson(accumulator, objectValue.parsed)) {
+        handledKeys.add('parsed');
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(objectValue, 'response_json')) {
+      if (appendStreamingJson(accumulator, objectValue.response_json)) {
+        handledKeys.add('response_json');
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(objectValue, 'arguments')) {
+      if (appendStreamingJson(accumulator, objectValue.arguments)) {
+        handledKeys.add('arguments');
+      }
+    }
+
+    Object.entries(objectValue).forEach(([key, nestedValue]) => {
+      if (handledKeys.has(key) || SKIP_OBJECT_KEYS.has(key)) {
+        return;
+      }
+      const nextHint = isThinkingHint(key) ? key : typeHint;
+      const nestedSource =
+        nestedValue && typeof nestedValue === 'object'
+          ? (nestedValue as Record<string, unknown>)
+          : undefined;
+      collectStreamingParts(nestedValue, accumulator, nextHint, nestedSource);
+    });
+  }
+};
+
+const buildStreamingSegments = (accumulator: StreamingAccumulator, trim = false): ThinkingSegment[] =>
+  accumulator.order
+    .map((key) => accumulator.thinking.get(key))
+    .filter((segment): segment is StreamingSegmentState => Boolean(segment))
+    .map((segment) => ({
+      type: segment.type,
+      label: segment.label,
+      text: trim ? segment.text.trim() : segment.text,
+    }))
+    .filter((segment) => (trim ? segment.text.length > 0 : true));
+
+const snapshotStreamingUpdate = (
+  accumulator: StreamingAccumulator,
+  trim = false,
+): ProviderTextResponse => ({
+  text: trim ? accumulator.text.trim() : accumulator.text,
+  thinking: buildStreamingSegments(accumulator, trim),
+});
 
 const extractFirstNonEmpty = (candidates: unknown[]): string | undefined => {
   for (const candidate of candidates) {
@@ -270,19 +628,58 @@ const extractFirstNonEmpty = (candidates: unknown[]): string | undefined => {
 const callOpenAICompatible = async (
   endpoint: string,
   apiKey: string,
-  { messages, maxOutputTokens, responseFormat, signal }: ProviderCallArgs,
+  {
+    messages,
+    maxOutputTokens,
+    responseFormat,
+    temperature,
+    reasoning,
+    thinking,
+    signal,
+    onUpdate,
+  }: ProviderCallArgs,
   extraHeaders: Record<string, string> = {},
 ): Promise<ProviderTextResponse> => {
+  const { model, maxOutputTokens: defaultMaxTokens } = ensureConfig();
+  const shouldStream = typeof onUpdate === 'function';
+
   const requestBody: Record<string, unknown> = {
-    model: ensureConfig().model,
+    model,
     messages: toOpenAIMessage(messages),
-    temperature: 0.7,
-    stream: false,
+    stream: shouldStream,
   };
 
-  if (typeof maxOutputTokens === 'number') {
-    requestBody.max_tokens = maxOutputTokens;
+  const resolvedTemperature = typeof temperature === 'number' ? temperature : GENERATION_DEFAULTS.temperature;
+  const resolvedMaxOutputTokens = typeof maxOutputTokens === 'number'
+    ? Math.max(1, Math.round(maxOutputTokens))
+    : defaultMaxTokens;
+  const isReasoningModel = isReasoningModelId(model);
+
+  if (isReasoningModel) {
+    requestBody.temperature = resolvedTemperature;
+    requestBody.max_output_tokens = resolvedMaxOutputTokens;
+
+    const reasoningPayload: Record<string, unknown> = {
+      effort: reasoning?.effort ?? GENERATION_DEFAULTS.reasoningEffort,
+    };
+    if (typeof reasoning?.budgetTokens === 'number') {
+      reasoningPayload.budget_tokens = Math.max(1, Math.round(reasoning.budgetTokens));
+    }
+    requestBody.reasoning = reasoningPayload;
+
+    const thinkingEnabled = thinking?.enabled ?? false;
+    const thinkingPayload: Record<string, unknown> = {
+      enabled: thinkingEnabled,
+    };
+    if (typeof thinking?.budgetTokens === 'number') {
+      thinkingPayload.budget_tokens = Math.max(1, Math.round(thinking.budgetTokens));
+    }
+    requestBody.thinking = thinkingPayload;
+  } else {
+    requestBody.temperature = resolvedTemperature;
+    requestBody.max_tokens = resolvedMaxOutputTokens;
   }
+
   if (responseFormat === 'json') {
     requestBody.response_format = { type: 'json_object' };
   }
@@ -305,28 +702,172 @@ const callOpenAICompatible = async (
     throw new Error(`Provider request failed (${response.status}): ${errorText || response.statusText}`);
   }
 
-  const data = await response.json();
-  const choice = data?.choices?.[0];
-  const message = choice?.message ?? {};
+  if (!shouldStream || !response.body) {
+    const data = await response.json();
+    const choice = data?.choices?.[0];
+    const message = choice?.message ?? {};
 
-  const collector = createCollector();
-  collectNormalizedParts(message?.content, collector);
-  collectNormalizedParts(message?.reasoning, collector, 'reasoning');
-  collectNormalizedParts(message?.thinking, collector, 'thinking');
-  collectNormalizedParts(choice?.reasoning, collector, 'reasoning');
-  collectNormalizedParts(choice?.thinking, collector, 'thinking');
+    const collector = createCollector();
+    collectNormalizedParts(message?.content, collector);
+    collectNormalizedParts(message?.reasoning, collector, 'reasoning');
+    collectNormalizedParts(message?.thinking, collector, 'thinking');
+    collectNormalizedParts(choice?.reasoning, collector, 'reasoning');
+    collectNormalizedParts(choice?.thinking, collector, 'thinking');
 
-  const fallback = extractFirstNonEmpty([
-    message?.content,
-    message?.text,
-    choice?.text,
-  ]);
+    const fallback = extractFirstNonEmpty([
+      message?.content,
+      message?.text,
+      choice?.text,
+    ]);
 
-  return finalizeCollector(collector, fallback);
+    const result = finalizeCollector(collector, fallback);
+    if (shouldStream && onUpdate) {
+      onUpdate(result);
+    }
+    return result;
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  const accumulator = createStreamingAccumulator();
+  let buffer = '';
+  let sawDone = false;
+  let lastChoice: any = null;
+  let finalMessage: any = null;
+
+  const emitUpdate = () => {
+    if (onUpdate) {
+      onUpdate(snapshotStreamingUpdate(accumulator));
+    }
+  };
+
+  const handleEvent = (eventChunk: string) => {
+    const trimmed = eventChunk.trim();
+    if (!trimmed) {
+      return;
+    }
+    const lines = trimmed.split('\n');
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+      if (!line.startsWith('data:')) {
+        continue;
+      }
+      const payload = line.slice(5).trim();
+      if (!payload) {
+        continue;
+      }
+      if (payload === '[DONE]') {
+        sawDone = true;
+        continue;
+      }
+      try {
+        const parsed = JSON.parse(payload);
+        const choice = parsed?.choices?.[0];
+        if (!choice) {
+          continue;
+        }
+        lastChoice = choice;
+        if (choice.message) {
+          finalMessage = choice.message;
+        }
+
+        const delta = choice.delta ?? {};
+        if (delta.content !== undefined) {
+          collectStreamingParts(delta.content, accumulator);
+        }
+        if (typeof delta.text === 'string') {
+          collectStreamingParts(delta.text, accumulator);
+        }
+        if (delta.reasoning !== undefined) {
+          collectStreamingParts(delta.reasoning, accumulator, 'reasoning');
+        }
+        if (delta.thinking !== undefined) {
+          collectStreamingParts(delta.thinking, accumulator, 'thinking');
+        }
+        if (choice.reasoning !== undefined) {
+          collectStreamingParts(choice.reasoning, accumulator, 'reasoning');
+        }
+        if (choice.thinking !== undefined) {
+          collectStreamingParts(choice.thinking, accumulator, 'thinking');
+        }
+
+        emitUpdate();
+      } catch (error) {
+        console.warn('Failed to parse provider stream chunk:', error);
+      }
+    }
+  };
+
+  const processBuffer = (flush = false) => {
+    let boundaryIndex = buffer.indexOf('\n\n');
+    while (boundaryIndex !== -1) {
+      const eventChunk = buffer.slice(0, boundaryIndex);
+      buffer = buffer.slice(boundaryIndex + 2);
+      handleEvent(eventChunk);
+      boundaryIndex = buffer.indexOf('\n\n');
+    }
+
+    if (flush && buffer.trim()) {
+      handleEvent(buffer);
+      buffer = '';
+    }
+  };
+
+  while (true) {
+    const { value, done } = await reader.read();
+    buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
+    processBuffer(done);
+    if (done || sawDone) {
+      if (!done && sawDone) {
+        try {
+          await reader.cancel();
+        } catch {
+          // No-op: cancellation failures are non-fatal here.
+        }
+      }
+      break;
+    }
+  }
+
+  processBuffer(true);
+
+  let finalResult = snapshotStreamingUpdate(accumulator, true);
+
+  if ((!finalResult.text || finalResult.text.length === 0) && finalMessage) {
+    const collector = createCollector();
+    collectNormalizedParts(finalMessage?.content, collector);
+    collectNormalizedParts(finalMessage?.reasoning, collector, 'reasoning');
+    collectNormalizedParts(finalMessage?.thinking, collector, 'thinking');
+    if (lastChoice) {
+      collectNormalizedParts(lastChoice?.reasoning, collector, 'reasoning');
+      collectNormalizedParts(lastChoice?.thinking, collector, 'thinking');
+    }
+    const fallback = extractFirstNonEmpty([
+      finalMessage?.content,
+      finalMessage?.text,
+      lastChoice?.text,
+    ]);
+    finalResult = finalizeCollector(collector, fallback);
+  } else if (finalResult.thinking.length === 0 && lastChoice) {
+    const collector = createCollector();
+    collectNormalizedParts(lastChoice?.message?.thinking, collector, 'thinking');
+    collectNormalizedParts(lastChoice?.thinking, collector, 'thinking');
+    collectNormalizedParts(lastChoice?.reasoning, collector, 'reasoning');
+    const fallbackThinking = finalizeCollector(collector).thinking;
+    if (fallbackThinking.length > 0) {
+      finalResult = { ...finalResult, thinking: fallbackThinking };
+    }
+  }
+
+  if (onUpdate) {
+    onUpdate(finalResult);
+  }
+
+  return finalResult;
 };
 
 const callAnthropic = async (
-  { messages, maxOutputTokens, responseFormat, signal }: ProviderCallArgs,
+  { messages, maxOutputTokens, responseFormat, temperature, signal, onUpdate }: ProviderCallArgs,
   apiKey: string,
 ): Promise<ProviderTextResponse> => {
   const systemMessage = messages.find((msg) => msg.role === 'system');
@@ -335,10 +876,11 @@ const callAnthropic = async (
     content: [{ type: 'text', text: msg.content }],
   }));
 
+  const { model, maxOutputTokens: defaultMaxTokens } = ensureConfig();
   const body: Record<string, unknown> = {
-    model: ensureConfig().model,
-    max_tokens: maxOutputTokens ?? 4096,
-    temperature: 0.7,
+    model,
+    max_tokens: typeof maxOutputTokens === 'number' ? maxOutputTokens : defaultMaxTokens,
+    temperature: typeof temperature === 'number' ? temperature : GENERATION_DEFAULTS.temperature,
     messages: conversation,
   };
 
@@ -375,12 +917,22 @@ const callAnthropic = async (
   if (!result.text && result.thinking.length === 0) {
     throw new Error('Anthropic did not return a textual response.');
   }
+  if (onUpdate) {
+    onUpdate(result);
+  }
   return result;
 };
 
-const callOllama = async ({ messages, maxOutputTokens, signal }: ProviderCallArgs): Promise<ProviderTextResponse> => {
+const callOllama = async ({
+  messages,
+  maxOutputTokens,
+  temperature,
+  signal,
+  onUpdate,
+}: ProviderCallArgs): Promise<ProviderTextResponse> => {
   const systemMessages = messages.filter((msg) => msg.role === 'system');
   const conversation = messages.filter((msg) => msg.role !== 'system');
+  const { maxOutputTokens: defaultMaxTokens } = ensureConfig();
 
   const promptSections: string[] = [];
   if (systemMessages.length > 0) {
@@ -399,8 +951,16 @@ const callOllama = async ({ messages, maxOutputTokens, signal }: ProviderCallArg
     stream: false,
   };
 
-  if (typeof maxOutputTokens === 'number') {
-    body.options = { num_predict: maxOutputTokens };
+  const options: Record<string, unknown> = {};
+  const resolvedMaxPredict = typeof maxOutputTokens === 'number' ? maxOutputTokens : defaultMaxTokens;
+  if (Number.isFinite(resolvedMaxPredict)) {
+    options.num_predict = resolvedMaxPredict;
+  }
+  if (typeof temperature === 'number') {
+    options.temperature = temperature;
+  }
+  if (Object.keys(options).length > 0) {
+    body.options = options;
   }
 
   const response = await fetch('http://127.0.0.1:11434/api/generate', {
@@ -419,10 +979,23 @@ const callOllama = async ({ messages, maxOutputTokens, signal }: ProviderCallArg
   if (!data || typeof data.response !== 'string') {
     throw new Error('Ollama did not return a textual response.');
   }
-  return { text: data.response, thinking: [] };
+  const result = { text: data.response, thinking: [] };
+  if (onUpdate) {
+    onUpdate(result);
+  }
+  return result;
 };
 
-export const callProvider = async ({ messages, maxOutputTokens, responseFormat = 'text', signal }: ProviderCallArgs): Promise<ProviderTextResponse> => {
+export const callProvider = async ({
+  messages,
+  maxOutputTokens,
+  responseFormat = 'text',
+  temperature,
+  reasoning,
+  thinking,
+  signal,
+  onUpdate,
+}: ProviderCallArgs): Promise<ProviderTextResponse> => {
   if (signal?.aborted) {
     throw new DOMException('Aborted by user', 'AbortError');
   }
@@ -442,14 +1015,18 @@ export const callProvider = async ({ messages, maxOutputTokens, responseFormat =
           messages,
           maxOutputTokens,
           responseFormat,
+          temperature,
+          reasoning,
+          thinking,
           signal,
+          onUpdate,
         });
       case 'openrouter': {
         const referer = typeof window !== 'undefined' ? window.location.origin : 'https://local.app';
         return await callOpenAICompatible(
           'https://openrouter.ai/api/v1/chat/completions',
           apiKey!,
-          { messages, maxOutputTokens, responseFormat, signal },
+          { messages, maxOutputTokens, responseFormat, temperature, reasoning, thinking, signal, onUpdate },
           { 'HTTP-Referer': referer, 'X-Title': 'AI Content Suite' },
         );
       }
@@ -458,19 +1035,27 @@ export const callProvider = async ({ messages, maxOutputTokens, responseFormat =
           messages,
           maxOutputTokens,
           responseFormat,
+          temperature,
+          reasoning,
+          thinking,
           signal,
+          onUpdate,
         });
       case 'deepseek':
         return await callOpenAICompatible('https://api.deepseek.com/chat/completions', apiKey!, {
           messages,
           maxOutputTokens,
           responseFormat,
+          temperature,
+          reasoning,
+          thinking,
           signal,
+          onUpdate,
         });
       case 'anthropic':
-        return await callAnthropic({ messages, maxOutputTokens, responseFormat, signal }, apiKey!);
+        return await callAnthropic({ messages, maxOutputTokens, responseFormat, temperature, signal, onUpdate }, apiKey!);
       case 'ollama':
-        return await callOllama({ messages, maxOutputTokens, responseFormat, signal });
+        return await callOllama({ messages, maxOutputTokens, responseFormat, temperature, signal, onUpdate });
       default:
         throw new Error(`Unsupported provider: ${config.providerId}`);
     }
