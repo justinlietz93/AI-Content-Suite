@@ -117,12 +117,6 @@ const baseProps = {
     activeProviderLabel: 'OpenAI',
     activeModelName: 'gpt-5.1-mini',
   },
-  layoutControls: {
-    contentWidthLabel: '70%',
-    contentWidthPercent: 70,
-    onWidthPercentChange: noop,
-    appliedContentWidth: '960px',
-  },
   providerBanner: {
     activeProviderLabel: 'OpenAI',
     activeModelName: 'gpt-5.1-mini',

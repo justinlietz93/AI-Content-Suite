@@ -49,17 +49,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
   showCollapseToggle = true,
 }) => {
   const baseVisibility = variant === 'overlay' ? 'flex md:hidden' : 'hidden md:flex';
+  const widthStyle =
+    variant === 'overlay'
+      ? undefined
+      : {
+          width: collapsed ? 'clamp(3.75rem, 5vw, 5.5rem)' : 'clamp(13rem, 18vw, 20rem)',
+        };
   const classes = [
     baseVisibility,
-    'flex flex-col border-r border-border-color/70 bg-surface/80 backdrop-blur-sm transition-all duration-300 ease-in-out',
-    collapsed ? 'w-16' : 'w-64',
+    'flex flex-col shrink-0 border-r border-border-color/70 bg-surface/80 backdrop-blur-sm transition-all duration-300 ease-in-out',
     className ?? '',
   ]
     .filter(Boolean)
     .join(' ');
 
   return (
-    <aside className={classes} aria-label="Workspace navigation">
+    <aside className={classes} aria-label="Workspace navigation" style={widthStyle}>
       <div className="flex items-center justify-between px-3 py-4 border-b border-border-color/60">
         <span
           className={`text-xs font-semibold uppercase tracking-widest text-text-secondary transition-opacity ${

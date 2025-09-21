@@ -28,12 +28,6 @@ interface WorkspaceLayoutProps {
     activeProviderLabel: string;
     activeModelName: string;
   };
-  layoutControls: {
-    contentWidthLabel: string;
-    contentWidthPercent: number;
-    onWidthPercentChange: (value: number) => void;
-    appliedContentWidth: string;
-  };
   providerBanner: {
     activeProviderLabel: string;
     activeModelName: string;
@@ -64,7 +58,6 @@ export const WorkspaceLayout: React.FC<WorkspaceLayoutProps> = ({
   sidebarProps,
   onModeChange,
   headerProps,
-  layoutControls,
   providerBanner,
   showChat,
   chatProps,
@@ -169,35 +162,10 @@ export const WorkspaceLayout: React.FC<WorkspaceLayoutProps> = ({
         </header>
 
         <main className="flex-1 overflow-y-auto px-4 sm:px-6 lg:px-10 py-6">
-          <div
-            className="mx-auto flex flex-col gap-4 flex-1 min-h-0"
-            style={{ width: layoutControls.appliedContentWidth, maxWidth: '100%' }}
-          >
-            <div className="rounded-xl bg-secondary/70 px-4 py-3 shadow-inner">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-xs uppercase tracking-widest text-text-secondary">Workspace width</p>
-                  <p className="text-sm font-medium text-text-primary">{layoutControls.contentWidthLabel}</p>
-                </div>
-                <div className="flex items-center gap-2 w-full sm:w-auto">
-                  <span className="text-xs text-text-secondary">Compact</span>
-                  <input
-                    type="range"
-                    min={0}
-                    max={100}
-                    value={layoutControls.contentWidthPercent}
-                    onChange={event => layoutControls.onWidthPercentChange(Number(event.target.value))}
-                    className="flex-1 sm:w-48 accent-primary"
-                    aria-label="Adjust workspace width"
-                  />
-                  <span className="text-xs text-text-secondary">Full</span>
-                </div>
-              </div>
-            </div>
-
+          <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 flex-1 min-h-0">
             <div
               data-testid="workspace-card"
-              className="bg-surface/95 shadow-2xl rounded-2xl animate-breathing-glow p-6 sm:p-8 backdrop-blur-sm flex flex-col min-h-0 overflow-hidden"
+              className="w-full max-w-6xl bg-surface/95 shadow-2xl rounded-2xl animate-breathing-glow p-6 sm:p-8 backdrop-blur-sm flex flex-col min-h-0 overflow-hidden"
               style={workspaceCardStyle}
             >
               <header className="mb-6 text-center">

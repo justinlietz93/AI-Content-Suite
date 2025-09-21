@@ -81,14 +81,7 @@ const App: React.FC = () => {
     providerSummaryText,
   } = usePersistentProviderSettings(activeMode);
   const { savedPrompts, setSavedPrompts } = useSavedPrompts();
-  const {
-    isSidebarCollapsed,
-    toggleSidebar,
-    contentWidthPercent,
-    setContentWidthPercent,
-    appliedContentWidth,
-    contentWidthLabel,
-  } = useLayoutPreferences();
+  const { isSidebarCollapsed, toggleSidebar } = useLayoutPreferences();
 
   const activeTabDefinition = useMemo(
     () => TABS.find(tab => tab.id === activeMode),
@@ -368,13 +361,6 @@ const App: React.FC = () => {
     [activeMode, closeMobileSidebar, handleReset],
   );
 
-  const handleWidthSliderChange = useCallback(
-    (percent: number) => {
-      setContentWidthPercent(percent);
-    },
-    [setContentWidthPercent],
-  );
-
   const showMainForm = activeMode !== 'chat' && (appState === 'idle' || appState === 'fileSelected');
   const showSubmitButton = activeMode !== 'chat' && canSubmit && appState !== 'completed' && appState !== 'error';
   const showResults = appState === 'completed' && !!processedData;
@@ -488,32 +474,7 @@ const App: React.FC = () => {
           variant="desktop"
         />
         <div className="flex flex-1 flex-col items-center justify-center p-4 sm:p-8">
-          <div
-            className="mx-auto flex w-full flex-1 flex-col gap-4 min-h-0"
-            style={{ width: appliedContentWidth, maxWidth: '100%' }}
-          >
-            <div className="rounded-xl bg-secondary/70 px-4 py-3 shadow-inner">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-xs uppercase tracking-widest text-text-secondary">Workspace width</p>
-                  <p className="text-sm font-medium text-text-primary">{contentWidthLabel}</p>
-                </div>
-                <div className="flex items-center gap-2 w-full sm:w-auto">
-                  <span className="text-xs text-text-secondary">Compact</span>
-                  <input
-                    type="range"
-                    min={0}
-                    max={100}
-                    value={contentWidthPercent}
-                    onChange={event => handleWidthSliderChange(Number(event.target.value))}
-                    className="flex-1 sm:w-48 accent-primary"
-                    aria-label="Adjust workspace width"
-                  />
-                  <span className="text-xs text-text-secondary">Full</span>
-                </div>
-              </div>
-            </div>
-
+          <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 min-h-0">
             <div
               data-testid="workspace-card"
               className="w-full max-w-6xl bg-surface shadow-2xl rounded-lg px-6 sm:px-10 pt-6 sm:pt-10 pb-6 sm:pb-8 border border-border-color animate-breathing-glow transition-colors duration-500 ease-in-out flex flex-col min-h-0 overflow-hidden"
