@@ -44,7 +44,7 @@ interface CategoryHeaderProps {
   /** Blur handler that commits rename. */
   onRenameBlur: () => void;
   /** Drag start handler for the category header. */
-  onDragStart: (event: React.DragEvent<HTMLDivElement>) => void;
+  onDragStart: (event: React.DragEvent<HTMLElement>) => void;
   /** Drag end handler. */
   onDragEnd: () => void;
   /** Keyboard handler used for accessible drag toggling. */
@@ -278,6 +278,7 @@ export const CategoryHeader: React.FC<CategoryHeaderProps> = ({
         <div
           className={containerClasses}
           draggable={!isEditing}
+          data-drag-handle="category"
           onDragStart={event => {
             if (isEditing) {
               event.preventDefault();

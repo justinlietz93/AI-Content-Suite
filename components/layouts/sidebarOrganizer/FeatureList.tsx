@@ -19,7 +19,7 @@ interface FeatureListProps {
   draggingItem: DraggingItem | null;
   featureDropTarget: FeatureDropTarget;
   onSelectMode?: (mode: Mode) => void;
-  onDragStart: (event: React.DragEvent<HTMLButtonElement>, featureId: string) => void;
+  onDragStart: (event: React.DragEvent<HTMLElement>, featureId: string) => void;
   onDragEnd: () => void;
   onKeyDown: (event: React.KeyboardEvent<HTMLButtonElement>, featureId: string) => void;
   onDrop: (featureId: string, categoryId: string | null, index: number) => void;

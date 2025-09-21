@@ -50,8 +50,8 @@ interface UseSidebarOrganizerActionsResult {
   handleDeleteCategory: (categoryId: string) => void;
   handleFeatureKeyDown: (event: KeyboardEvent<HTMLButtonElement>, featureId: string) => void;
   handleCategoryKeyDown: (event: KeyboardEvent<HTMLDivElement>, categoryId: string) => void;
-  handleFeatureDragStart: (event: DragEvent<HTMLButtonElement>, featureId: string) => void;
-  handleCategoryDragStart: (event: DragEvent<HTMLDivElement>, categoryId: string) => void;
+  handleFeatureDragStart: (event: DragEvent<HTMLElement>, featureId: string) => void;
+  handleCategoryDragStart: (event: DragEvent<HTMLElement>, categoryId: string) => void;
   dropFeature: (featureId: string, categoryId: string | null, index: number) => void;
   parseDragData: (event: DragEvent) => DraggingItem | null;
   resetDragState: () => void;
@@ -77,6 +77,53 @@ export const useSidebarOrganizerActions = ({
   const [featureDropTarget, setFeatureDropTarget] = useState<FeatureDropTarget>(null);
   const [categoryDropTarget, setCategoryDropTarget] = useState<CategoryDropTarget>(null);
   const draggingItemRef = useRef<DraggingItem | null>(null);
+  const dragPreviewRef = useRef<HTMLElement | null>(null);
+
+  /**
+   * Removes the currently mounted drag preview element from the DOM, if present.
+   */
+  const removeDragPreview = useCallback(() => {
+    const preview = dragPreviewRef.current;
+    if (preview && preview.parentNode) {
+      preview.parentNode.removeChild(preview);
+    }
+    dragPreviewRef.current = null;
+  }, []);
+
+  /**
+   * Builds a floating clone of the provided element to serve as the drag image.
+   */
+  const buildDragPreview = useCallback(
+    (element: HTMLElement | null) => {
+      if (typeof document === 'undefined' || !element) {
+        return null;
+      }
+      removeDragPreview();
+      const rect = element.getBoundingClientRect();
+      const clone = element.cloneNode(true) as HTMLElement;
+      clone.style.boxSizing = 'border-box';
+      clone.style.position = 'fixed';
+      clone.style.top = '-9999px';
+      clone.style.left = '-9999px';
+      clone.style.width = `${rect.width}px`;
+      clone.style.height = `${rect.height}px`;
+      clone.style.pointerEvents = 'none';
+      clone.style.margin = '0';
+      clone.style.opacity = '0.92';
+      clone.style.transform = 'scale(1.05)';
+      clone.style.filter = 'brightness(1.05)';
+      clone.style.boxShadow = '0 18px 42px rgba(15, 23, 42, 0.35)';
+      if (typeof window !== 'undefined') {
+        const computed = window.getComputedStyle(element);
+        clone.style.borderRadius = computed.borderRadius;
+        clone.style.background = computed.backgroundColor;
+      }
+      document.body.appendChild(clone);
+      dragPreviewRef.current = clone;
+      return { element: clone, offsetX: rect.width / 2, offsetY: rect.height / 2 };
+    },
+    [removeDragPreview],
+  );
 
   /**
    * Keeps the latest drag payload available synchronously for DOM drag events while still updating React state.
@@ -93,7 +140,8 @@ export const useSidebarOrganizerActions = ({
     setDraggingItem(null);
     setFeatureDropTarget(null);
     setCategoryDropTarget(null);
-  }, [setDraggingItem]);
+    removeDragPreview();
+  }, [removeDragPreview, setDraggingItem]);
 
   /**
    * Clears rename state and optionally removes a newly created category that was never finalized.
@@ -433,8 +481,12 @@ export const useSidebarOrganizerActions = ({
    * Configures drag payloads for feature items.
    */
   const handleFeatureDragStart = useCallback(
-    (event: DragEvent<HTMLButtonElement>, featureId: string) => {
+    (event: DragEvent<HTMLElement>, featureId: string) => {
       const serialized = JSON.stringify({ type: 'feature', id: featureId });
+      const currentTarget = event.currentTarget as HTMLElement;
+      const dragHandle =
+        (currentTarget.closest('[data-drag-handle="feature"]') as HTMLElement | null) ??
+        currentTarget;
       if (event.dataTransfer) {
         event.dataTransfer.setData(DRAG_DATA_MIME, serialized);
         event.dataTransfer.setData(
@@ -442,20 +494,30 @@ export const useSidebarOrganizerActions = ({
           `${DRAG_DATA_TEXT_FEATURE_PREFIX}${featureId}`,
         );
         event.dataTransfer.effectAllowed = 'move';
-        event.dataTransfer.setDragImage(event.currentTarget, 0, 0);
+        const preview = buildDragPreview(dragHandle);
+        if (preview) {
+          event.dataTransfer.setDragImage(preview.element, preview.offsetX, preview.offsetY);
+        } else {
+          const rect = dragHandle.getBoundingClientRect();
+          event.dataTransfer.setDragImage(dragHandle, rect.width / 2, rect.height / 2);
+        }
       }
       setDraggingItem({ type: 'feature', id: featureId, viaKeyboard: false });
       announce(labels.featureGrabAnnouncement);
     },
-    [announce, labels.featureGrabAnnouncement, setDraggingItem],
+    [announce, buildDragPreview, labels.featureGrabAnnouncement, setDraggingItem],
   );
 
   /**
    * Configures drag payloads for category headers.
    */
   const handleCategoryDragStart = useCallback(
-    (event: DragEvent<HTMLDivElement>, categoryId: string) => {
+    (event: DragEvent<HTMLElement>, categoryId: string) => {
       const serialized = JSON.stringify({ type: 'category', id: categoryId });
+      const currentTarget = event.currentTarget as HTMLElement;
+      const dragHandle =
+        (currentTarget.closest('[data-drag-handle="category"]') as HTMLElement | null) ??
+        currentTarget;
       if (event.dataTransfer) {
         event.dataTransfer.setData(DRAG_DATA_MIME, serialized);
         event.dataTransfer.setData(
@@ -463,12 +525,18 @@ export const useSidebarOrganizerActions = ({
           `${DRAG_DATA_TEXT_CATEGORY_PREFIX}${categoryId}`,
         );
         event.dataTransfer.effectAllowed = 'move';
-        event.dataTransfer.setDragImage(event.currentTarget, 0, 0);
+        const preview = buildDragPreview(dragHandle);
+        if (preview) {
+          event.dataTransfer.setDragImage(preview.element, preview.offsetX, preview.offsetY);
+        } else {
+          const rect = dragHandle.getBoundingClientRect();
+          event.dataTransfer.setDragImage(dragHandle, rect.width / 2, rect.height / 2);
+        }
       }
       setDraggingItem({ type: 'category', id: categoryId, viaKeyboard: false });
       announce(labels.categoryGrabAnnouncement);
     },
-    [announce, labels.categoryGrabAnnouncement, setDraggingItem],
+    [announce, buildDragPreview, labels.categoryGrabAnnouncement, setDraggingItem],
   );
 
   return {

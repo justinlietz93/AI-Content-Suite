@@ -25,7 +25,7 @@ interface FeatureItemProps {
   /** Keyboard handler supporting drag shortcuts. */
   onKeyDown: (event: React.KeyboardEvent<HTMLButtonElement>, featureId: string) => void;
   /** Pointer drag start handler. */
-  onDragStart: (event: React.DragEvent<HTMLButtonElement>, featureId: string) => void;
+  onDragStart: (event: React.DragEvent<HTMLElement>, featureId: string) => void;
   /** Pointer drag end handler. */
   onDragEnd: () => void;
 }
@@ -47,6 +47,15 @@ export const FeatureItem: React.FC<FeatureItemProps> = ({
 }) => {
   const IconComponent = iconMap[feature.mode];
   const isActive = activeMode === feature.mode;
+  const handleDragStart = React.useCallback(
+    (event: React.DragEvent<HTMLElement>) => {
+      onDragStart(event, feature.id);
+    },
+    [feature.id, onDragStart],
+  );
+  const handleDragEnd = React.useCallback(() => {
+    onDragEnd();
+  }, [onDragEnd]);
   const buttonClasses = [
     'group flex w-full items-center gap-3 rounded-md px-2 py-2 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-surface',
     isActive
@@ -61,9 +70,10 @@ export const FeatureItem: React.FC<FeatureItemProps> = ({
     <button
       type="button"
       className={buttonClasses}
+      data-drag-handle="feature"
       draggable
-      onDragStart={event => onDragStart(event, feature.id)}
-      onDragEnd={onDragEnd}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
       onKeyDown={event => onKeyDown(event, feature.id)}
       onClick={() => onSelectMode?.(feature.mode)}
       aria-grabbed={isDragging}
@@ -74,6 +84,9 @@ export const FeatureItem: React.FC<FeatureItemProps> = ({
         <IconComponent
           fontSize={collapsed ? 'large' : 'medium'}
           className={`shrink-0 ${isActive ? 'text-primary' : 'text-text-secondary'} ${collapsed ? 'mx-auto' : ''}`}
+          draggable
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
         />
       ) : null}
       {collapsed ? (
