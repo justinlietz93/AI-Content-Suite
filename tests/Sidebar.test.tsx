@@ -1,6 +1,6 @@
 /* @vitest-environment jsdom */
 import React from 'react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { Sidebar } from '../components/layouts/Sidebar';
@@ -351,6 +351,38 @@ describe('Sidebar', () => {
         .filter(id => id && id !== 'uncategorized');
 
       expect(orderedIds.slice(0, 3)).toEqual(['interactive', 'workspace', 'orchestration']);
+    });
+  });
+
+  it('does not switch modes when a feature drag ends on its original slot', async () => {
+    console.info('Ensuring drag-ending over the origin does not trigger unintended mode switches.');
+
+    const handleSelect = vi.fn();
+
+    render(
+      <Sidebar
+        collapsed
+        onToggle={noop}
+        activeMode={'technical' as Mode}
+        onSelectMode={handleSelect}
+      />,
+    );
+
+    const workspaceSection = await screen.findByTestId('category-section-workspace');
+    const summarizer = workspaceSection.querySelector(
+      '[data-feature-id="technical"]',
+    ) as HTMLButtonElement;
+    const parentRow = summarizer.parentElement as HTMLElement;
+    const transfer = createDataTransfer();
+
+    fireEvent.dragStart(summarizer, { dataTransfer: transfer });
+    fireEvent.dragOver(parentRow, { dataTransfer: transfer, clientY: 4 });
+    fireEvent.drop(parentRow, { dataTransfer: transfer, clientY: 4 });
+    fireEvent.dragEnd(summarizer, { dataTransfer: transfer });
+    fireEvent.click(summarizer);
+
+    await waitFor(() => {
+      expect(handleSelect).not.toHaveBeenCalled();
     });
   });
 

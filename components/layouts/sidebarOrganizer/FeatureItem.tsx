@@ -47,15 +47,36 @@ export const FeatureItem: React.FC<FeatureItemProps> = ({
 }) => {
   const IconComponent = iconMap[feature.mode];
   const isActive = activeMode === feature.mode;
+  /** Tracks whether a drag interaction just completed so the click handler can be suppressed. */
+  const suppressClickRef = React.useRef(false);
   const handleDragStart = React.useCallback(
     (event: React.DragEvent<HTMLElement>) => {
+      suppressClickRef.current = true;
       onDragStart(event, feature.id);
     },
     [feature.id, onDragStart],
   );
   const handleDragEnd = React.useCallback(() => {
     onDragEnd();
+    setTimeout(() => {
+      suppressClickRef.current = false;
+    }, 0);
   }, [onDragEnd]);
+  /**
+   * Prevents drag terminations from triggering a mode switch while still allowing regular clicks to activate features.
+   */
+  const handleClick = React.useCallback(
+    (event: React.MouseEvent<HTMLButtonElement>) => {
+      if (suppressClickRef.current) {
+        event.preventDefault();
+        event.stopPropagation();
+        suppressClickRef.current = false;
+        return;
+      }
+      onSelectMode?.(feature.mode);
+    },
+    [feature.mode, onSelectMode],
+  );
   const buttonClasses = [
     'group flex w-full items-center gap-3 rounded-md px-2 py-2 text-left transition-colors transition-transform focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-surface',
     isActive
@@ -75,8 +96,8 @@ export const FeatureItem: React.FC<FeatureItemProps> = ({
       draggable
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
+      onClick={handleClick}
       onKeyDown={event => onKeyDown(event, feature.id)}
-      onClick={() => onSelectMode?.(feature.mode)}
       aria-grabbed={isDragging}
       data-feature-id={feature.id}
       role="listitem"
