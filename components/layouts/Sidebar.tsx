@@ -157,7 +157,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
           const listId = `${section.id}-nav-list`;
           const isSectionCollapsed = collapsed ? false : collapsedSections[section.id] ?? false;
 
-          const sectionSpacingClasses = collapsed ? 'px-1 py-2' : 'px-2 py-4';
+          const sectionSpacingClasses = collapsed
+            ? 'px-1 first:pt-2 last:pb-2'
+            : 'px-2 py-4';
 
           return (
             <div

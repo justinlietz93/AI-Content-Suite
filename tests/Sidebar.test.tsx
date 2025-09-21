@@ -61,7 +61,9 @@ describe('Sidebar', () => {
     );
 
     const workspaceSection = screen.getByTestId('sidebar-section-workspace');
-    expect(workspaceSection).toHaveClass('py-2');
+    expect(workspaceSection).toHaveClass('px-1');
+    expect(workspaceSection).toHaveClass('first:pt-2');
+    expect(workspaceSection).not.toHaveClass('py-2');
     expect(workspaceSection).not.toHaveClass('py-4');
   });
 });
