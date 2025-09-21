@@ -20,6 +20,8 @@ import { createCategoryId } from './constants';
 import type { DraggingItem, FeatureDropTarget, CategoryDropTarget } from './dragTypes';
 
 const DRAG_DATA_MIME = 'application/x-sidebar-item';
+const DRAG_DATA_TEXT_FEATURE_PREFIX = 'feature:';
+const DRAG_DATA_TEXT_CATEGORY_PREFIX = 'category:';
 
 interface UseSidebarOrganizerActionsParams {
   state: SidebarOrganizationState;
@@ -396,6 +398,25 @@ export const useSidebarOrganizerActions = ({
     try {
       const data = event.dataTransfer?.getData(DRAG_DATA_MIME);
       if (!data) {
+        const fallback = event.dataTransfer?.getData('text/plain') ?? '';
+        if (fallback.startsWith(DRAG_DATA_TEXT_FEATURE_PREFIX)) {
+          const id = fallback.slice(DRAG_DATA_TEXT_FEATURE_PREFIX.length);
+          if (id) {
+            const parsed: DraggingItem = { type: 'feature', id, viaKeyboard: false };
+            draggingItemRef.current = parsed;
+            setDraggingItemState(parsed);
+            return parsed;
+          }
+        }
+        if (fallback.startsWith(DRAG_DATA_TEXT_CATEGORY_PREFIX)) {
+          const id = fallback.slice(DRAG_DATA_TEXT_CATEGORY_PREFIX.length);
+          if (id) {
+            const parsed: DraggingItem = { type: 'category', id, viaKeyboard: false };
+            draggingItemRef.current = parsed;
+            setDraggingItemState(parsed);
+            return parsed;
+          }
+        }
         return null;
       }
       const parsed = JSON.parse(data) as DraggingItem;
@@ -412,12 +433,16 @@ export const useSidebarOrganizerActions = ({
    */
   const handleFeatureDragStart = useCallback(
     (event: DragEvent<HTMLButtonElement>, featureId: string) => {
-      event.dataTransfer?.setData(
-        DRAG_DATA_MIME,
-        JSON.stringify({ type: 'feature', id: featureId }),
-      );
-      event.dataTransfer?.setDragImage(event.currentTarget, 0, 0);
-      event.dataTransfer.effectAllowed = 'move';
+      const serialized = JSON.stringify({ type: 'feature', id: featureId });
+      if (event.dataTransfer) {
+        event.dataTransfer.setData(DRAG_DATA_MIME, serialized);
+        event.dataTransfer.setData(
+          'text/plain',
+          `${DRAG_DATA_TEXT_FEATURE_PREFIX}${featureId}`,
+        );
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setDragImage(event.currentTarget, 0, 0);
+      }
       setDraggingItem({ type: 'feature', id: featureId, viaKeyboard: false });
       announce(labels.featureGrabAnnouncement);
     },
@@ -429,11 +454,16 @@ export const useSidebarOrganizerActions = ({
    */
   const handleCategoryDragStart = useCallback(
     (event: DragEvent<HTMLDivElement>, categoryId: string) => {
-      event.dataTransfer?.setData(
-        DRAG_DATA_MIME,
-        JSON.stringify({ type: 'category', id: categoryId }),
-      );
-      event.dataTransfer.effectAllowed = 'move';
+      const serialized = JSON.stringify({ type: 'category', id: categoryId });
+      if (event.dataTransfer) {
+        event.dataTransfer.setData(DRAG_DATA_MIME, serialized);
+        event.dataTransfer.setData(
+          'text/plain',
+          `${DRAG_DATA_TEXT_CATEGORY_PREFIX}${categoryId}`,
+        );
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setDragImage(event.currentTarget, 0, 0);
+      }
       setDraggingItem({ type: 'category', id: categoryId, viaKeyboard: false });
       announce(labels.categoryGrabAnnouncement);
     },
