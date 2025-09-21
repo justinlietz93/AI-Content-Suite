@@ -188,7 +188,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   const layoutClasses = collapsed
                     ? 'justify-center px-0 py-3'
                     : 'gap-4 px-2 py-2 text-left';
-                  const iconSizeClasses = collapsed ? 'text-[3.75rem]' : 'text-[2.7rem]';
 
                   return (
                     <li key={mode}>
@@ -201,8 +200,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       >
                         {IconComponent ? (
                           <IconComponent
-                            fontSize="inherit"
-                            className={`shrink-0 transition-colors ${iconSizeClasses}`}
+                            fontSize={collapsed ? 'large' : 'medium'}
+                            sx={{ fontSize: collapsed ? '3.25rem' : '2.5rem' }}
+                            className="shrink-0 transition-colors"
                             aria-hidden="true"
                           />
                         ) : null}
