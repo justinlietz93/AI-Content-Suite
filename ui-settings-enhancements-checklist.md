@@ -28,8 +28,8 @@
 
 ## Sidebar Organizer UI/UX Regression Checklist
 
-- [ ] Collapsed sidebar mode removes category headers entirely, leaving no drag handles to reorder categories without expanding the panel (see `CategorySection.tsx`).
+- [x] Collapsed sidebar mode removes category headers entirely, leaving no drag handles to reorder categories without expanding the panel (see `CategorySection.tsx`).
 - [x] Dragging a feature still fires the mode-selection click handler on mouseup, which flips the active view during reordering and disrupts drag/drop feedback (`FeatureItem.tsx`).
-- [ ] Collapsed category containers never change styling when targeted for a drop, so users get no visual confirmation that the icon bucket will accept the feature (`CategorySection.tsx`).
-- [ ] Drop indicators render as a one-pixel line with no alternate highlight, making the target border effectively invisible against dense icon stacks (`DropZone.tsx`).
-- [ ] Category drop announcements read stale ordering data because `SidebarOrganizer` looks up the destination immediately after dispatching the reorder action, confusing screen readers about the new placement (`SidebarOrganizer.tsx`).
+- [x] Collapsed category containers never change styling when targeted for a drop, so users get no visual confirmation that the icon bucket will accept the feature (`CategorySection.tsx`).
+- [x] Drop indicators render as a one-pixel line with no alternate highlight, making the target border effectively invisible against dense icon stacks (`DropZone.tsx`).
+- [x] Category drop announcements read stale ordering data because `SidebarOrganizer` looks up the destination immediately after dispatching the reorder action, confusing screen readers about the new placement (`SidebarOrganizer.tsx`).

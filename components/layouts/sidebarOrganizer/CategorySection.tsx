@@ -88,6 +88,15 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
 }) => {
   const sectionSpacing = collapsed ? 'px-1 first:pt-2 last:pb-2' : 'px-2 py-3';
   const testId = `category-section-${bucket.categoryId ?? 'uncategorized'}`;
+  const dropHighlightClasses =
+    'rounded-xl bg-primary/10 ring-2 ring-primary/60 ring-offset-2 ring-offset-surface shadow-[0_0_0_1px_rgba(59,130,246,0.35)]';
+  const isFeatureTargetingBucket =
+    featureDropTarget?.categoryId === bucket.categoryId &&
+    (featureDropTarget?.context === undefined ||
+      featureDropTarget.context === 'zone' ||
+      featureDropTarget.context === 'header' ||
+      featureDropTarget.context === 'before-item' ||
+      featureDropTarget.context === 'after-item');
 
   /**
    * Highlights collapsed sections when a feature hovers over empty whitespace so dropping is intuitive.
@@ -212,10 +221,17 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
       : shouldRenderRootZone
       ? sectionSpacing
       : 'px-2 pb-3 pt-0';
+    const rootContainerClassName = [
+      rootSectionSpacing,
+      collapsed ? 'transition-all duration-150' : '',
+      collapsed && featureDropTarget?.categoryId === null ? dropHighlightClasses : '',
+    ]
+      .filter(Boolean)
+      .join(' ');
 
     return (
       <div
-        className={rootSectionSpacing}
+        className={rootContainerClassName}
         data-testid={testId}
         onDragOver={handleCollapsedSectionDragOver}
         onDragLeave={handleCollapsedSectionDragLeave}
@@ -401,9 +417,17 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
   };
 
   if (collapsed) {
+    const collapsedSectionClassName = [
+      sectionSpacing,
+      'transition-all duration-150',
+      isFeatureTargetingBucket ? dropHighlightClasses : '',
+    ]
+      .filter(Boolean)
+      .join(' ');
+
     return (
       <div
-        className={sectionSpacing}
+        className={collapsedSectionClassName}
         data-testid={testId}
         onDragOver={handleCollapsedSectionDragOver}
         onDragLeave={handleCollapsedSectionDragLeave}

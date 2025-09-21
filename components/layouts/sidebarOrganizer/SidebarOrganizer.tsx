@@ -169,11 +169,23 @@ export const SidebarOrganizer: React.FC<SidebarOrganizerProps> = ({
             onCategoryDragEnd={resetDragState}
             onCategoryKeyDown={handleCategoryKeyDown}
             onCategoryDrop={(categoryId, targetIndex) => {
+              const hoveredCategoryId = categoryDropTarget?.hoveredCategoryId ?? null;
+              const announcementCategory =
+                hoveredCategoryId !== null
+                  ? state.categories.find(item => item.id === hoveredCategoryId)
+                  : null;
+
               dispatch(moveCategory(categoryId, targetIndex));
-              const target = state.categories.find(item => item.order === targetIndex);
-              if (target) {
-                announce(mergedLabels.dropOnCategoryAnnouncement.replace('{categoryName}', target.name));
+
+              if (announcementCategory && announcementCategory.id !== categoryId) {
+                announce(
+                  mergedLabels.dropOnCategoryAnnouncement.replace(
+                    '{categoryName}',
+                    announcementCategory.name,
+                  ),
+                );
               }
+
               resetDragState();
             }}
             setFeatureDropTarget={setFeatureDropTarget}

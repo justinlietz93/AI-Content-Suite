@@ -300,6 +300,44 @@ describe('Sidebar', () => {
     });
   });
 
+  it('highlights collapsed category buckets while hovering a feature drop target', async () => {
+    console.info('Ensuring collapsed categories surface visible drop feedback while hovering features.');
+
+    render(
+      <Sidebar
+        collapsed
+        onToggle={noop}
+        activeMode={'technical' as Mode}
+        onSelectMode={noop}
+      />,
+    );
+
+    const workspaceSection = await screen.findByTestId('category-section-workspace');
+    const orchestrationSection = await screen.findByTestId('category-section-orchestration');
+    const summarizer = workspaceSection.querySelector(
+      '[data-feature-id="technical"]',
+    ) as HTMLButtonElement;
+    expect(summarizer).toBeTruthy();
+
+    const transfer = createDataTransfer();
+
+    fireEvent.dragStart(summarizer, { dataTransfer: transfer });
+    fireEvent.dragOver(orchestrationSection, { dataTransfer: transfer });
+
+    await waitFor(() => {
+      expect(orchestrationSection).toHaveClass('ring-2', { exact: false });
+      expect(orchestrationSection).toHaveClass('bg-primary/10', { exact: false });
+    });
+
+    fireEvent.dragLeave(orchestrationSection, { relatedTarget: null });
+
+    await waitFor(() => {
+      expect(orchestrationSection).not.toHaveClass('ring-2', { exact: false });
+    });
+
+    fireEvent.dragEnd(summarizer, { dataTransfer: transfer });
+  });
+
   it('reorders categories while the sidebar is collapsed', async () => {
     console.info('Confirming collapsed sidebar retains category drag-and-drop ordering.');
 
