@@ -88,6 +88,7 @@ export const CategoryHeader: React.FC<CategoryHeaderProps> = ({
   const [isPointerInActionZone, setPointerInActionZone] = React.useState(false);
   const [isActionFocused, setActionFocused] = React.useState(false);
   const [isHeaderFocused, setHeaderFocused] = React.useState(false);
+  const pointerFocusRef = React.useRef(false);
 
   const showActions = !isEditing;
   const errorId = editingError ? `rename-${categoryId}-error` : undefined;
@@ -132,16 +133,31 @@ export const CategoryHeader: React.FC<CategoryHeaderProps> = ({
    */
   const handleHeaderMouseLeave = React.useCallback(() => {
     setPointerInActionZone(false);
+    pointerFocusRef.current = false;
   }, []);
 
   /**
    * Ensures keyboard users reveal the action tray when the header gains focus.
    */
-  const handleHeaderFocus = React.useCallback(() => {
-    if (showActions) {
-      setHeaderFocused(true);
-    }
-  }, [showActions]);
+  const handleHeaderFocus = React.useCallback(
+    (event: React.FocusEvent<HTMLDivElement>) => {
+      if (!showActions) {
+        return;
+      }
+
+      const element = event.currentTarget;
+      const supportsMatches = typeof element.matches === 'function';
+      const isKeyboardFocus =
+        !pointerFocusRef.current && (!supportsMatches || element.matches(':focus-visible'));
+
+      pointerFocusRef.current = false;
+
+      if (isKeyboardFocus) {
+        setHeaderFocused(true);
+      }
+    },
+    [showActions],
+  );
 
   /**
    * Hides the action tray when focus leaves the header entirely.
@@ -154,8 +170,54 @@ export const CategoryHeader: React.FC<CategoryHeaderProps> = ({
       }
 
       setHeaderFocused(false);
+      pointerFocusRef.current = false;
     },
     [],
+  );
+
+  /**
+   * Marks the upcoming focus event as pointer-driven so hover controls are not revealed.
+   */
+  const handleHeaderPointerDown = React.useCallback(() => {
+    pointerFocusRef.current = true;
+  }, []);
+
+  /**
+   * Clears pointer-driven focus tracking when the pointer interaction finishes.
+   */
+  const handleHeaderPointerUp = React.useCallback(() => {
+    pointerFocusRef.current = false;
+  }, []);
+
+  /**
+   * Toggles the category expansion state when clicking anywhere on the header that is not
+   * reserved for rename/delete actions. Editing mode blocks toggling to avoid cancelling input.
+   */
+  const handleHeaderClick = React.useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      if (isEditing) {
+        return;
+      }
+
+      const target = event.target as HTMLElement | null;
+      if (actionContainerRef.current && target && actionContainerRef.current.contains(target)) {
+        return;
+      }
+
+      onToggleCollapse();
+    },
+    [isEditing, onToggleCollapse],
+  );
+
+  /**
+   * Prevents the collapse chevron click from bubbling back to the header container.
+   */
+  const handleCollapseToggleClick = React.useCallback(
+    (event: React.MouseEvent<HTMLButtonElement>) => {
+      event.stopPropagation();
+      onToggleCollapse();
+    },
+    [onToggleCollapse],
   );
 
   /**
@@ -216,6 +278,10 @@ export const CategoryHeader: React.FC<CategoryHeaderProps> = ({
         onMouseLeave={handleHeaderMouseLeave}
         onFocus={handleHeaderFocus}
         onBlur={handleHeaderBlur}
+        onPointerDown={handleHeaderPointerDown}
+        onPointerUp={handleHeaderPointerUp}
+        onPointerCancel={handleHeaderPointerUp}
+        onClick={handleHeaderClick}
         tabIndex={isEditing ? -1 : 0}
         role="button"
         aria-grabbed={isDragging}
@@ -228,6 +294,7 @@ export const CategoryHeader: React.FC<CategoryHeaderProps> = ({
             className={`flex flex-shrink-0 items-center gap-1 overflow-hidden transition-[width,opacity] duration-200 ease-out ${
               shouldRevealActions ? 'w-[3.5rem] opacity-100' : 'w-0 opacity-0'
             }`}
+            data-testid={`category-actions-${categoryId}`}
             aria-hidden={!shouldRevealActions}
             onMouseEnter={handleActionMouseEnter}
             onMouseLeave={handleActionMouseLeave}
@@ -280,7 +347,7 @@ export const CategoryHeader: React.FC<CategoryHeaderProps> = ({
         <button
           type="button"
           className="ml-2 text-xs text-text-secondary"
-          onClick={onToggleCollapse}
+          onClick={handleCollapseToggleClick}
           aria-label={`${isCollapsed ? 'Expand' : 'Collapse'} ${name}`}
         >
           {isCollapsed ? '▸' : '▾'}

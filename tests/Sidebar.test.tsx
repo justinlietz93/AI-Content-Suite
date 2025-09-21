@@ -87,6 +87,44 @@ describe('Sidebar', () => {
     expect(screen.getByText('Technical Summarizer')).toBeVisible();
   });
 
+  it('collapses a category when clicking the header body without revealing actions', async () => {
+    console.info('Validating that clicking a category header toggles collapse without exposing inline actions.');
+
+    render(
+      <Sidebar
+        collapsed={false}
+        onToggle={noop}
+        activeMode={'technical' as Mode}
+        onSelectMode={noop}
+      />,
+    );
+
+    await screen.findByTestId('category-section-workspace');
+    const header = document.querySelector('[data-category-id="workspace"]') as HTMLElement;
+    expect(header).toBeTruthy();
+
+    const initialActions = header.querySelector('[data-testid="category-actions-workspace"]') as HTMLElement;
+    expect(initialActions).toHaveAttribute('aria-hidden', 'true');
+
+    fireEvent.click(header);
+
+    await waitFor(() => {
+      expect(screen.queryByText('Technical Summarizer')).not.toBeInTheDocument();
+    });
+
+    const collapsedHeader = document.querySelector('[data-category-id="workspace"]') as HTMLElement;
+    expect(collapsedHeader).toBeTruthy();
+    const collapsedActions = collapsedHeader.querySelector('[data-testid="category-actions-workspace"]') as HTMLElement;
+    expect(collapsedActions).toHaveAttribute('aria-hidden', 'true');
+
+    fireEvent.click(collapsedHeader);
+    await screen.findByText('Technical Summarizer');
+
+    const expandedHeader = document.querySelector('[data-category-id="workspace"]') as HTMLElement;
+    const expandedActions = expandedHeader.querySelector('[data-testid="category-actions-workspace"]') as HTMLElement;
+    expect(expandedActions).toHaveAttribute('aria-hidden', 'true');
+  });
+
   it('hides category management controls when collapsed', () => {
     console.info('Verifying collapsed sidebar hides rename/delete affordances and the add button.');
 
