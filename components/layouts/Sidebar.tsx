@@ -24,21 +24,40 @@ type SidebarProps = {
   showCollapseToggle?: boolean;
 };
 
-const NAV_SECTIONS = [
+type NavSection = {
+  id: string;
+  title: string;
+  modes: Mode[];
+};
+
+const NAV_SECTIONS: NavSection[] = [
   {
+    id: 'workspace',
     title: 'Workspace',
     modes: ['technical', 'styleExtractor', 'rewriter', 'mathFormatter', 'reasoningStudio', 'scaffolder'] as Mode[],
   },
   {
+    id: 'orchestration',
     title: 'Orchestration',
     modes: ['requestSplitter', 'promptEnhancer', 'agentDesigner'] as Mode[],
   },
   {
+    id: 'interactive',
     title: 'Interactive',
     modes: ['chat'] as Mode[],
   },
 ];
 
+/**
+ * Renders the workspace navigation sidebar, including optional collapse mode and
+ * per-section toggles for feature categories. The component does not perform
+ * asynchronous work and therefore has no timeout concerns.
+ *
+ * @param props - Sidebar configuration including collapse state, callbacks, and the active mode.
+ * @returns The sidebar navigation element.
+ * @throws Never throws directly; relies on React error boundaries for rendering issues.
+ * @remarks Updates internal React state when section toggle handlers run.
+ */
 export const Sidebar: React.FC<SidebarProps> = ({
   collapsed,
   onToggle,
@@ -48,6 +67,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
   className,
   showCollapseToggle = true,
 }) => {
+  const [collapsedSections, setCollapsedSections] = React.useState<Record<string, boolean>>(() =>
+    NAV_SECTIONS.reduce((acc, section) => {
+      acc[section.id] = false;
+      return acc;
+    }, {} as Record<string, boolean>),
+  );
+
+  /**
+   * Toggles the collapsed state for a sidebar category.
+   *
+   * @param sectionId - Identifier for the navigation section that should change visibility.
+   * @returns void
+   * @throws This handler never throws; it only updates component state.
+   * @remarks Mutates React state to track the collapsed sections map.
+   */
+  const handleSectionToggle = React.useCallback((sectionId: string) => {
+    setCollapsedSections(prev => ({
+      ...prev,
+      [sectionId]: !prev[sectionId],
+    }));
+  }, []);
+
   const baseVisibility = variant === 'overlay' ? 'flex md:hidden' : 'hidden md:flex';
   const widthStyle =
     variant === 'overlay'
@@ -89,40 +130,55 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        {NAV_SECTIONS.map(section => (
-          <div key={section.title} className="px-2 py-4">
-            <p
-              className={`text-[0.65rem] uppercase tracking-widest text-text-secondary/70 mb-3 ${
-                collapsed ? 'hidden' : 'block'
-              }`}
-            >
-              {section.title}
-            </p>
-            <ul className="space-y-1">
-              {section.modes.map(mode => {
-                const tab = TABS.find(tabItem => tabItem.id === mode);
-                if (!tab) return null;
-                const isActive = activeMode === mode;
+        {NAV_SECTIONS.map(section => {
+          const listId = `${section.id}-nav-list`;
+          const isSectionCollapsed = collapsed ? false : collapsedSections[section.id] ?? false;
 
-                return (
-                  <li key={mode}>
-                    <button
-                      type="button"
-                      onClick={() => onSelectMode?.(mode)}
-                      className={`w-full rounded-md px-2 py-2 text-left text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 focus:ring-offset-surface ${
-                        isActive
-                          ? 'bg-primary/20 text-text-primary border border-primary/40'
-                          : 'text-text-secondary hover:text-text-primary hover:bg-secondary/60'
-                      } ${collapsed ? 'justify-center text-[0.65rem] px-0 py-1.5' : ''}`}
-                    >
-                      {collapsed ? tab.label[0] : tab.label}
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        ))}
+          return (
+            <div key={section.id} className="px-2 py-4" data-testid={`sidebar-section-${section.id}`}>
+              {!collapsed && (
+                <button
+                  type="button"
+                  onClick={() => handleSectionToggle(section.id)}
+                  className="mb-3 flex w-full items-center justify-between text-[0.65rem] uppercase tracking-widest text-text-secondary/70"
+                  aria-controls={listId}
+                  aria-expanded={!isSectionCollapsed}
+                >
+                  <span>{section.title}</span>
+                  <span aria-hidden="true">{isSectionCollapsed ? '▸' : '▾'}</span>
+                </button>
+              )}
+              <ul
+                id={listId}
+                aria-hidden={isSectionCollapsed}
+                className={`space-y-1 ${isSectionCollapsed ? 'hidden' : ''}`}
+                hidden={isSectionCollapsed}
+              >
+                {section.modes.map(mode => {
+                  const tab = TABS.find(tabItem => tabItem.id === mode);
+                  if (!tab) return null;
+                  const isActive = activeMode === mode;
+
+                  return (
+                    <li key={mode}>
+                      <button
+                        type="button"
+                        onClick={() => onSelectMode?.(mode)}
+                        className={`w-full rounded-md px-2 py-2 text-left text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 focus:ring-offset-surface ${
+                          isActive
+                            ? 'bg-primary/20 text-text-primary border border-primary/40'
+                            : 'text-text-secondary hover:text-text-primary hover:bg-secondary/60'
+                        } ${collapsed ? 'justify-center text-[0.65rem] px-0 py-1.5' : ''}`}
+                      >
+                        {collapsed ? tab.label[0] : tab.label}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          );
+        })}
       </div>
 
       <div
