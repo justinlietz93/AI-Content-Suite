@@ -233,6 +233,73 @@ describe('Sidebar', () => {
     });
   });
 
+  it('reorders feature icons while the sidebar is collapsed', async () => {
+    console.info('Verifying collapsed sidebar retains drag-and-drop feature reordering.');
+
+    render(
+      <Sidebar
+        collapsed
+        onToggle={noop}
+        activeMode={'technical' as Mode}
+        onSelectMode={noop}
+      />,
+    );
+
+    const workspaceSection = await screen.findByTestId('category-section-workspace');
+    const scaffolder = workspaceSection.querySelector(
+      '[data-feature-id="scaffolder"]',
+    ) as HTMLButtonElement;
+    const summarizer = workspaceSection.querySelector(
+      '[data-feature-id="technical"]',
+    ) as HTMLButtonElement;
+    const targetRow = summarizer.parentElement as HTMLElement;
+    expect(targetRow).toBeTruthy();
+    const transfer = createDataTransfer();
+
+    fireEvent.dragStart(scaffolder, { dataTransfer: transfer });
+    fireEvent.dragOver(targetRow, { dataTransfer: transfer });
+    fireEvent.drop(targetRow, { dataTransfer: transfer });
+
+    await waitFor(() => {
+      const order = getFeatureOrder(workspaceSection);
+      expect(order.indexOf('scaffolder')).toBeLessThan(order.indexOf('technical'));
+    });
+  });
+
+  it('moves a feature into another category while the sidebar is collapsed', async () => {
+    console.info('Ensuring collapsed sidebar supports cross-category feature drops.');
+
+    render(
+      <Sidebar
+        collapsed
+        onToggle={noop}
+        activeMode={'technical' as Mode}
+        onSelectMode={noop}
+      />,
+    );
+
+    const workspaceSection = await screen.findByTestId('category-section-workspace');
+    const orchestrationSection = await screen.findByTestId('category-section-orchestration');
+    const targetFeature = orchestrationSection.querySelector(
+      '[data-feature-id="requestSplitter"]',
+    ) as HTMLButtonElement;
+    const targetRow = targetFeature.parentElement as HTMLElement;
+    const summarizer = workspaceSection.querySelector(
+      '[data-feature-id="technical"]',
+    ) as HTMLButtonElement;
+    const transfer = createDataTransfer();
+
+    fireEvent.dragStart(summarizer, { dataTransfer: transfer });
+    fireEvent.dragOver(targetRow, { dataTransfer: transfer });
+    fireEvent.drop(targetRow, { dataTransfer: transfer });
+
+    await waitFor(() => {
+      expect(
+        within(orchestrationSection).getByText('Technical Summarizer'),
+      ).toBeVisible();
+    });
+  });
+
   it('places a feature directly after the hovered row when dragging downward within a category', async () => {
     console.info('Confirming dragging a feature downward re-inserts it immediately after the destination row.');
 

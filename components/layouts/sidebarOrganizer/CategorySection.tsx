@@ -88,6 +88,114 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
   const sectionSpacing = collapsed ? 'px-1 first:pt-2 last:pb-2' : 'px-2 py-3';
   const testId = `category-section-${bucket.categoryId ?? 'uncategorized'}`;
 
+  /**
+   * Highlights collapsed sections when a feature hovers over empty whitespace so dropping is intuitive.
+   *
+   * @param event - Drag event triggered while hovering the collapsed section container.
+   */
+  const handleCollapsedSectionDragOver = React.useCallback(
+    (event: React.DragEvent<HTMLDivElement>) => {
+      if (!collapsed || event.defaultPrevented) {
+        return;
+      }
+
+      const data = draggingItem ?? parseDragData(event);
+      if (data?.type !== 'feature') {
+        return;
+      }
+
+      event.preventDefault();
+      if (event.dataTransfer) {
+        event.dataTransfer.dropEffect = 'move';
+      }
+
+      setFeatureDropTarget(prev => {
+        if (
+          prev?.categoryId === bucket.categoryId &&
+          prev.index === bucket.features.length &&
+          prev.context === 'zone'
+        ) {
+          return prev;
+        }
+        return {
+          categoryId: bucket.categoryId,
+          index: bucket.features.length,
+          context: 'zone',
+        };
+      });
+    },
+    [
+      bucket.categoryId,
+      bucket.features.length,
+      collapsed,
+      draggingItem,
+      parseDragData,
+      setFeatureDropTarget,
+    ],
+  );
+
+  /**
+   * Clears hover styling when a drag leaves the collapsed section wrapper.
+   *
+   * @param event - Drag leave event emitted from the collapsed section container.
+   */
+  const handleCollapsedSectionDragLeave = React.useCallback(
+    (event: React.DragEvent<HTMLDivElement>) => {
+      if (!collapsed) {
+        return;
+      }
+
+      const related = event.relatedTarget as Node | null;
+      if (related && event.currentTarget.contains(related)) {
+        return;
+      }
+
+      setFeatureDropTarget(prev => {
+        if (
+          prev?.categoryId === bucket.categoryId &&
+          prev.index === bucket.features.length &&
+          prev.context === 'zone'
+        ) {
+          return null;
+        }
+        return prev;
+      });
+    },
+    [bucket.categoryId, bucket.features.length, collapsed, setFeatureDropTarget],
+  );
+
+  /**
+   * Accepts drops on collapsed sections when the pointer releases over whitespace instead of a specific feature.
+   *
+   * @param event - Drop event fired on the collapsed section container.
+   */
+  const handleCollapsedSectionDrop = React.useCallback(
+    (event: React.DragEvent<HTMLDivElement>) => {
+      if (!collapsed || event.defaultPrevented) {
+        return;
+      }
+
+      const data = draggingItem ?? parseDragData(event);
+      if (data?.type !== 'feature') {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      onFeatureDrop(data.id, bucket.categoryId, bucket.features.length);
+      setFeatureDropTarget(null);
+    },
+    [
+      bucket.categoryId,
+      bucket.features.length,
+      collapsed,
+      draggingItem,
+      onFeatureDrop,
+      parseDragData,
+      setFeatureDropTarget,
+    ],
+  );
+
   if (bucket.categoryId === null) {
     const hasUncategorizedFeatures = bucket.features.length > 0;
     const isDraggingFeature = draggingItem?.type === 'feature';
@@ -105,7 +213,13 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
       : 'px-2 pb-3 pt-0';
 
     return (
-      <div className={rootSectionSpacing} data-testid={testId}>
+      <div
+        className={rootSectionSpacing}
+        data-testid={testId}
+        onDragOver={handleCollapsedSectionDragOver}
+        onDragLeave={handleCollapsedSectionDragLeave}
+        onDrop={handleCollapsedSectionDrop}
+      >
         {shouldRenderRootZone ? (
           <DropZone
             active={
@@ -141,6 +255,7 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
                 return;
               }
               event.preventDefault();
+              event.stopPropagation();
               onFeatureDrop(data.id, null, 0);
               setFeatureDropTarget(null);
             }}
@@ -168,7 +283,13 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
 
   if (collapsed) {
     return (
-      <div className={sectionSpacing} data-testid={testId}>
+      <div
+        className={sectionSpacing}
+        data-testid={testId}
+        onDragOver={handleCollapsedSectionDragOver}
+        onDragLeave={handleCollapsedSectionDragLeave}
+        onDrop={handleCollapsedSectionDrop}
+      >
         <FeatureList
           bucket={bucket}
           collapsed={collapsed}

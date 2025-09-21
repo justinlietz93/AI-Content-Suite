@@ -212,6 +212,7 @@ export const FeatureList: React.FC<FeatureListProps> = ({
               return;
             }
             event.preventDefault();
+            event.stopPropagation();
             onDrop(data.id, bucket.categoryId, bucket.features.length);
             setFeatureDropTarget(null);
           }}
