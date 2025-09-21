@@ -6,6 +6,10 @@ export type DraggingItem =
   | { type: 'feature'; id: string; viaKeyboard: boolean }
   | { type: 'category'; id: string; viaKeyboard: boolean };
 
-export type FeatureDropTarget = { categoryId: string | null; index: number } | null;
+export type FeatureDropContext = 'item' | 'zone' | 'header';
+
+export type FeatureDropTarget =
+  | { categoryId: string | null; index: number; context?: FeatureDropContext }
+  | null;
 
 export type CategoryDropTarget = { targetIndex: number } | null;

@@ -20,6 +20,8 @@ interface FeatureItemProps {
   tabLabels: Record<Mode, string>;
   /** Indicates that the feature is being dragged. */
   isDragging: boolean;
+  /** Highlights the feature when it is the active drop location. */
+  isDropTarget: boolean;
   /** Callback triggered when the entry is selected. */
   onSelectMode?: (mode: Mode) => void;
   /** Keyboard handler supporting drag shortcuts. */
@@ -40,6 +42,7 @@ export const FeatureItem: React.FC<FeatureItemProps> = ({
   iconMap,
   tabLabels,
   isDragging,
+  isDropTarget,
   onSelectMode,
   onKeyDown,
   onDragStart,
@@ -53,6 +56,7 @@ export const FeatureItem: React.FC<FeatureItemProps> = ({
       ? 'bg-primary/20 text-primary'
       : 'text-text-secondary hover:bg-secondary/60 hover:text-text-primary focus-visible:text-text-primary',
     collapsed ? 'justify-center px-0' : '',
+    isDropTarget ? 'bg-primary/10 ring-2 ring-primary/60 ring-offset-1 ring-offset-surface' : '',
   ]
     .filter(Boolean)
     .join(' ');
@@ -67,6 +71,7 @@ export const FeatureItem: React.FC<FeatureItemProps> = ({
       onKeyDown={event => onKeyDown(event, feature.id)}
       onClick={() => onSelectMode?.(feature.mode)}
       aria-grabbed={isDragging}
+      data-feature-id={feature.id}
       role="listitem"
     >
       {IconComponent ? (
