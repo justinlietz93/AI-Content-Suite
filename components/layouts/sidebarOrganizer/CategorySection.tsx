@@ -4,6 +4,7 @@
 
 import React from 'react';
 import { CategoryHeader } from './CategoryHeader';
+import { CollapsedCategoryHandle } from './CollapsedCategoryHandle';
 import { FeatureList } from './FeatureList';
 import type { LayoutBucket } from './useLayoutBuckets';
 import type { DraggingItem, FeatureDropTarget, CategoryDropTarget } from './dragTypes';
@@ -281,50 +282,23 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
     );
   }
 
-  if (collapsed) {
-    return (
-      <div
-        className={sectionSpacing}
-        data-testid={testId}
-        onDragOver={handleCollapsedSectionDragOver}
-        onDragLeave={handleCollapsedSectionDragLeave}
-        onDrop={handleCollapsedSectionDrop}
-      >
-        <FeatureList
-          bucket={bucket}
-          collapsed={collapsed}
-          activeMode={activeMode}
-          iconMap={iconMap}
-          tabLabels={tabLabels}
-          draggingItem={draggingItem}
-          featureDropTarget={featureDropTarget}
-          onSelectMode={onSelectMode}
-          onDragStart={onFeatureDragStart}
-          onDragEnd={onFeatureDragEnd}
-          onKeyDown={onFeatureKeyDown}
-          onDrop={onFeatureDrop}
-          setFeatureDropTarget={setFeatureDropTarget}
-          parseDragData={parseDragData}
-        />
-      </div>
-    );
-  }
-
-  const isCollapsed = collapsedCategoryIds.includes(bucket.categoryId);
+  const categoryId = bucket.categoryId!;
+  const isCollapsed = collapsedCategoryIds.includes(categoryId);
 
   const categoryInsertionIndex = Math.max(0, bucketIndex - 1);
   const headerCategoryDropTarget =
-    categoryDropTarget?.hoveredCategoryId === bucket.categoryId ? categoryDropTarget : null;
+    categoryDropTarget?.hoveredCategoryId === categoryId ? categoryDropTarget : null;
   const isCategoryDropTarget = Boolean(headerCategoryDropTarget);
   const categoryDropPosition = headerCategoryDropTarget?.position ?? null;
   const isLeadingDropTarget =
-    categoryDropTarget?.hoveredCategoryId === bucket.categoryId &&
+    categoryDropTarget?.hoveredCategoryId === categoryId &&
     categoryDropTarget.targetIndex === categoryInsertionIndex &&
     categoryDropTarget.position === 'before';
   const isFeatureHeaderDropTarget =
-    featureDropTarget?.categoryId === bucket.categoryId && featureDropTarget.context === 'header';
+    featureDropTarget?.categoryId === categoryId && featureDropTarget.context === 'header';
   const headerDropPositionRef = React.useRef<'before' | 'after'>('before');
   const headerPointerActiveRef = React.useRef(false);
+  const dropZoneClassName = collapsed ? 'px-1' : 'px-2';
 
   /**
    * Highlights the category header when a draggable hovers above it and records the intended target.
@@ -346,7 +320,7 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
       const pointerOffset = Number.isFinite(offset) ? offset : height / 2;
       const pointerIndicatesAfter = hasPointer ? pointerOffset > height / 2 : false;
       const sourceIndex = orderedCategoryIds.indexOf(data.id);
-      const targetIndexInOrder = orderedCategoryIds.indexOf(bucket.categoryId!);
+      const targetIndexInOrder = orderedCategoryIds.indexOf(categoryId);
       const isMovingDown = sourceIndex !== -1 && targetIndexInOrder !== -1 && sourceIndex < targetIndexInOrder;
       const position = hasPointer
         ? ((pointerIndicatesAfter ? 'after' : 'before') as const)
@@ -357,7 +331,7 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
       setCategoryDropTarget({
         targetIndex,
         position,
-        hoveredCategoryId: bucket.categoryId,
+        hoveredCategoryId: categoryId,
       });
       return;
     }
@@ -367,7 +341,7 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
         event.dataTransfer.dropEffect = 'move';
       }
       setFeatureDropTarget({
-        categoryId: bucket.categoryId,
+        categoryId,
         index: bucket.features.length,
         context: 'header',
       });
@@ -382,11 +356,9 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
     if (related && event.currentTarget.contains(related)) {
       return;
     }
-    setCategoryDropTarget(prev =>
-      prev?.hoveredCategoryId === bucket.categoryId ? null : prev,
-    );
+    setCategoryDropTarget(prev => (prev?.hoveredCategoryId === categoryId ? null : prev));
     setFeatureDropTarget(prev =>
-      prev?.categoryId === bucket.categoryId && prev.context === 'header' ? null : prev,
+      prev?.categoryId === categoryId && prev.context === 'header' ? null : prev,
     );
   };
 
@@ -402,7 +374,7 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
       event.preventDefault();
       event.stopPropagation();
       const sourceIndex = orderedCategoryIds.indexOf(data.id);
-      const targetIndexInOrder = orderedCategoryIds.indexOf(bucket.categoryId!);
+      const targetIndexInOrder = orderedCategoryIds.indexOf(categoryId);
       const isMovingDown = sourceIndex !== -1 && targetIndexInOrder !== -1 && sourceIndex < targetIndexInOrder;
       const shouldUseAfter =
         headerDropPositionRef.current === 'after' || (!headerPointerActiveRef.current && isMovingDown);
@@ -424,17 +396,105 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
     if (data.type === 'feature') {
       event.preventDefault();
       event.stopPropagation();
-      onFeatureDrop(data.id, bucket.categoryId, bucket.features.length);
+      onFeatureDrop(data.id, categoryId, bucket.features.length);
     }
   };
+
+  if (collapsed) {
+    return (
+      <div
+        className={sectionSpacing}
+        data-testid={testId}
+        onDragOver={handleCollapsedSectionDragOver}
+        onDragLeave={handleCollapsedSectionDragLeave}
+        onDrop={handleCollapsedSectionDrop}
+      >
+        <DropZone
+          active={isLeadingDropTarget}
+          sizeClassName="h-3"
+          className={dropZoneClassName}
+          testId={`category-dropzone-before-${categoryId}`}
+          onDragOver={event => {
+            const data = draggingItem ?? parseDragData(event);
+            if (data?.type !== 'category') {
+              return;
+            }
+            event.preventDefault();
+            if (event.dataTransfer) {
+              event.dataTransfer.dropEffect = 'move';
+            }
+            headerDropPositionRef.current = 'before';
+            setCategoryDropTarget({
+              targetIndex: categoryInsertionIndex,
+              position: 'before',
+              hoveredCategoryId: categoryId,
+            });
+          }}
+          onDragLeave={() => {
+            setCategoryDropTarget(prev => {
+              if (
+                prev &&
+                prev.hoveredCategoryId === categoryId &&
+                prev.targetIndex === categoryInsertionIndex &&
+                prev.position === 'before'
+              ) {
+                return null;
+              }
+              return prev;
+            });
+          }}
+          onDrop={event => {
+            const data = draggingItem ?? parseDragData(event);
+            if (data?.type !== 'category') {
+              return;
+            }
+            event.preventDefault();
+            onCategoryDrop(data.id, categoryInsertionIndex);
+            setCategoryDropTarget(null);
+          }}
+        />
+        <CollapsedCategoryHandle
+          categoryId={categoryId}
+          name={bucket.title ?? ''}
+          isDragging={draggingItem?.type === 'category' && draggingItem.id === categoryId}
+          categoryDropPosition={isCategoryDropTarget ? categoryDropPosition : null}
+          isFeatureDropTarget={isFeatureHeaderDropTarget}
+          labels={mergedLabels}
+          isEditing={editingCategoryId === categoryId}
+          onDragStart={event => onCategoryDragStart(event, categoryId)}
+          onDragEnd={onCategoryDragEnd}
+          onKeyDown={event => onCategoryKeyDown(event, categoryId)}
+          onHeaderDragOver={handleHeaderDragOver}
+          onHeaderDragLeave={handleHeaderDragLeave}
+          onHeaderDrop={handleHeaderDrop}
+        />
+        <FeatureList
+          bucket={bucket}
+          collapsed={collapsed}
+          activeMode={activeMode}
+          iconMap={iconMap}
+          tabLabels={tabLabels}
+          draggingItem={draggingItem}
+          featureDropTarget={featureDropTarget}
+          onSelectMode={onSelectMode}
+          onDragStart={onFeatureDragStart}
+          onDragEnd={onFeatureDragEnd}
+          onKeyDown={onFeatureKeyDown}
+          onDrop={onFeatureDrop}
+          setFeatureDropTarget={setFeatureDropTarget}
+          parseDragData={parseDragData}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className={sectionSpacing} data-testid={testId}>
       <DropZone
         active={isLeadingDropTarget}
         sizeClassName="h-3"
-        className="px-2"
-        testId={`category-dropzone-before-${bucket.categoryId}`}
+        className={dropZoneClassName}
+        testId={`category-dropzone-before-${categoryId}`}
         onDragOver={event => {
           const data = draggingItem ?? parseDragData(event);
           if (data?.type !== 'category') {
@@ -448,14 +508,14 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
           setCategoryDropTarget({
             targetIndex: categoryInsertionIndex,
             position: 'before',
-            hoveredCategoryId: bucket.categoryId,
+            hoveredCategoryId: categoryId,
           });
         }}
         onDragLeave={() => {
           setCategoryDropTarget(prev => {
             if (
               prev &&
-              prev.hoveredCategoryId === bucket.categoryId &&
+              prev.hoveredCategoryId === categoryId &&
               prev.targetIndex === categoryInsertionIndex &&
               prev.position === 'before'
             ) {
@@ -475,25 +535,25 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
         }}
       />
       <CategoryHeader
-        categoryId={bucket.categoryId}
+        categoryId={categoryId}
         name={bucket.title ?? ''}
-        isDragging={draggingItem?.type === 'category' && draggingItem.id === bucket.categoryId}
+        isDragging={draggingItem?.type === 'category' && draggingItem.id === categoryId}
         categoryDropPosition={isCategoryDropTarget ? categoryDropPosition : null}
         isFeatureDropTarget={isFeatureHeaderDropTarget}
         labels={mergedLabels}
         isCollapsed={isCollapsed}
-        isEditing={editingCategoryId === bucket.categoryId}
+        isEditing={editingCategoryId === categoryId}
         editingValue={editingName}
         editingError={editingError}
-        onToggleCollapse={() => onToggleCollapse(bucket.categoryId!)}
-        onBeginRename={() => onBeginRename(bucket.categoryId!, bucket.title ?? '')}
-        onDelete={() => onDeleteCategory(bucket.categoryId!)}
+        onToggleCollapse={() => onToggleCollapse(categoryId)}
+        onBeginRename={() => onBeginRename(categoryId, bucket.title ?? '')}
+        onDelete={() => onDeleteCategory(categoryId)}
         onRenameChange={onRenameChange}
         onRenameKeyDown={onRenameKeyDown}
         onRenameBlur={onRenameBlur}
-        onDragStart={event => onCategoryDragStart(event, bucket.categoryId!)}
+        onDragStart={event => onCategoryDragStart(event, categoryId)}
         onDragEnd={onCategoryDragEnd}
-        onKeyDown={event => onCategoryKeyDown(event, bucket.categoryId!)}
+        onKeyDown={event => onCategoryKeyDown(event, categoryId)}
         onHeaderDragOver={handleHeaderDragOver}
         onHeaderDragLeave={handleHeaderDragLeave}
         onHeaderDrop={handleHeaderDrop}

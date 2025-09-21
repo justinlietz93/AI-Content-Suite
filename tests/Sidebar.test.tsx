@@ -300,6 +300,60 @@ describe('Sidebar', () => {
     });
   });
 
+  it('reorders categories while the sidebar is collapsed', async () => {
+    console.info('Confirming collapsed sidebar retains category drag-and-drop ordering.');
+
+    render(
+      <Sidebar
+        collapsed
+        onToggle={noop}
+        activeMode={'technical' as Mode}
+        onSelectMode={noop}
+      />,
+    );
+
+    await screen.findByTestId('category-section-workspace');
+    const interactiveHandle = document.querySelector(
+      '[data-category-id="interactive"]',
+    ) as HTMLElement;
+    const workspaceHandle = document.querySelector(
+      '[data-category-id="workspace"]',
+    ) as HTMLElement;
+    expect(interactiveHandle).toBeTruthy();
+    expect(workspaceHandle).toBeTruthy();
+
+    Object.defineProperty(workspaceHandle, 'getBoundingClientRect', {
+      value: () =>
+        ({
+          top: 0,
+          bottom: 40,
+          left: 0,
+          right: 200,
+          height: 40,
+          width: 200,
+          x: 0,
+          y: 0,
+          toJSON: () => {},
+        }) as DOMRect,
+    });
+
+    const transfer = createDataTransfer();
+
+    fireEvent.dragStart(interactiveHandle, { dataTransfer: transfer });
+    fireEvent.dragOver(workspaceHandle, { dataTransfer: transfer, clientY: 5 });
+    fireEvent.drop(workspaceHandle, { dataTransfer: transfer, clientY: 5 });
+
+    await waitFor(() => {
+      const orderedIds = Array.from(
+        document.querySelectorAll('[data-testid^="category-section-"]'),
+      )
+        .map(element => element.getAttribute('data-testid')?.replace('category-section-', '') ?? '')
+        .filter(id => id && id !== 'uncategorized');
+
+      expect(orderedIds.slice(0, 3)).toEqual(['interactive', 'workspace', 'orchestration']);
+    });
+  });
+
   it('places a feature directly after the hovered row when dragging downward within a category', async () => {
     console.info('Confirming dragging a feature downward re-inserts it immediately after the destination row.');
 
