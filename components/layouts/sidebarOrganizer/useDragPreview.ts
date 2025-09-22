@@ -43,9 +43,18 @@ export const useDragPreview = (): DragPreviewController => {
    * @param event - Drag event used to access the native data transfer payload.
    * @param handle - Element representing the item under drag; used to generate the preview snapshot.
    */
+  // Decide whether to use custom drag image.
+  // Re-enable custom drag image; guarded by checks and try/catch to avoid cancellations.
+  const shouldUseCustomPreview = true;
+
   const applyDragPreview = React.useCallback(
     (event: React.DragEvent, handle: HTMLElement | null) => {
-      if (!event.dataTransfer || !handle) {
+      if (!shouldUseCustomPreview) {
+        clearDragPreview();
+        return;
+      }
+
+      if (!event.dataTransfer || !handle || typeof handle.getBoundingClientRect !== 'function') {
         clearDragPreview();
         return;
       }
@@ -67,7 +76,7 @@ export const useDragPreview = (): DragPreviewController => {
       clone.style.transform = 'none';
       clone.setAttribute('aria-hidden', 'true');
 
-      document.body.appendChild(clone);
+  document.body.appendChild(clone);
       dragPreviewRef.current = clone;
 
       const pointerOffsetX = Number.isFinite(event.clientX) ? event.clientX - rect.left : width / 2;
@@ -80,7 +89,7 @@ export const useDragPreview = (): DragPreviewController => {
         console.warn('Unable to set custom drag image for sidebar organizer handle.', error);
       }
     },
-    [clearDragPreview],
+    [clearDragPreview, shouldUseCustomPreview],
   );
 
   React.useEffect(() => clearDragPreview, [clearDragPreview]);

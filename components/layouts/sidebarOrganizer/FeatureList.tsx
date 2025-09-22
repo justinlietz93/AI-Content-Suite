@@ -6,6 +6,7 @@ import React from 'react';
 import type { Mode } from '../../../types';
 import { DropZone } from './DropZone';
 import { FeatureItem } from './FeatureItem';
+import { debugLog } from '../../../utils/debugToast';
 import type { LayoutBucket } from './useLayoutBuckets';
 import type { DraggingItem, FeatureDropTarget } from './dragTypes';
 import type { ModeIconMap } from './types';
@@ -83,8 +84,39 @@ export const FeatureList: React.FC<FeatureListProps> = ({
     featureDropTarget.context === 'zone';
   const shouldRenderTerminalZone = hasFeatures || isDraggingFeature || isZoneTargeted;
 
+  const isTerminalTarget =
+    featureDropTarget?.categoryId === bucket.categoryId &&
+    featureDropTarget.index === bucket.features.length;
+
   return (
-    <ul role="list" className="space-y-1">
+    <div
+      className="relative"
+      onDragOver={event => {
+        const data = draggingItem ?? parseDragData(event);
+        if (data?.type !== 'feature') {
+          return;
+        }
+        // Keep drag alive over list gaps; rely on row/zone handlers to update exact target.
+        event.preventDefault();
+        if (event.dataTransfer) {
+          event.dataTransfer.dropEffect = 'move';
+        }
+      }}
+      onDrop={event => {
+        const data = draggingItem ?? parseDragData(event);
+        if (data?.type !== 'feature') {
+          return;
+        }
+        // If a specific row/zone already handled drop it will stopPropagation in capture.
+        event.preventDefault();
+        const target = featureDropTarget;
+        if (target && target.categoryId === bucket.categoryId && typeof target.index === 'number') {
+          onDrop(data.id, bucket.categoryId, target.index);
+          setFeatureDropTarget(null);
+        }
+      }}
+    >
+      <ul role="list" className="space-y-1">
       {bucket.features.map((feature, index) => (
         <li key={feature.id}>
           <div
@@ -92,6 +124,19 @@ export const FeatureList: React.FC<FeatureListProps> = ({
             onDragOver={event => {
               const data = draggingItem ?? parseDragData(event);
               if (data?.type !== 'feature') {
+                return;
+              }
+              debugLog('row.dragover', { featureId: feature.id });
+
+              // Avoid mutating the DOM under the drag source itself; some browsers cancel the drag
+              // when the source node's parent subtree changes during the drag.
+              if (data.id === feature.id) {
+                // It's still a valid dragover; preventDefault to keep the operation alive, but don't
+                // set any drop target for the same row.
+                event.preventDefault();
+                if (event.dataTransfer) {
+                  event.dataTransfer.dropEffect = 'move';
+                }
                 return;
               }
 
@@ -120,6 +165,9 @@ export const FeatureList: React.FC<FeatureListProps> = ({
               if (related && event.currentTarget.contains(related)) {
                 return;
               }
+              if (draggingItem?.type === 'feature') {
+                debugLog('row.dragleave', { featureId: feature.id });
+              }
               setFeatureDropTarget(prev => {
                 if (prev?.categoryId !== bucket.categoryId) {
                   return prev;
@@ -135,6 +183,14 @@ export const FeatureList: React.FC<FeatureListProps> = ({
               if (data?.type !== 'feature') {
                 return;
               }
+              debugLog('row.dropCapture', { sourceId: data.id, targetId: feature.id });
+              if (data.id === feature.id) {
+                // Ignore self-drops on the same row; simply clear any transient state.
+                event.preventDefault();
+                event.stopPropagation();
+                setFeatureDropTarget(null);
+                return;
+              }
               const { index: targetIndex } = resolveItemDropPosition(event, index);
               event.preventDefault();
               event.stopPropagation();
@@ -142,16 +198,19 @@ export const FeatureList: React.FC<FeatureListProps> = ({
               setFeatureDropTarget(null);
             }}
           >
-            {isBeforeTarget(index) ? (
+            {draggingItem?.type === 'feature' && draggingItem.id === feature.id ? null : isBeforeTarget(index) ? (
               <span
                 aria-hidden
-                className="pointer-events-none absolute inset-x-0 -top-1 h-1 rounded-full bg-primary"
+                className="pointer-events-none absolute inset-x-0 -top-1 h-1 rounded-full bg-primary ring-2 ring-primary/50 ring-offset-1 ring-offset-surface"
               />
             ) : null}
-            {isAfterTarget(index) ? (
+            {draggingItem?.type === 'feature' && draggingItem.id === feature.id
+              ? null
+              : // Suppress row bottom line for last item when terminal target is active; an overlay will render instead
+                (isAfterTarget(index) && !(index === bucket.features.length - 1 && isTerminalTarget)) ? (
               <span
                 aria-hidden
-                className="pointer-events-none absolute inset-x-0 -bottom-1 h-1 rounded-full bg-primary"
+                className="pointer-events-none absolute inset-x-0 -bottom-1 h-1 rounded-full bg-primary ring-2 ring-primary/50 ring-offset-1 ring-offset-surface"
               />
             ) : null}
             <FeatureItem
@@ -169,14 +228,11 @@ export const FeatureList: React.FC<FeatureListProps> = ({
           </div>
         </li>
       ))}
+      </ul>
       {shouldRenderTerminalZone ? (
         <DropZone
-          active={
-            featureDropTarget?.categoryId === bucket.categoryId &&
-            featureDropTarget.index === bucket.features.length &&
-            featureDropTarget.context === 'zone'
-          }
-          sizeClassName={hasFeatures ? 'h-3' : 'h-12'}
+          active={false}
+          sizeClassName={hasFeatures ? 'h-10' : 'h-12'}
           className={collapsed ? '' : 'px-2'}
           onDragOver={event => {
             const data = draggingItem ?? parseDragData(event);
@@ -194,17 +250,13 @@ export const FeatureList: React.FC<FeatureListProps> = ({
             });
           }}
           onDragLeave={event => {
+            // Hysteresis: don't clear the last computed terminal target on leave.
+            // Container/row handlers will override this as the pointer moves to a new valid target.
             const related = event.relatedTarget as Node | null;
             if (related && event.currentTarget.contains(related)) {
               return;
             }
-            setFeatureDropTarget(prev =>
-              prev?.categoryId === bucket.categoryId &&
-              prev.index === bucket.features.length &&
-              prev.context === 'zone'
-                ? null
-                : prev,
-            );
+            setFeatureDropTarget(prev => prev);
           }}
           onDrop={event => {
             const data = draggingItem ?? parseDragData(event);
@@ -218,6 +270,12 @@ export const FeatureList: React.FC<FeatureListProps> = ({
           }}
         />
       ) : null}
-    </ul>
+      {draggingItem?.type === 'feature' && isTerminalTarget ? (
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 -bottom-1 h-1 rounded-full bg-primary ring-2 ring-primary/50 ring-offset-1 ring-offset-surface"
+        />
+      ) : null}
+    </div>
   );
 };

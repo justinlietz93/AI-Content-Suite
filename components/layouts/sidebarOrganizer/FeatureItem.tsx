@@ -3,6 +3,7 @@
  */
 
 import React from 'react';
+import { debugToastDragEnd, debugToastDragStart } from '../../../utils/debugToast';
 import type { Mode } from '../../../types';
 import type { ModeIconMap } from './types';
 import type { SidebarFeature } from './types';
@@ -52,16 +53,20 @@ export const FeatureItem: React.FC<FeatureItemProps> = ({
   const handleDragStart = React.useCallback(
     (event: React.DragEvent<HTMLElement>) => {
       suppressClickRef.current = true;
+      // Emit a small dev-only toast for quick confirmation.
+      debugToastDragStart(feature.id, collapsed);
       onDragStart(event, feature.id);
     },
-    [feature.id, onDragStart],
+    [collapsed, feature.id, onDragStart],
   );
   const handleDragEnd = React.useCallback(() => {
+    // Emit a small dev-only toast for quick confirmation.
+    debugToastDragEnd(feature.id);
     onDragEnd();
     setTimeout(() => {
       suppressClickRef.current = false;
     }, 0);
-  }, [onDragEnd]);
+  }, [feature.id, onDragEnd]);
   /**
    * Prevents drag terminations from triggering a mode switch while still allowing regular clicks to activate features.
    */
@@ -78,12 +83,14 @@ export const FeatureItem: React.FC<FeatureItemProps> = ({
     [feature.mode, onSelectMode],
   );
   const buttonClasses = [
-    'group flex w-full items-center gap-3 rounded-md px-2 py-2 text-left transition-colors transition-transform focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-surface cursor-grab active:cursor-grabbing',
+    'group flex w-full items-center gap-3 rounded-md px-2 py-2 text-left select-none transition-colors transition-transform focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-surface',
     isActive
       ? 'bg-primary/20 text-primary'
       : 'text-text-secondary hover:bg-secondary/60 hover:text-text-primary focus-visible:text-text-primary',
-    collapsed ? 'justify-center px-0' : '',
-    isDragging ? 'scale-[1.02] ring-2 ring-primary/70 shadow-lg' : '',
+    collapsed ? 'justify-center px-0 cursor-grab active:cursor-grabbing' : 'cursor-grab active:cursor-grabbing',
+    // Intentionally avoid mutating the draggable element's visual styles during drag to prevent
+    // immediate drag cancellation on some environments (e.g., Linux/Wayland) that are sensitive
+    // to source-node DOM/style changes mid-drag. Visual feedback is provided via previews/indicators.
   ]
     .filter(Boolean)
     .join(' ');
@@ -92,24 +99,29 @@ export const FeatureItem: React.FC<FeatureItemProps> = ({
     <button
       type="button"
       className={buttonClasses}
-      data-drag-handle="feature"
+      data-drag-handle={'feature'}
       draggable
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
       onClick={handleClick}
       onKeyDown={event => onKeyDown(event, feature.id)}
-      aria-grabbed={isDragging}
+      data-grabbed={String(isDragging)}
       data-feature-id={feature.id}
       role="listitem"
+      aria-pressed={isActive}
     >
       {IconComponent ? (
-        <IconComponent
-          fontSize={collapsed ? 'large' : 'medium'}
-          className={`shrink-0 ${isActive ? 'text-primary' : 'text-text-secondary'} ${collapsed ? 'mx-auto' : ''}`}
-          draggable
-          onDragStart={handleDragStart}
-          onDragEnd={handleDragEnd}
-        />
+        collapsed ? (
+          <IconComponent
+            fontSize="large"
+            className={`shrink-0 ${isActive ? 'text-primary' : 'text-text-secondary'}`}
+          />
+        ) : (
+          <IconComponent
+            fontSize="medium"
+            className={`shrink-0 ${isActive ? 'text-primary' : 'text-text-secondary'}`}
+          />
+        )
       ) : null}
       {collapsed ? (
         <span className="sr-only">{tabLabels[feature.mode]}</span>

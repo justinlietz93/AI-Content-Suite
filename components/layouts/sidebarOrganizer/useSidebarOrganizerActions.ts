@@ -79,6 +79,41 @@ export const useSidebarOrganizerActions = ({
   const [categoryDropTarget, setCategoryDropTarget] = useState<CategoryDropTarget>(null);
   const draggingItemRef = useRef<DraggingItem | null>(null);
   const { applyDragPreview, clearDragPreview } = useDragPreview();
+  // Track whether we've attached global drag keepalive listeners for this drag session.
+  const keepaliveAttachedRef = useRef<
+    | null
+    | {
+        attached: boolean;
+        handleWindowDragOver: (e: WindowEventMap['dragover']) => void;
+        handleWindowDrop: (e: WindowEventMap['drop']) => void;
+      }
+  >(null);
+
+  const attachGlobalDragKeepalive = useCallback(() => {
+    if (keepaliveAttachedRef.current?.attached) {
+      return;
+    }
+    const handleWindowDragOver = (e: WindowEventMap['dragover']) => {
+      // Prevent default to avoid drag cancellation over non-droppable areas.
+      e.preventDefault();
+      if (e.dataTransfer) {
+        // Some browsers honor dropEffect on dragover; set to move for consistency.
+        e.dataTransfer.dropEffect = 'move';
+      }
+    };
+    const handleWindowDrop = (e: WindowEventMap['drop']) => {
+      // Prevent the browser from navigating when dropping outside explicit targets.
+      e.preventDefault();
+    };
+    window.addEventListener('dragover', handleWindowDragOver);
+    window.addEventListener('drop', handleWindowDrop);
+    // Stash cleanup on the ref for removal later.
+    keepaliveAttachedRef.current = {
+      attached: true,
+      handleWindowDragOver,
+      handleWindowDrop,
+    };
+  }, []);
 
   /**
    * Keeps the latest drag payload available synchronously for DOM drag events while still updating React state.
@@ -96,6 +131,13 @@ export const useSidebarOrganizerActions = ({
     setDraggingItem(null);
     setFeatureDropTarget(null);
     setCategoryDropTarget(null);
+    // Remove global keepalive listeners if they were attached.
+    const ka = keepaliveAttachedRef.current;
+    if (ka && ka.attached) {
+      window.removeEventListener('dragover', ka.handleWindowDragOver);
+      window.removeEventListener('drop', ka.handleWindowDrop);
+    }
+    keepaliveAttachedRef.current = null;
   }, [clearDragPreview, setDraggingItem]);
 
   /**
@@ -346,7 +388,7 @@ export const useSidebarOrganizerActions = ({
    * Handles keyboard events on category headers for drag toggling.
    */
   const handleCategoryKeyDown = useCallback(
-    (event: KeyboardEvent<HTMLDivElement>, categoryId: string) => {
+    (event: KeyboardEvent<HTMLElement>, categoryId: string) => {
       if (event.key === ' ' || event.key === 'Enter') {
         event.preventDefault();
         const currentItem = draggingItemRef.current;
@@ -451,10 +493,16 @@ export const useSidebarOrganizerActions = ({
         event.dataTransfer.effectAllowed = 'move';
         applyDragPreview(event, dragHandle);
       }
-      setDraggingItem({ type: 'feature', id: featureId, viaKeyboard: false });
-      announce(labels.featureGrabAnnouncement);
+      // Attach global keepalive immediately at drag start to avoid instant cancellations.
+      attachGlobalDragKeepalive();
+      // Defer React state updates/announcements to avoid DOM mutations during the critical
+      // dragstart frame on some environments (e.g., Linux/Wayland) which can cancel the drag.
+      setTimeout(() => {
+        setDraggingItem({ type: 'feature', id: featureId, viaKeyboard: false });
+        announce(labels.featureGrabAnnouncement);
+      }, 0);
     },
-    [announce, applyDragPreview, labels.featureGrabAnnouncement, setDraggingItem],
+    [announce, applyDragPreview, labels.featureGrabAnnouncement, setDraggingItem, attachGlobalDragKeepalive],
   );
 
   /**
@@ -476,10 +524,16 @@ export const useSidebarOrganizerActions = ({
         event.dataTransfer.effectAllowed = 'move';
         applyDragPreview(event, dragHandle);
       }
-      setDraggingItem({ type: 'category', id: categoryId, viaKeyboard: false });
-      announce(labels.categoryGrabAnnouncement);
+      // Attach global keepalive immediately at drag start to avoid instant cancellations.
+      attachGlobalDragKeepalive();
+      // Defer React state updates/announcements to avoid DOM mutations during the critical
+      // dragstart frame on some environments (e.g., Linux/Wayland) which can cancel the drag.
+      setTimeout(() => {
+        setDraggingItem({ type: 'category', id: categoryId, viaKeyboard: false });
+        announce(labels.categoryGrabAnnouncement);
+      }, 0);
     },
-    [announce, applyDragPreview, labels.categoryGrabAnnouncement, setDraggingItem],
+    [announce, applyDragPreview, labels.categoryGrabAnnouncement, setDraggingItem, attachGlobalDragKeepalive],
   );
 
   return {

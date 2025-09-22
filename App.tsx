@@ -186,7 +186,7 @@ const App: React.FC = () => {
   const buttonText = useMemo(() => {
     return getButtonText(
       activeMode,
-      currentFiles,
+      currentFiles?.length ?? 0,
       summaryTextInput,
       reasoningPrompt,
       scaffolderPrompt,

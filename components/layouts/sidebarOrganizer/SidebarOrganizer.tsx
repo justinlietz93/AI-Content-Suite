@@ -5,6 +5,7 @@
  */
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { debugLog } from '../../../utils/debugToast';
 import type { Mode } from '../../../types';
 import { TABS } from '../../../constants/uiConstants';
 import { DropZone } from './DropZone';
@@ -119,6 +120,30 @@ export const SidebarOrganizer: React.FC<SidebarOrganizerProps> = ({
     }
   }, [cancelRename, collapsed, resetDragState]);
 
+  // Guard against browsers cancelling drags when the pointer crosses non-droppable areas
+  // by preventing default on window dragover/drop while a drag is active.
+  useEffect(() => {
+    if (!draggingItem) {
+      return;
+    }
+    const handleWindowDragOver = (e: DragEvent) => {
+      debugLog('window.dragover', { target: (e.target as HTMLElement)?.tagName });
+      e.preventDefault();
+    };
+    const handleWindowDrop = (e: DragEvent) => {
+      debugLog('window.drop', { target: (e.target as HTMLElement)?.tagName });
+      e.preventDefault();
+    };
+    debugLog('window.listeners.attach');
+    window.addEventListener('dragover', handleWindowDragOver);
+    window.addEventListener('drop', handleWindowDrop);
+    return () => {
+      debugLog('window.listeners.detach');
+      window.removeEventListener('dragover', handleWindowDragOver);
+      window.removeEventListener('drop', handleWindowDrop);
+    };
+  }, [draggingItem]);
+
   return (
     <div className="flex h-full flex-col" role="navigation" aria-label="Sidebar organizer">
       {persistenceError ? (
@@ -136,7 +161,28 @@ export const SidebarOrganizer: React.FC<SidebarOrganizerProps> = ({
 
       <div ref={liveRegionRef} aria-live="polite" className="sr-only" />
 
-      <div className="flex-1 overflow-y-auto pb-4" role="list">
+      <div
+        className="flex-1 overflow-y-auto pb-4"
+        role="list"
+        onDragOver={event => {
+          // Keep the drag operation alive across whitespace between drop zones.
+          if (draggingItem) {
+            debugLog('container.dragover');
+            event.preventDefault();
+            if (event.dataTransfer) {
+              event.dataTransfer.dropEffect = 'move';
+            }
+          }
+        }}
+        onDrop={event => {
+          // Avoid the browser navigating or cancelling unexpectedly when dropping on container gaps.
+          if (draggingItem) {
+            debugLog('container.drop');
+            event.preventDefault();
+            event.stopPropagation();
+          }
+        }}
+      >
         {layoutBuckets.map((bucket, index) => (
           <CategorySection
             key={bucket.categoryId ?? 'uncategorized'}

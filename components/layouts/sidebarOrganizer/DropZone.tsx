@@ -34,20 +34,25 @@ export const DropZone: React.FC<DropZoneProps> = ({
   testId,
 }) => (
   <div
-    className={`relative flex items-center ${sizeClassName} ${className}`}
-    onDragOver={onDragOver}
-    onDragLeave={onDragLeave}
-    onDrop={onDrop}
+    className={`relative ${className}`}
     data-testid={testId}
     data-drop-zone="true"
   >
-    <span
-      aria-hidden
-      className={`pointer-events-none h-1.5 w-full rounded-full transform transition-all duration-150 ${
-        active
-          ? 'scale-y-125 bg-primary shadow-[0_0_0_2px_rgba(59,130,246,0.25)] opacity-100'
-          : 'scale-y-100 bg-border-color/60 opacity-80'
-      }`}
-    />
+    {/* Absolute overlay to avoid shifting layout while remaining hoverable */}
+    <div
+      className={`absolute inset-x-0 bottom-0 flex items-center ${sizeClassName}`}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+    >
+      <span
+        aria-hidden
+        className={`pointer-events-none h-1 w-full rounded-full transition-all duration-100 ${
+          active
+            ? 'bg-primary ring-2 ring-primary/50 ring-offset-1 ring-offset-surface opacity-100'
+            : 'opacity-0 bg-transparent ring-0 ring-transparent'
+        }`}
+      />
+    </div>
   </div>
 );
