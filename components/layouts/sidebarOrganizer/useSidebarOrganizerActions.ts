@@ -18,6 +18,7 @@ import {
 } from './actions';
 import { createCategoryId } from './constants';
 import type { DraggingItem, FeatureDropTarget, CategoryDropTarget } from './dragTypes';
+import { useDragPreview } from './useDragPreview';
 
 const DRAG_DATA_MIME = 'application/x-sidebar-item';
 const DRAG_DATA_TEXT_FEATURE_PREFIX = 'feature:';
@@ -77,23 +78,7 @@ export const useSidebarOrganizerActions = ({
   const [featureDropTarget, setFeatureDropTarget] = useState<FeatureDropTarget>(null);
   const [categoryDropTarget, setCategoryDropTarget] = useState<CategoryDropTarget>(null);
   const draggingItemRef = useRef<DraggingItem | null>(null);
-  /**
-   * Aligns the native drag preview so the cursor stays centered on the dragged element.
-   */
-  const applyDragImage = useCallback((event: DragEvent, handle: HTMLElement | null) => {
-    if (!handle || !event.dataTransfer) {
-      return;
-    }
-    const rect = handle.getBoundingClientRect();
-    const offsetX = rect.width / 2;
-    const offsetY = rect.height / 2;
-    try {
-      event.dataTransfer.setDragImage(handle, offsetX, offsetY);
-    } catch (error) {
-      // Some browsers may throw when reusing DOM elements for drag images; fall back silently.
-      console.warn('Unable to set custom drag image for sidebar organizer handle.', error);
-    }
-  }, []);
+  const { applyDragPreview, clearDragPreview } = useDragPreview();
 
   /**
    * Keeps the latest drag payload available synchronously for DOM drag events while still updating React state.
@@ -107,10 +92,11 @@ export const useSidebarOrganizerActions = ({
    * Clears drag state for both features and categories.
    */
   const resetDragState = useCallback(() => {
+    clearDragPreview();
     setDraggingItem(null);
     setFeatureDropTarget(null);
     setCategoryDropTarget(null);
-  }, [setDraggingItem]);
+  }, [clearDragPreview, setDraggingItem]);
 
   /**
    * Clears rename state and optionally removes a newly created category that was never finalized.
@@ -463,12 +449,12 @@ export const useSidebarOrganizerActions = ({
           `${DRAG_DATA_TEXT_FEATURE_PREFIX}${featureId}`,
         );
         event.dataTransfer.effectAllowed = 'move';
-        applyDragImage(event, dragHandle);
+        applyDragPreview(event, dragHandle);
       }
       setDraggingItem({ type: 'feature', id: featureId, viaKeyboard: false });
       announce(labels.featureGrabAnnouncement);
     },
-    [announce, applyDragImage, labels.featureGrabAnnouncement, setDraggingItem],
+    [announce, applyDragPreview, labels.featureGrabAnnouncement, setDraggingItem],
   );
 
   /**
@@ -488,12 +474,12 @@ export const useSidebarOrganizerActions = ({
           `${DRAG_DATA_TEXT_CATEGORY_PREFIX}${categoryId}`,
         );
         event.dataTransfer.effectAllowed = 'move';
-        applyDragImage(event, dragHandle);
+        applyDragPreview(event, dragHandle);
       }
       setDraggingItem({ type: 'category', id: categoryId, viaKeyboard: false });
       announce(labels.categoryGrabAnnouncement);
     },
-    [announce, applyDragImage, labels.categoryGrabAnnouncement, setDraggingItem],
+    [announce, applyDragPreview, labels.categoryGrabAnnouncement, setDraggingItem],
   );
 
   return {

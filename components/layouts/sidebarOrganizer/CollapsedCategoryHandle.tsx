@@ -62,18 +62,22 @@ export const CollapsedCategoryHandle: React.FC<CollapsedCategoryHandleProps> = (
   onHeaderDrop,
 }) => {
   const normalizedName = name.trim() || labels.newCategoryDefaultName;
-  const badgeText = normalizedName.slice(0, 3).toUpperCase();
   const dropBeforeActive = categoryDropPosition === 'before';
   const dropAfterActive = categoryDropPosition === 'after';
   const isDropTarget = dropBeforeActive || dropAfterActive || isFeatureDropTarget;
   const containerClasses = [
-    'flex h-9 w-9 items-center justify-center rounded-full border border-border-color bg-surface text-[0.6rem] font-semibold uppercase tracking-tight text-text-secondary transition-colors transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-surface',
-    isDropTarget ? 'bg-primary/10 text-primary ring-2 ring-primary/60' : '',
+    'group flex h-9 w-9 items-center justify-center rounded-full border border-border-color bg-surface transition-colors transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-surface',
+    isDropTarget ? 'bg-primary/10 ring-2 ring-primary/60' : '',
     isDragging ? 'scale-[1.05] shadow-lg ring-2 ring-primary/70' : '',
-    isEditing ? 'cursor-not-allowed opacity-60' : 'cursor-grab hover:bg-secondary/60 hover:text-text-primary',
+    isEditing
+      ? 'cursor-not-allowed opacity-60'
+      : 'cursor-grab active:cursor-grabbing hover:bg-secondary/60',
   ]
     .filter(Boolean)
     .join(' ');
+
+  const glyphBarClasses =
+    'block h-0.5 w-3 rounded-full bg-border-color transition-colors duration-150 group-hover:bg-primary group-focus-visible:bg-primary';
 
   return (
     <div className="relative mb-1 flex justify-center">
@@ -94,7 +98,6 @@ export const CollapsedCategoryHandle: React.FC<CollapsedCategoryHandleProps> = (
         role="button"
         tabIndex={isEditing ? -1 : 0}
         draggable={!isEditing}
-        title={normalizedName}
         aria-label={normalizedName}
         aria-grabbed={isDragging}
         aria-dropeffect={isDropTarget ? 'move' : undefined}
@@ -127,7 +130,11 @@ export const CollapsedCategoryHandle: React.FC<CollapsedCategoryHandleProps> = (
         }}
       >
         <span className="sr-only">{normalizedName}</span>
-        <span aria-hidden>{badgeText}</span>
+        <span aria-hidden className="flex flex-col items-center justify-center gap-[3px]">
+          <span className={glyphBarClasses} />
+          <span className={glyphBarClasses} />
+          <span className={glyphBarClasses} />
+        </span>
       </div>
     </div>
   );
