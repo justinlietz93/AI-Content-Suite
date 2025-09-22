@@ -266,6 +266,37 @@ describe('Sidebar', () => {
     });
   });
 
+  it('reorders features when the drop target is the feature button itself', async () => {
+    console.info('Validating drop events targeting the feature button still reorder the list.');
+
+    render(
+      <Sidebar
+        collapsed={false}
+        onToggle={noop}
+        activeMode={'technical' as Mode}
+        onSelectMode={noop}
+      />,
+    );
+
+    const workspaceSection = await screen.findByTestId('category-section-workspace');
+    const scaffolder = workspaceSection.querySelector(
+      '[data-feature-id="scaffolder"]',
+    ) as HTMLButtonElement;
+    const summarizer = workspaceSection.querySelector(
+      '[data-feature-id="technical"]',
+    ) as HTMLButtonElement;
+    const transfer = createDataTransfer();
+
+    fireEvent.dragStart(scaffolder, { dataTransfer: transfer });
+    fireEvent.dragOver(summarizer, { dataTransfer: transfer });
+    fireEvent.drop(summarizer, { dataTransfer: transfer });
+
+    await waitFor(() => {
+      const order = getFeatureOrder(workspaceSection);
+      expect(order.indexOf('scaffolder')).toBeLessThan(order.indexOf('technical'));
+    });
+  });
+
   it('moves a feature into another category while the sidebar is collapsed', async () => {
     console.info('Ensuring collapsed sidebar supports cross-category feature drops.');
 

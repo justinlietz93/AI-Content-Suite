@@ -130,7 +130,7 @@ export const FeatureList: React.FC<FeatureListProps> = ({
                 return shouldClear ? null : prev;
               });
             }}
-            onDrop={event => {
+            onDropCapture={event => {
               const data = draggingItem ?? parseDragData(event);
               if (data?.type !== 'feature') {
                 return;
