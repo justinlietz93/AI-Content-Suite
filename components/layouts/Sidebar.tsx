@@ -115,14 +115,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           iconMap={MODE_ICONS}
         />
       </div>
-
-      <div
-        className={`px-3 py-4 text-xs text-text-secondary/70 border-t border-border-color/60 ${
-          collapsed ? 'hidden' : 'block'
-        }`}
-      >
-        Future modules and team dashboards will appear here.
-      </div>
     </aside>
   );
 };

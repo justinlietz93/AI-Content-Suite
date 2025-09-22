@@ -1,12 +1,38 @@
-# Technical Summary Report
+# Environment Setup (Linux / bash)
 
-**Generated on:** September 16, 2025 at 11:02 PM CDT
+Use the following commands to set up and work on this project locally.
 
----
+```bash
+# 1) Node.js (recommended: >= 20.x LTS)
+# If you use nvm:
+command -v nvm >/dev/null 2>&1 || curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+nvm install --lts
+nvm use --lts
 
-## Generated Summary
+# 2) Install dependencies
+npm install
 
-### Core Mission
+# 3) Typecheck & Tests
+npm run typecheck
+npm test
+
+# 4) Local development server
+npm run dev
+
+# 5) Production build & preview
+npm run build
+npm run preview
+```
+
+Notes:
+
+- Package manager: `npm` (see `package.json` scripts).
+- Tooling: Vite (dev/build/preview), TypeScript, Vitest (+ coverage), Testing Library, jsdom.
+- After any `npm install`, run a security scan via Codacy’s Trivy integration per policy.
+
+## Core Mission
 
 - The agent's primary goal is to guide, enforce, and analyze the implementation of software components against a set of predefined engineering standards, security policies, and architectural guidelines.
 - Ensure adherence to current best practices (modular monolith, clean architecture, security, scalability, maintainability, testability, framework independence) and drive the roadmap toward future improvements emphasizing robustness, security, reliability, and observability.
