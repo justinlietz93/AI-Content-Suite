@@ -44,10 +44,8 @@ export const useDragPreview = (): DragPreviewController => {
    * @param handle - Element representing the item under drag; used to generate the preview snapshot.
    */
   // Decide whether to use custom drag image.
-  // Temporarily disabled to diagnose environments where custom previews may cancel the drag
-  // immediately (e.g., some Linux/Wayland setups). If the browser rejects setDragImage, we
-  // already fall back to native previews; disabling here avoids any DOM cloning during drag.
-  const shouldUseCustomPreview = false;
+  // Re-enable custom drag image; guarded by checks and try/catch to avoid cancellations.
+  const shouldUseCustomPreview = true;
 
   const applyDragPreview = React.useCallback(
     (event: React.DragEvent, handle: HTMLElement | null) => {
@@ -56,7 +54,7 @@ export const useDragPreview = (): DragPreviewController => {
         return;
       }
 
-      if (!event.dataTransfer || !handle) {
+      if (!event.dataTransfer || !handle || typeof handle.getBoundingClientRect !== 'function') {
         clearDragPreview();
         return;
       }
@@ -78,7 +76,7 @@ export const useDragPreview = (): DragPreviewController => {
       clone.style.transform = 'none';
       clone.setAttribute('aria-hidden', 'true');
 
-      document.body.appendChild(clone);
+  document.body.appendChild(clone);
       dragPreviewRef.current = clone;
 
       const pointerOffsetX = Number.isFinite(event.clientX) ? event.clientX - rect.left : width / 2;

@@ -202,6 +202,10 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
     categoryDropTarget.context === 'zone';
   const isFeatureHeaderDropTarget =
     featureDropTarget?.categoryId === categoryId && featureDropTarget.context === 'header';
+  const isCategoryTerminalTarget =
+    categoryDropTarget?.hoveredCategoryId === categoryId &&
+    categoryDropTarget.position === 'before' &&
+    categoryDropTarget.targetIndex === categoryInsertionIndex;
   const headerDropPositionRef = React.useRef<'before' | 'after'>('before');
   const headerPointerActiveRef = React.useRef(false);
 
@@ -354,8 +358,8 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
       }}
     >
       <DropZone
-        active={isLeadingDropTarget}
-        sizeClassName="h-5"
+        active={false}
+        sizeClassName="h-10"
         className="px-2"
         testId={`category-dropzone-before-${categoryId}`}
         onDragOver={event => {
@@ -376,18 +380,8 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
           });
         }}
         onDragLeave={() => {
-          setCategoryDropTarget(prev => {
-            if (
-              prev &&
-              prev.hoveredCategoryId === categoryId &&
-              prev.targetIndex === categoryInsertionIndex &&
-              prev.position === 'before' &&
-              prev.context === 'zone'
-            ) {
-              return null;
-            }
-            return prev;
-          });
+          // Hysteresis: keep the last computed top-of-category target on leave; container/header will override.
+          setCategoryDropTarget(prev => prev);
         }}
         onDrop={event => {
           const data = draggingItem ?? parseDragData(event);
@@ -399,6 +393,12 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
           setCategoryDropTarget(null);
         }}
       />
+      {draggingItem?.type === 'category' && isCategoryTerminalTarget ? (
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 -top-1 h-1 rounded-full bg-primary ring-2 ring-primary/50 ring-offset-1 ring-offset-surface"
+        />
+      ) : null}
       <CategoryHeader
         categoryId={categoryId}
         name={bucket.title ?? ''}
