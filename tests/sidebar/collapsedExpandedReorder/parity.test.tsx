@@ -29,8 +29,11 @@ describe('Sidebar collapsed and expanded parity', () => {
       <Sidebar collapsed onToggle={() => {}} activeMode={'technical' as Mode} onSelectMode={() => {}} />,
     );
 
-    const handles = screen.getAllByTestId(/collapsed-category-handle-/i);
-    expect(handles.length).toBeGreaterThan(0);
+    const categoryHandles = document.querySelectorAll('[data-drag-handle="category"]');
+    expect(categoryHandles.length).toBe(0);
+
+    const featureHandles = document.querySelectorAll('[data-drag-handle="feature"]');
+    expect(featureHandles.length).toBeGreaterThan(0);
 
     const workspaceText = screen.queryByText(/workspace/i);
     expect(workspaceText).not.toBeInTheDocument();
@@ -39,27 +42,6 @@ describe('Sidebar collapsed and expanded parity', () => {
     const labelRect = summarizerLabel.getBoundingClientRect();
     expect(labelRect.width).toBeLessThanOrEqual(1);
     expect(labelRect.height).toBeLessThanOrEqual(1);
-  });
-
-  it('allows categories to reorder while collapsed', async () => {
-    console.info('Ensuring collapsed category handles support drag-and-drop reordering.');
-
-    render(
-      <Sidebar collapsed onToggle={() => {}} activeMode={'technical' as Mode} onSelectMode={() => {}} />,
-    );
-
-    const orchestrationHandle = await screen.findByTestId('collapsed-category-handle-orchestration');
-    const workspaceHandle = await screen.findByTestId('collapsed-category-handle-workspace');
-    const dataTransfer = createDataTransfer();
-
-    fireEvent.dragStart(orchestrationHandle, { dataTransfer });
-    fireEvent.dragOver(workspaceHandle, { dataTransfer });
-    fireEvent.drop(workspaceHandle, { dataTransfer });
-    fireEvent.dragEnd(orchestrationHandle, { dataTransfer });
-
-    await waitFor(() => {
-      expect(getRenderedCategoryOrder()).toEqual(['orchestration', 'workspace', 'interactive']);
-    });
   });
 
   it('allows categories to reorder while expanded', async () => {

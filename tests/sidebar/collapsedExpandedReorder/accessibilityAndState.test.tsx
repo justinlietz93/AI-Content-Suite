@@ -224,21 +224,45 @@ describe('Sidebar accessibility and state handling', () => {
     console.info('Validating that switching collapse state preserves order and active mode.');
 
     const { rerender } = render(
+      <Sidebar
+        collapsed={false}
+        onToggle={() => {}}
+        activeMode={'technical' as Mode}
+        onSelectMode={() => {}}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(document.querySelector('[data-category-id="interactive"]')).toBeTruthy();
+      expect(document.querySelector('[data-category-id="workspace"]')).toBeTruthy();
+    });
+
+    const interactiveHeader = document.querySelector('[data-category-id="interactive"]') as HTMLElement;
+    const workspaceHeader = document.querySelector('[data-category-id="workspace"]') as HTMLElement;
+    const dataTransfer = createDataTransfer();
+
+    fireEvent.dragStart(interactiveHeader, { dataTransfer });
+    fireEvent.dragOver(workspaceHeader, { dataTransfer });
+    fireEvent.drop(workspaceHeader, { dataTransfer });
+    fireEvent.dragEnd(interactiveHeader, { dataTransfer });
+
+    await waitFor(() => {
+      expect(getRenderedCategoryOrder()).toEqual(['interactive', 'workspace', 'orchestration']);
+    });
+
+    rerender(
       <Sidebar collapsed onToggle={() => {}} activeMode={'technical' as Mode} onSelectMode={() => {}} />,
     );
 
-    const orchestrationHandle = await screen.findByTestId('collapsed-category-handle-orchestration');
-    const interactiveHandle = await screen.findByTestId('collapsed-category-handle-interactive');
-    const dataTransfer = createDataTransfer();
-
-    fireEvent.dragStart(interactiveHandle, { dataTransfer });
-    fireEvent.dragOver(orchestrationHandle, { dataTransfer });
-    fireEvent.drop(orchestrationHandle, { dataTransfer });
-    fireEvent.dragEnd(interactiveHandle, { dataTransfer });
-
     await waitFor(() => {
-      expect(getRenderedCategoryOrder()).toEqual(['workspace', 'interactive', 'orchestration']);
+      expect(getRenderedCategoryOrder()).toEqual(['interactive', 'workspace', 'orchestration']);
     });
+
+    const collapsedCategoryHandles = document.querySelectorAll('[data-drag-handle="category"]');
+    expect(collapsedCategoryHandles.length).toBe(0);
+
+    const activeButton = document.querySelector('[data-feature-id="technical"]') as HTMLElement;
+    expect(activeButton).toHaveClass('bg-primary/20');
 
     rerender(
       <Sidebar
@@ -250,21 +274,7 @@ describe('Sidebar accessibility and state handling', () => {
     );
 
     await waitFor(() => {
-      expect(getRenderedCategoryOrder()).toEqual(['workspace', 'interactive', 'orchestration']);
-    });
-
-    await waitFor(() => {
-      expect(document.querySelector('[data-feature-id="technical"]')).toBeTruthy();
-    });
-    const activeButton = document.querySelector('[data-feature-id="technical"]') as HTMLElement;
-    expect(activeButton).toHaveClass('bg-primary/20');
-
-    rerender(
-      <Sidebar collapsed onToggle={() => {}} activeMode={'technical' as Mode} onSelectMode={() => {}} />,
-    );
-
-    await waitFor(() => {
-      expect(getRenderedCategoryOrder()).toEqual(['workspace', 'interactive', 'orchestration']);
+      expect(getRenderedCategoryOrder()).toEqual(['interactive', 'workspace', 'orchestration']);
     });
   });
 

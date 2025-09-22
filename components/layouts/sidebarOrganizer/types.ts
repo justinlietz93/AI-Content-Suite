@@ -112,8 +112,6 @@ export interface SidebarOrganizerLabels {
   dropBetweenFeaturesAnnouncement: string;
   /** Announcement when moving to uncategorized. */
   uncategorizedAnnouncement: string;
-  /** Accessible label template for collapsed category drag handles. */
-  collapsedCategoryHandleLabel: string;
 }
 
 /**

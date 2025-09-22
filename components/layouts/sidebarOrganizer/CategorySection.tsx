@@ -10,7 +10,6 @@ import type { DraggingItem, FeatureDropTarget, CategoryDropTarget } from './drag
 import type { Mode } from '../../../types';
 import type { SidebarOrganizerLabels, ModeIconMap } from './types';
 import { DropZone } from './DropZone';
-import { CollapsedCategoryHandle } from './CollapsedCategoryHandle';
 
 interface CategorySectionProps {
   bucket: LayoutBucket;
@@ -168,6 +167,30 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
   }
 
   const categoryId = bucket.categoryId!;
+
+  if (collapsed) {
+    return (
+      <div className={sectionSpacing} data-testid={testId}>
+        <FeatureList
+          bucket={bucket}
+          collapsed={collapsed}
+          activeMode={activeMode}
+          iconMap={iconMap}
+          tabLabels={tabLabels}
+          draggingItem={draggingItem}
+          featureDropTarget={featureDropTarget}
+          onSelectMode={onSelectMode}
+          onDragStart={onFeatureDragStart}
+          onDragEnd={onFeatureDragEnd}
+          onKeyDown={onFeatureKeyDown}
+          onDrop={onFeatureDrop}
+          setFeatureDropTarget={setFeatureDropTarget}
+          parseDragData={parseDragData}
+        />
+      </div>
+    );
+  }
+
   const isCollapsedCategory = collapsedCategoryIds.includes(categoryId);
   const categoryInsertionIndex = Math.max(0, bucketIndex - 1);
   const headerCategoryDropTarget =
@@ -287,49 +310,7 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
     }
   };
 
-  const categoryControl = collapsed ? (
-    <CollapsedCategoryHandle
-      categoryId={categoryId}
-      name={bucket.title ?? ''}
-      isDragging={draggingItem?.type === 'category' && draggingItem.id === categoryId}
-      categoryDropPosition={isCategoryDropTarget ? categoryDropPosition : null}
-      isFeatureDropTarget={isFeatureHeaderDropTarget}
-      labels={mergedLabels}
-      onDragStart={onCategoryDragStart}
-      onDragEnd={onCategoryDragEnd}
-      onKeyDown={onCategoryKeyDown}
-      onHandleDragOver={handleHeaderDragOver}
-      onHandleDragLeave={handleHeaderDragLeave}
-      onHandleDrop={handleHeaderDrop}
-    />
-  ) : (
-    <CategoryHeader
-      categoryId={categoryId}
-      name={bucket.title ?? ''}
-      isDragging={draggingItem?.type === 'category' && draggingItem.id === categoryId}
-      categoryDropPosition={isCategoryDropTarget ? categoryDropPosition : null}
-      isFeatureDropTarget={isFeatureHeaderDropTarget}
-      labels={mergedLabels}
-      isCollapsed={isCollapsedCategory}
-      isEditing={editingCategoryId === categoryId}
-      editingValue={editingName}
-      editingError={editingError}
-      onToggleCollapse={() => onToggleCollapse(categoryId)}
-      onBeginRename={() => onBeginRename(categoryId, bucket.title ?? '')}
-      onDelete={() => onDeleteCategory(categoryId)}
-      onRenameChange={onRenameChange}
-      onRenameKeyDown={onRenameKeyDown}
-      onRenameBlur={onRenameBlur}
-      onDragStart={event => onCategoryDragStart(event, categoryId)}
-      onDragEnd={onCategoryDragEnd}
-      onKeyDown={event => onCategoryKeyDown(event, categoryId)}
-      onHeaderDragOver={handleHeaderDragOver}
-      onHeaderDragLeave={handleHeaderDragLeave}
-      onHeaderDrop={handleHeaderDrop}
-    />
-  );
-
-  const shouldRenderFeatureList = collapsed ? true : !isCollapsedCategory;
+  const shouldRenderFeatureList = !isCollapsedCategory;
 
   return (
     <div className={sectionSpacing} data-testid={testId}>
@@ -377,7 +358,30 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
           setCategoryDropTarget(null);
         }}
       />
-      {categoryControl}
+      <CategoryHeader
+        categoryId={categoryId}
+        name={bucket.title ?? ''}
+        isDragging={draggingItem?.type === 'category' && draggingItem.id === categoryId}
+        categoryDropPosition={isCategoryDropTarget ? categoryDropPosition : null}
+        isFeatureDropTarget={isFeatureHeaderDropTarget}
+        labels={mergedLabels}
+        isCollapsed={isCollapsedCategory}
+        isEditing={editingCategoryId === categoryId}
+        editingValue={editingName}
+        editingError={editingError}
+        onToggleCollapse={() => onToggleCollapse(categoryId)}
+        onBeginRename={() => onBeginRename(categoryId, bucket.title ?? '')}
+        onDelete={() => onDeleteCategory(categoryId)}
+        onRenameChange={onRenameChange}
+        onRenameKeyDown={onRenameKeyDown}
+        onRenameBlur={onRenameBlur}
+        onDragStart={event => onCategoryDragStart(event, categoryId)}
+        onDragEnd={onCategoryDragEnd}
+        onKeyDown={event => onCategoryKeyDown(event, categoryId)}
+        onHeaderDragOver={handleHeaderDragOver}
+        onHeaderDragLeave={handleHeaderDragLeave}
+        onHeaderDrop={handleHeaderDrop}
+      />
       {shouldRenderFeatureList ? (
         <FeatureList
           bucket={bucket}

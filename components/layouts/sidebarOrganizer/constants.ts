@@ -77,7 +77,6 @@ export const DEFAULT_LABELS: SidebarOrganizerLabels = {
   dropOnCategoryAnnouncement: 'Moved into category {categoryName}.',
   dropBetweenFeaturesAnnouncement: 'Placed before {featureName}.',
   uncategorizedAnnouncement: 'Moved to the uncategorized area.',
-  collapsedCategoryHandleLabel: 'Move category {categoryName}',
 };
 
 /**

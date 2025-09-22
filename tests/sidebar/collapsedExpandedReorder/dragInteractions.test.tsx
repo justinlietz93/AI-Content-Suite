@@ -7,7 +7,7 @@
  */
 import React from 'react';
 import { describe, expect, it } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, waitFor } from '@testing-library/react';
 import { vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 
@@ -204,32 +204,6 @@ describe('Sidebar drag interactions', () => {
     expect(indicator?.className).not.toContain('shadow[');
 
     fireEvent.dragEnd(styleExtractorButton, { dataTransfer });
-  });
-
-  it('highlights collapsed category handles with ring styling during feature hovers', async () => {
-    console.info('Ensuring collapsed category handles gain visible focus when a feature targets them.');
-
-    render(
-      <Sidebar collapsed onToggle={() => {}} activeMode={'technical' as Mode} onSelectMode={() => {}} />,
-    );
-
-    const workspaceHandle = await screen.findByTestId('collapsed-category-handle-workspace');
-    const orchestrationHandle = await screen.findByTestId('collapsed-category-handle-orchestration');
-    const featureButton = document.querySelector('[data-feature-id="technical"]') as HTMLElement;
-    const dataTransfer = createDataTransfer();
-
-    fireEvent.dragStart(featureButton, { dataTransfer });
-    fireEvent.dragOver(orchestrationHandle, { dataTransfer });
-
-    expect(orchestrationHandle.className).toContain('ring-2');
-    expect(orchestrationHandle.className).toContain('bg-primary/10');
-
-    fireEvent.dragLeave(orchestrationHandle, { dataTransfer, relatedTarget: workspaceHandle });
-    fireEvent.dragEnd(featureButton, { dataTransfer });
-
-    expect(orchestrationHandle.className).not.toContain('bg-primary/10');
-    expect(orchestrationHandle.className).not.toContain('ring-primary/60');
-    expect(orchestrationHandle.className).not.toContain('text-primary');
   });
 
   it('performs repeated cross-category drags without emitting console noise', async () => {
