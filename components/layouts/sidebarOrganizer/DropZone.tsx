@@ -39,6 +39,7 @@ export const DropZone: React.FC<DropZoneProps> = ({
     onDragLeave={onDragLeave}
     onDrop={onDrop}
     data-testid={testId}
+    data-drop-zone="true"
   >
     <span
       aria-hidden

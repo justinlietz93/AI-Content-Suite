@@ -99,6 +99,81 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
       featureDropTarget.context === 'after-item');
 
   /**
+   * Determines whether the collapsed container should respond to drag events directly rather than
+   * delegating to nested feature buttons or drop zone indicators.
+   *
+   * @param event - Drag event fired while traversing the collapsed category wrapper.
+   * @returns True when whitespace handling should be activated for the event.
+   */
+  const shouldHandleCollapsedContainerEvent = React.useCallback(
+    (event: React.DragEvent<HTMLDivElement>) => {
+      const targetElement = event.target as HTMLElement | null;
+      if (!targetElement || targetElement === event.currentTarget) {
+        return true;
+      }
+      const withinFeatureList = targetElement.closest('li');
+      if (withinFeatureList) {
+        return false;
+      }
+      if (targetElement.closest('[data-drag-handle]')) {
+        return false;
+      }
+      return !targetElement.closest('[data-feature-id], [data-drop-zone]');
+    },
+    [],
+  );
+
+  /**
+   * Calculates a drop index when a drag hovers whitespace inside a collapsed section by comparing the
+   * pointer location to the visible feature buttons.
+   *
+   * @param event - Drag event emitted on the collapsed section container.
+   * @returns Index/context pair describing the intended insertion point.
+   */
+  const resolveCollapsedWhitespaceDrop = React.useCallback(
+    (event: React.DragEvent<HTMLDivElement>) => {
+      const listElement = event.currentTarget.querySelector('ul[role="list"]');
+      if (!listElement) {
+        return { index: bucket.features.length, context: 'zone' as const };
+      }
+
+      const featureButtons = Array.from(
+        listElement.querySelectorAll<HTMLButtonElement>('[data-feature-id]'),
+      );
+
+      if (featureButtons.length === 0) {
+        return { index: 0, context: 'zone' as const };
+      }
+
+      const pointerY = event.clientY;
+      if (!Number.isFinite(pointerY)) {
+        return { index: 0, context: 'before-item' as const };
+      }
+
+      for (let itemIndex = 0; itemIndex < featureButtons.length; itemIndex += 1) {
+        const button = featureButtons[itemIndex];
+        const rect = button.getBoundingClientRect();
+        const midpoint = rect.top + rect.height / 2;
+
+        if (pointerY <= midpoint) {
+          return { index: itemIndex, context: 'before-item' as const };
+        }
+
+        if (pointerY <= rect.bottom) {
+          return { index: itemIndex + 1, context: 'after-item' as const };
+        }
+      }
+
+      return { index: featureButtons.length, context: 'after-item' as const };
+    },
+    [bucket.features.length],
+  );
+
+  const collapsedWhitespaceTargetRef = React.useRef<
+    { index: number; context: FeatureDropTarget['context'] } | null
+  >(null);
+
+  /**
    * Highlights collapsed sections when a feature hovers over empty whitespace so dropping is intuitive.
    *
    * @param event - Drag event triggered while hovering the collapsed section container.
@@ -109,10 +184,17 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
         return;
       }
 
+      if (!shouldHandleCollapsedContainerEvent(event)) {
+        return;
+      }
+
       const data = draggingItem ?? parseDragData(event);
       if (data?.type !== 'feature') {
         return;
       }
+
+      const { index: targetIndex, context } = resolveCollapsedWhitespaceDrop(event);
+      collapsedWhitespaceTargetRef.current = { index: targetIndex, context };
 
       event.preventDefault();
       if (event.dataTransfer) {
@@ -122,24 +204,25 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
       setFeatureDropTarget(prev => {
         if (
           prev?.categoryId === bucket.categoryId &&
-          prev.index === bucket.features.length &&
-          prev.context === 'zone'
+          prev.index === targetIndex &&
+          prev.context === context
         ) {
           return prev;
         }
         return {
           categoryId: bucket.categoryId,
-          index: bucket.features.length,
-          context: 'zone',
+          index: targetIndex,
+          context,
         };
       });
     },
     [
       bucket.categoryId,
-      bucket.features.length,
       collapsed,
       draggingItem,
       parseDragData,
+      resolveCollapsedWhitespaceDrop,
+      shouldHandleCollapsedContainerEvent,
       setFeatureDropTarget,
     ],
   );
@@ -161,17 +244,14 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
       }
 
       setFeatureDropTarget(prev => {
-        if (
-          prev?.categoryId === bucket.categoryId &&
-          prev.index === bucket.features.length &&
-          prev.context === 'zone'
-        ) {
+        if (prev?.categoryId === bucket.categoryId) {
           return null;
         }
         return prev;
       });
+      collapsedWhitespaceTargetRef.current = null;
     },
-    [bucket.categoryId, bucket.features.length, collapsed, setFeatureDropTarget],
+    [bucket.categoryId, collapsed, setFeatureDropTarget],
   );
 
   /**
@@ -185,23 +265,41 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
         return;
       }
 
+      if (!shouldHandleCollapsedContainerEvent(event)) {
+        return;
+      }
+
       const data = draggingItem ?? parseDragData(event);
       if (data?.type !== 'feature') {
         return;
       }
 
+      const computedTarget = resolveCollapsedWhitespaceDrop(event);
+      const refTarget = collapsedWhitespaceTargetRef.current;
+      const stateTarget =
+        featureDropTarget?.categoryId === bucket.categoryId &&
+        (featureDropTarget.context === 'before-item' ||
+          featureDropTarget.context === 'after-item' ||
+          featureDropTarget.context === 'zone')
+          ? featureDropTarget
+          : null;
+      const targetIndex = stateTarget?.index ?? refTarget?.index ?? computedTarget.index;
+
       event.preventDefault();
       event.stopPropagation();
-      onFeatureDrop(data.id, bucket.categoryId, bucket.features.length);
+      onFeatureDrop(data.id, bucket.categoryId, targetIndex);
       setFeatureDropTarget(null);
+      collapsedWhitespaceTargetRef.current = null;
     },
     [
       bucket.categoryId,
-      bucket.features.length,
       collapsed,
       draggingItem,
+      featureDropTarget,
       onFeatureDrop,
       parseDragData,
+      resolveCollapsedWhitespaceDrop,
+      shouldHandleCollapsedContainerEvent,
       setFeatureDropTarget,
     ],
   );

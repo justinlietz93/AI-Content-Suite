@@ -266,6 +266,56 @@ describe('Sidebar', () => {
     });
   });
 
+  it('uses collapsed whitespace drop coordinates to position reordered features', async () => {
+    console.info('Ensuring collapsed whitespace drops reinsert features at pointer position.');
+
+    render(
+      <Sidebar
+        collapsed
+        onToggle={noop}
+        activeMode={'technical' as Mode}
+        onSelectMode={noop}
+      />,
+    );
+
+    const workspaceSection = await screen.findByTestId('category-section-workspace');
+    const featureButtons = Array.from(
+      workspaceSection.querySelectorAll<HTMLButtonElement>('[data-feature-id]'),
+    );
+
+    featureButtons.forEach((button, index) => {
+      Object.defineProperty(button, 'getBoundingClientRect', {
+        value: () =>
+          ({
+            width: 40,
+            height: 40,
+            top: index * 50,
+            bottom: index * 50 + 40,
+            left: 0,
+            right: 40,
+            x: 0,
+            y: index * 50,
+            toJSON: () => {},
+          }) as DOMRect,
+      });
+    });
+
+    const scaffolder = workspaceSection.querySelector(
+      '[data-feature-id="scaffolder"]',
+    ) as HTMLButtonElement;
+
+    const transfer = createDataTransfer();
+
+    fireEvent.dragStart(scaffolder, { dataTransfer: transfer });
+    fireEvent.dragOver(workspaceSection, { dataTransfer: transfer, clientY: 5 });
+    fireEvent.drop(workspaceSection, { dataTransfer: transfer, clientY: 5 });
+
+    await waitFor(() => {
+      const order = getFeatureOrder(workspaceSection);
+      expect(order.indexOf('scaffolder')).toBeLessThan(order.indexOf('technical'));
+    });
+  });
+
   it('moves a feature into another category while the sidebar is collapsed', async () => {
     console.info('Ensuring collapsed sidebar supports cross-category feature drops.');
 
