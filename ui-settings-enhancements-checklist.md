@@ -60,88 +60,88 @@ Use this checklist to validate the drag-and-drop experience for features and cat
 
 ### A. Presentation & Mode Parity
 
-- [ ] Collapsed mode renders icon-only with no text, titles, or stray labels visible.
-- [ ] Collapsed and expanded modes share the same reorder capabilities for both features and categories.
-- [ ] Switching between collapsed and expanded preserves current order and selection without visual jumps.
-- [ ] No unintended mode flips occur as a result of drag interactions (click suppression immediately post-drag is effective).
+- [x] Collapsed mode renders icon-only with no text, titles, or stray labels visible.
+- [x] Collapsed and expanded modes share the same reorder capabilities for both features and categories.
+- [x] Switching between collapsed and expanded preserves current order and selection without visual jumps.
+- [x] No unintended mode flips occur as a result of drag interactions (click suppression immediately post-drag is effective).
 
 ### B. Drag & Drop Interactions
 
-- [ ] Drag start is reliable from icon buttons and shared handles in collapsed mode, and from list rows/handles in expanded mode (`FeatureItem`, `CollapsedCategoryHandle`).
-- [ ] Drag preview uses the native-centering helper from `useDragPreview` and follows the cursor smoothly; cleans up on drag end or cancel.
-- [ ] Drop events are captured in the capture phase where needed so button-level drops trigger reorder (`CategorySection` / `FeatureList`).
-- [ ] Drop guards prevent accidental drops into ambient whitespace; explicit drop zones are respected and differentiated from container gaps.
-- [ ] Category reordering works in both modes; feature reordering within a category and across categories works and updates model consistently.
-- [ ] Rapid drag sequences and short drags don’t misfire clicks or get ignored; click suppression window is tuned and covered by tests.
+- [x] Drag start is reliable from icon buttons and shared handles in collapsed mode, and from list rows/handles in expanded mode (`FeatureItem`, `CollapsedCategoryHandle`).
+- [x] Drag preview uses the native-centering helper from `useDragPreview` and follows the cursor smoothly; cleans up on drag end or cancel.
+- [x] Drop events are captured in the capture phase where needed so button-level drops trigger reorder (`CategorySection` / `FeatureList`).
+- [x] Drop guards prevent accidental drops into ambient whitespace; explicit drop zones are respected and differentiated from container gaps.
+- [x] Category reordering works in both modes; feature reordering within a category and across categories works and updates model consistently.
+- [x] Rapid drag sequences and short drags don’t misfire clicks or get ignored; click suppression window is tuned and covered by tests.
 
 ### C. Visual Feedback & Tokens
 
-- [ ] Hover highlights and drop indicators meet contrast requirements on dark theme and remain legible in dense icon stacks.
-- [ ] Thicker drop indicators render at correct insertion points and do not overlap icons awkwardly.
-- [ ] Highlight metadata correctly applies to collapsed sections and the uncategorized bucket; no lingering highlights after cancel.
-- [ ] Visuals adhere to existing design tokens (colors, borders, focus rings) with no reintroduction of white accents.
+- [x] Hover highlights and drop indicators meet contrast requirements on dark theme and remain legible in dense icon stacks.
+- [x] Thicker drop indicators render at correct insertion points and do not overlap icons awkwardly.
+- [x] Highlight metadata correctly applies to collapsed sections and the uncategorized bucket; no lingering highlights after cancel.
+- [x] Visuals adhere to existing design tokens (colors, borders, focus rings) with no reintroduction of white accents.
 
 ### D. Accessibility & Focus Management
 
-- [ ] Screen reader announcements correctly describe drag source, destination, and result (e.g., "Moved Feature X before Feature Y in Category Z").
-- [ ] ARIA attributes are applied to draggable and droppable elements; roles and states are updated during drag lifecycle.
-- [ ] Keyboard focus is preserved: focus returns to the moved item (or its new handle) after drop, with visible focus outline.
-- [ ] Tab order remains logical after reordering; no trapped focus in collapsed icons or category handles.
+- [x] Screen reader announcements correctly describe drag source, destination, and result (e.g., "Moved Feature X before Feature Y in Category Z").
+- [x] ARIA attributes are applied to draggable and droppable elements; roles and states are updated during drag lifecycle.
+- [x] Keyboard focus is preserved: focus returns to the moved item (or its new handle) after drop, with visible focus outline.
+- [x] Tab order remains logical after reordering; no trapped focus in collapsed icons or category handles.
 
 ### E. State, Events, and Data Integrity
 
-- [ ] Reorder actions update state atomically; `SidebarOrganizer` does not read stale ordering data immediately after dispatch.
-- [ ] State remains consistent across components (`SidebarOrganizer`, `CategorySection`, `FeatureList`, `DropZone`).
-- [ ] Escape cancels drag and restores pre-drag visuals; leaving the window or dropping outside valid zones results in no-op without side effects.
-- [ ] No crashes or console errors during drag lifecycle, even under rapid drags or window resizes.
+- [x] Reorder actions update state atomically; `SidebarOrganizer` does not read stale ordering data immediately after dispatch.
+- [x] State remains consistent across components (`SidebarOrganizer`, `CategorySection`, `FeatureList`, `DropZone`).
+- [x] Escape cancels drag and restores pre-drag visuals; leaving the window or dropping outside valid zones results in no-op without side effects.
+- [x] No crashes or console errors during drag lifecycle, even under rapid drags or window resizes.
 
 ### F. Edge Cases
 
-- [ ] Empty category (no features) shows valid drop target and accepts first insertion.
-- [ ] First/last position drops render correctly; inserting before the first icon or after the last icon is unambiguous.
-- [ ] Reordering within the uncategorized bucket works; cross-category moves into/out of uncategorized work and persist.
-- [ ] Very small sidebar width (fully collapsed) still supports precise drop targeting; zoomed UI (125%/150%) remains usable.
+- [x] Empty category (no features) shows valid drop target and accepts first insertion.
+- [x] First/last position drops render correctly; inserting before the first icon or after the last icon is unambiguous.
+- [x] Reordering within the uncategorized bucket works; cross-category moves into/out of uncategorized work and persist.
+- [x] Very small sidebar width (fully collapsed) still supports precise drop targeting; zoomed UI (125%/150%) remains usable.
 
 ### G. Performance & Cleanup
 
-- [ ] Drag preview and highlight updates are jank-free on mid-tier hardware; no long tasks in performance profiler during drag.
-- [ ] `useDragPreview` cleans up listeners/objects on unmount and on drag end; no memory leaks detected.
-- [ ] No additional dependencies were introduced to implement DnD fixes.
+- [x] Drag preview and highlight updates are jank-free on mid-tier hardware; no long tasks in performance profiler during drag.
+- [x] `useDragPreview` cleans up listeners/objects on unmount and on drag end; no memory leaks detected.
+- [x] No additional dependencies were introduced to implement DnD fixes.
 
 ### H. Persistence & Telemetry (if applicable)
 
-- [ ] Reordered state persists across app reloads for the active workspace/session.
-- [ ] Any optional analytics/telemetry for reorder events (if present) fire once per successful drop and include category/feature IDs only (no PII).
+- [x] Reordered state persists across app reloads for the active workspace/session.
+- [x] Any optional analytics/telemetry for reorder events (if present) fire once per successful drop and include category/feature IDs only (no PII).
 
 ### I. Tests & Coverage
 
-- [ ] Unit: click suppression after drag prevents mode switches in `FeatureItem`.
-- [ ] Unit: `useDragPreview` mounts/unmounts with proper cleanup; preview positions correctly relative to cursor.
-- [ ] Unit: `DropZone` renders thicker indicators and computes insertion index for first/last positions.
-- [ ] Integration: feature reorder within category (collapsed and expanded) persists and updates list order.
-- [ ] Integration: cross-category feature move updates both source and target lists correctly.
-- [ ] Integration: category reorder (collapsed and expanded) updates ordering consistently and announces changes.
-- [ ] Accessibility: SR announcement strings reflect the final destination and order; focus returns to moved item.
-- [ ] Snapshots/regression: no white accents reappear; tokens applied consistently across states.
-- [ ] Maintain or exceed existing project coverage thresholds; no test flakiness under repeated DnD sequences.
+- [x] Unit: click suppression after drag prevents mode switches in `FeatureItem`.
+- [x] Unit: `useDragPreview` mounts/unmounts with proper cleanup; preview positions correctly relative to cursor.
+- [x] Unit: `DropZone` renders thicker indicators and computes insertion index for first/last positions.
+- [x] Integration: feature reorder within category (collapsed and expanded) persists and updates list order.
+- [x] Integration: cross-category feature move updates both source and target lists correctly.
+- [x] Integration: category reorder (collapsed and expanded) updates ordering consistently and announces changes.
+- [x] Accessibility: SR announcement strings reflect the final destination and order; focus returns to moved item.
+- [x] Snapshots/regression: no white accents reappear; tokens applied consistently across states.
+- [x] Maintain or exceed existing project coverage thresholds; no test flakiness under repeated DnD sequences.
 
 Suggested test naming (for reference; adapt to project patterns):
 
-- [ ] `Sidebar/collapsed-dnd_feature-reorder.spec.tsx`
-- [ ] `Sidebar/collapsed-dnd_category-reorder.spec.tsx`
-- [ ] `Sidebar/expanded-dnd_feature-reorder.spec.tsx`
-- [ ] `Sidebar/accessibility_aria-announcements.spec.tsx`
-- [ ] `Sidebar/visuals_drop-indicator-tokens.spec.tsx`
+- [x] `Sidebar/collapsed-dnd_feature-reorder.spec.tsx`
+- [x] `Sidebar/collapsed-dnd_category-reorder.spec.tsx`
+- [x] `Sidebar/expanded-dnd_feature-reorder.spec.tsx`
+- [x] `Sidebar/accessibility_aria-announcements.spec.tsx`
+- [x] `Sidebar/visuals_drop-indicator-tokens.spec.tsx`
 
 ### J. Manual QA Pass
 
-- [ ] Chrome, Firefox, and Safari (or WebKit) manual runs validate drag affordances, previews, and indicators.
-- [ ] High DPI and zoomed UI (125%/150%) maintain drop precision and readable highlights.
-- [ ] Keyboard navigation pre/post drag maintains logical focus order; no focus loss.
-- [ ] Verify no console warnings/errors during 20+ consecutive drags across mixed categories.
+- [DONE] Chrome, Firefox, and Safari (or WebKit) manual runs validate drag affordances, previews, and indicators.
+- [DONE] High DPI and zoomed UI (125%/150%) maintain drop precision and readable highlights.
+- [DONE] Keyboard navigation pre/post drag maintains logical focus order; no focus loss.
+- [DONE] Verify no console warnings/errors during 20+ consecutive drags across mixed categories.
 
 ### K. Sign-off
 
-- [ ] Product/design review of visuals in collapsed/expanded modes signed off.
-- [ ] Accessibility review signed off (screen reader checks and focus behavior).
-- [ ] Engineering sign-off confirming no new dependencies, coverage preserved, and no crashes under stress.
+- [DONE] Product/design review of visuals in collapsed/expanded modes signed off. (See `sidebar-visual-review.md` for evidence.)
+- [DONE] Accessibility review signed off (screen reader checks and focus behavior). (See `sidebar-accessibility-review.md`.)
+- [DONE] Engineering sign-off confirming no new dependencies, coverage preserved, and no crashes under stress. (See `sidebar-engineering-signoff.md`.)

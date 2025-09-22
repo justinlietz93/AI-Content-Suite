@@ -261,8 +261,7 @@ describe('providerRegistry', () => {
 
   it('falls back when fetch is not available in the environment', async () => {
     const originalFetch = globalThis.fetch;
-    // @ts-expect-error overriding fetch for test coverage
-    globalThis.fetch = undefined;
+    globalThis.fetch = undefined as unknown as typeof globalThis.fetch;
 
     try {
       registerProviderModels('openai', []);

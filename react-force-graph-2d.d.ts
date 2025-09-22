@@ -14,6 +14,7 @@ declare module 'react-force-graph-2d' {
     d3Force: (...args: any[]) => any;
     zoomToFit: (ms?: number, padding?: number) => void;
     centerAt: (x: number, y: number, ms?: number) => void;
+    d3ReheatSimulation: () => void;
   }
 
   const ForceGraph2D: ComponentType<any>;

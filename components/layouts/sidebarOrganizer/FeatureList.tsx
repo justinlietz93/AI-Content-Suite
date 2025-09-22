@@ -145,13 +145,13 @@ export const FeatureList: React.FC<FeatureListProps> = ({
             {isBeforeTarget(index) ? (
               <span
                 aria-hidden
-                className="pointer-events-none absolute inset-x-0 -top-1 h-1 rounded-full bg-primary"
+                className="pointer-events-none absolute inset-x-0 -top-1 h-1 rounded-full bg-primary ring-2 ring-primary/50 ring-offset-1 ring-offset-surface"
               />
             ) : null}
             {isAfterTarget(index) ? (
               <span
                 aria-hidden
-                className="pointer-events-none absolute inset-x-0 -bottom-1 h-1 rounded-full bg-primary"
+                className="pointer-events-none absolute inset-x-0 -bottom-1 h-1 rounded-full bg-primary ring-2 ring-primary/50 ring-offset-1 ring-offset-surface"
               />
             ) : null}
             <FeatureItem

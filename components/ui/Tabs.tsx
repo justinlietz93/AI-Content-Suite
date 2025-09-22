@@ -10,7 +10,7 @@ interface Tab {
 }
 
 interface TabsProps {
-  tabs: Tab[];
+  tabs: ReadonlyArray<Tab>;
   activeTabId: string;
   onTabChange: (id: string) => void;
 }

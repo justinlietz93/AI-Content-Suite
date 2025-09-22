@@ -1,5 +1,6 @@
 
 import type { ReasoningEffortLevel } from './config/generationConfig';
+export type { ProviderInfo } from './services/providerRegistry';
 
 export interface Highlight {
   text: string;

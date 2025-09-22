@@ -346,7 +346,7 @@ export const useSidebarOrganizerActions = ({
    * Handles keyboard events on category headers for drag toggling.
    */
   const handleCategoryKeyDown = useCallback(
-    (event: KeyboardEvent<HTMLDivElement>, categoryId: string) => {
+    (event: KeyboardEvent<HTMLElement>, categoryId: string) => {
       if (event.key === ' ' || event.key === 'Enter') {
         event.preventDefault();
         const currentItem = draggingItemRef.current;

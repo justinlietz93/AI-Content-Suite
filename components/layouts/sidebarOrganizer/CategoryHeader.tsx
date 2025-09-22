@@ -48,13 +48,13 @@ interface CategoryHeaderProps {
   /** Drag end handler. */
   onDragEnd: () => void;
   /** Keyboard handler used for accessible drag toggling. */
-  onKeyDown: (event: React.KeyboardEvent<HTMLDivElement>) => void;
+  onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => void;
   /** Handles drag over events to support dropping features or categories on the header. */
-  onHeaderDragOver: (event: React.DragEvent<HTMLDivElement>) => void;
+  onHeaderDragOver: (event: React.DragEvent<HTMLElement>) => void;
   /** Clears drop target state when the pointer leaves the header area. */
-  onHeaderDragLeave: (event: React.DragEvent<HTMLDivElement>) => void;
+  onHeaderDragLeave: (event: React.DragEvent<HTMLElement>) => void;
   /** Processes drop events for categories and features. */
-  onHeaderDrop: (event: React.DragEvent<HTMLDivElement>) => void;
+  onHeaderDrop: (event: React.DragEvent<HTMLElement>) => void;
 }
 
 /**
@@ -268,16 +268,16 @@ export const CategoryHeader: React.FC<CategoryHeaderProps> = ({
     <div className="space-y-1">
       <div className="relative mb-2">
         {dropBeforeActive ? (
-          <span
-            aria-hidden
-            className="pointer-events-none absolute inset-x-0 -top-1 h-1 rounded-full bg-primary"
-          />
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 -top-1 h-1 rounded-full bg-primary ring-2 ring-primary/50 ring-offset-1 ring-offset-surface"
+        />
         ) : null}
         {dropAfterActive ? (
-          <span
-            aria-hidden
-            className="pointer-events-none absolute inset-x-0 -bottom-1 h-1 rounded-full bg-primary"
-          />
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 -bottom-1 h-1 rounded-full bg-primary ring-2 ring-primary/50 ring-offset-1 ring-offset-surface"
+        />
         ) : null}
         <div
           className={containerClasses}
