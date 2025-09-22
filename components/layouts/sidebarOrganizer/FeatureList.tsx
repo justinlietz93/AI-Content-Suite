@@ -85,7 +85,33 @@ export const FeatureList: React.FC<FeatureListProps> = ({
   const shouldRenderTerminalZone = hasFeatures || isDraggingFeature || isZoneTargeted;
 
   return (
-    <div className="relative">
+    <div
+      className="relative"
+      onDragOver={event => {
+        const data = draggingItem ?? parseDragData(event);
+        if (data?.type !== 'feature') {
+          return;
+        }
+        // Keep drag alive over list gaps; rely on row/zone handlers to update exact target.
+        event.preventDefault();
+        if (event.dataTransfer) {
+          event.dataTransfer.dropEffect = 'move';
+        }
+      }}
+      onDrop={event => {
+        const data = draggingItem ?? parseDragData(event);
+        if (data?.type !== 'feature') {
+          return;
+        }
+        // If a specific row/zone already handled drop it will stopPropagation in capture.
+        event.preventDefault();
+        const target = featureDropTarget;
+        if (target && target.categoryId === bucket.categoryId && typeof target.index === 'number') {
+          onDrop(data.id, bucket.categoryId, target.index);
+          setFeatureDropTarget(null);
+        }
+      }}
+    >
       <ul role="list" className="space-y-1">
       {bucket.features.map((feature, index) => (
         <li key={feature.id}>

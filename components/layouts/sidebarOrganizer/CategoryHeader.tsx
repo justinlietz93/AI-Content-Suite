@@ -306,7 +306,7 @@ export const CategoryHeader: React.FC<CategoryHeaderProps> = ({
           tabIndex={isEditing ? -1 : 0}
           role="button"
           aria-grabbed={isDragging}
-          aria-dropeffect={isDropTarget ? 'move' : undefined}
+          aria-dropeffect={undefined}
           data-category-id={categoryId}
         >
           <div className="flex flex-1 items-center gap-2 overflow-hidden">

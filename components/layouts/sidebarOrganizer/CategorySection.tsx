@@ -50,6 +50,10 @@ interface CategorySectionProps {
 /**
  * Renders a category bucket including drop zones for categories and features.
  */
+/* eslint-disable sonarjs/cognitive-complexity, complexity */
+// NOTE: The organizer section coordinates multiple DnD branches (features vs categories, header vs zones)
+// which increases branching. We keep logic inline for synchronicity with DOM events and add comments/tests
+// rather than over-abstracting. If this grows further, consider splitting handlers into small hooks.
 export const CategorySection: React.FC<CategorySectionProps> = ({
   bucket,
   bucketIndex,
@@ -186,13 +190,16 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
   const isCollapsedCategory = collapsedCategoryIds.includes(categoryId);
   const categoryInsertionIndex = Math.max(0, bucketIndex - 1);
   const headerCategoryDropTarget =
-    categoryDropTarget?.hoveredCategoryId === categoryId ? categoryDropTarget : null;
+    categoryDropTarget?.hoveredCategoryId === categoryId && categoryDropTarget.context !== 'zone'
+      ? categoryDropTarget
+      : null;
   const isCategoryDropTarget = Boolean(headerCategoryDropTarget);
   const categoryDropPosition = headerCategoryDropTarget?.position ?? null;
   const isLeadingDropTarget =
     categoryDropTarget?.hoveredCategoryId === categoryId &&
     categoryDropTarget.targetIndex === categoryInsertionIndex &&
-    categoryDropTarget.position === 'before';
+    categoryDropTarget.position === 'before' &&
+    categoryDropTarget.context === 'zone';
   const isFeatureHeaderDropTarget =
     featureDropTarget?.categoryId === categoryId && featureDropTarget.context === 'header';
   const headerDropPositionRef = React.useRef<'before' | 'after'>('before');
@@ -234,6 +241,7 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
         targetIndex,
         position,
         hoveredCategoryId: categoryId,
+        context: 'header',
       });
       return;
     }
@@ -258,7 +266,9 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
     if (related && event.currentTarget.contains(related)) {
       return;
     }
-    setCategoryDropTarget(prev => (prev?.hoveredCategoryId === categoryId ? null : prev));
+    setCategoryDropTarget(prev =>
+      prev?.hoveredCategoryId === categoryId && prev.context === 'header' ? null : prev,
+    );
     setFeatureDropTarget(prev =>
       prev?.categoryId === categoryId && prev.context === 'header' ? null : prev,
     );
@@ -305,10 +315,47 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
   const shouldRenderFeatureList = !isCollapsedCategory;
 
   return (
-    <div className={sectionSpacing} data-testid={testId}>
+    <div
+      className={sectionSpacing}
+      data-testid={testId}
+      onDragOver={event => {
+        const data = draggingItem ?? parseDragData(event);
+        if (!data) {
+          return;
+        }
+        // Keep drag alive across gaps at the section level
+        event.preventDefault();
+        if (event.dataTransfer) {
+          event.dataTransfer.dropEffect = 'move';
+        }
+      }}
+      onDrop={event => {
+        const data = draggingItem ?? parseDragData(event);
+        if (!data) {
+          return;
+        }
+        event.preventDefault();
+        // Use last computed targets so the item drops where the active line shows, even if the cursor isn't exactly on it
+        if (data.type === 'feature') {
+          const t = featureDropTarget;
+          if (t && t.categoryId === bucket.categoryId && typeof t.index === 'number') {
+            onFeatureDrop(data.id, bucket.categoryId, t.index);
+            setFeatureDropTarget(null);
+            return;
+          }
+        } else if (data.type === 'category') {
+          const t = categoryDropTarget;
+          if (t && typeof t.targetIndex === 'number') {
+            onCategoryDrop(data.id, t.targetIndex);
+            setCategoryDropTarget(null);
+            return;
+          }
+        }
+      }}
+    >
       <DropZone
         active={isLeadingDropTarget}
-        sizeClassName="h-3"
+        sizeClassName="h-5"
         className="px-2"
         testId={`category-dropzone-before-${categoryId}`}
         onDragOver={event => {
@@ -325,6 +372,7 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
             targetIndex: categoryInsertionIndex,
             position: 'before',
             hoveredCategoryId: categoryId,
+            context: 'zone',
           });
         }}
         onDragLeave={() => {
@@ -333,7 +381,8 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
               prev &&
               prev.hoveredCategoryId === categoryId &&
               prev.targetIndex === categoryInsertionIndex &&
-              prev.position === 'before'
+              prev.position === 'before' &&
+              prev.context === 'zone'
             ) {
               return null;
             }
@@ -395,3 +444,4 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
     </div>
   );
 };
+/* eslint-enable sonarjs/cognitive-complexity, complexity */

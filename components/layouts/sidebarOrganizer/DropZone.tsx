@@ -47,10 +47,10 @@ export const DropZone: React.FC<DropZoneProps> = ({
     >
       <span
         aria-hidden
-        className={`pointer-events-none h-1.5 w-full rounded-full transform transition-all duration-150 ring-0 ring-transparent ring-offset-0 ring-offset-transparent ${
+        className={`pointer-events-none h-1 w-full rounded-full transition-all duration-100 ${
           active
-            ? 'scale-y-125 bg-primary ring-2 ring-primary/50 ring-offset-2 ring-offset-surface opacity-100'
-            : 'scale-y-100 bg-border-color/60 opacity-80'
+            ? 'bg-primary ring-2 ring-primary/50 ring-offset-1 ring-offset-surface opacity-100'
+            : 'opacity-0 bg-transparent ring-0 ring-transparent'
         }`}
       />
     </div>
