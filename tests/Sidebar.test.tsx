@@ -1,6 +1,6 @@
 /* @vitest-environment jsdom */
 import React from 'react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { Sidebar } from '../components/layouts/Sidebar';
@@ -230,6 +230,157 @@ describe('Sidebar', () => {
     await waitFor(() => {
       const order = getFeatureOrder(workspaceSection);
       expect(order.indexOf('scaffolder')).toBeLessThan(order.indexOf('technical'));
+    });
+  });
+
+  it('reorders feature icons while the sidebar is collapsed', async () => {
+    console.info('Verifying collapsed sidebar retains drag-and-drop feature reordering.');
+
+    render(
+      <Sidebar
+        collapsed
+        onToggle={noop}
+        activeMode={'technical' as Mode}
+        onSelectMode={noop}
+      />,
+    );
+
+    const workspaceSection = await screen.findByTestId('category-section-workspace');
+    const scaffolder = workspaceSection.querySelector(
+      '[data-feature-id="scaffolder"]',
+    ) as HTMLButtonElement;
+    const summarizer = workspaceSection.querySelector(
+      '[data-feature-id="technical"]',
+    ) as HTMLButtonElement;
+    const targetRow = summarizer.parentElement as HTMLElement;
+    expect(targetRow).toBeTruthy();
+    const transfer = createDataTransfer();
+
+    fireEvent.dragStart(scaffolder, { dataTransfer: transfer });
+    fireEvent.dragOver(targetRow, { dataTransfer: transfer });
+    fireEvent.drop(targetRow, { dataTransfer: transfer });
+
+    await waitFor(() => {
+      const order = getFeatureOrder(workspaceSection);
+      expect(order.indexOf('scaffolder')).toBeLessThan(order.indexOf('technical'));
+    });
+  });
+
+  it('reorders features when the drop target is the feature button itself', async () => {
+    console.info('Validating drop events targeting the feature button still reorder the list.');
+
+    render(
+      <Sidebar
+        collapsed={false}
+        onToggle={noop}
+        activeMode={'technical' as Mode}
+        onSelectMode={noop}
+      />,
+    );
+
+    const workspaceSection = await screen.findByTestId('category-section-workspace');
+    const scaffolder = workspaceSection.querySelector(
+      '[data-feature-id="scaffolder"]',
+    ) as HTMLButtonElement;
+    const summarizer = workspaceSection.querySelector(
+      '[data-feature-id="technical"]',
+    ) as HTMLButtonElement;
+    const transfer = createDataTransfer();
+
+    fireEvent.dragStart(scaffolder, { dataTransfer: transfer });
+    fireEvent.dragOver(summarizer, { dataTransfer: transfer });
+    fireEvent.drop(summarizer, { dataTransfer: transfer });
+
+    await waitFor(() => {
+      const order = getFeatureOrder(workspaceSection);
+      expect(order.indexOf('scaffolder')).toBeLessThan(order.indexOf('technical'));
+    });
+  });
+
+  it('moves a feature into another category while the sidebar is collapsed', async () => {
+    console.info('Ensuring collapsed sidebar supports cross-category feature drops.');
+
+    render(
+      <Sidebar
+        collapsed
+        onToggle={noop}
+        activeMode={'technical' as Mode}
+        onSelectMode={noop}
+      />,
+    );
+
+    const workspaceSection = await screen.findByTestId('category-section-workspace');
+    const orchestrationSection = await screen.findByTestId('category-section-orchestration');
+    const targetFeature = orchestrationSection.querySelector(
+      '[data-feature-id="requestSplitter"]',
+    ) as HTMLButtonElement;
+    const targetRow = targetFeature.parentElement as HTMLElement;
+    const summarizer = workspaceSection.querySelector(
+      '[data-feature-id="technical"]',
+    ) as HTMLButtonElement;
+    const transfer = createDataTransfer();
+
+    fireEvent.dragStart(summarizer, { dataTransfer: transfer });
+    fireEvent.dragOver(targetRow, { dataTransfer: transfer });
+    fireEvent.drop(targetRow, { dataTransfer: transfer });
+
+    await waitFor(() => {
+      expect(
+        within(orchestrationSection).getByText('Technical Summarizer'),
+      ).toBeVisible();
+    });
+  });
+
+  it('hides category headers when the sidebar is collapsed', async () => {
+    console.info('Confirming collapsed sidebar remains icon-only without category drag handles.');
+
+    render(
+      <Sidebar
+        collapsed
+        onToggle={noop}
+        activeMode={'technical' as Mode}
+        onSelectMode={noop}
+      />,
+    );
+
+    const workspaceSection = await screen.findByTestId('category-section-workspace');
+    expect(workspaceSection.querySelector('[data-category-id="workspace"]')).toBeNull();
+
+    const categoryHandles = document.querySelectorAll('[data-category-id]');
+    expect(categoryHandles.length).toBe(0);
+    expect(screen.queryByText('Workspace')).not.toBeInTheDocument();
+    expect(screen.queryByText('Interactive')).not.toBeInTheDocument();
+  });
+
+  it('does not switch modes when a feature drag ends on its original slot', async () => {
+    console.info('Ensuring drag-ending over the origin does not trigger unintended mode switches.');
+
+    const handleSelect = vi.fn();
+
+    render(
+      <Sidebar
+        collapsed
+        onToggle={noop}
+        activeMode={'technical' as Mode}
+        onSelectMode={handleSelect}
+      />,
+    );
+
+    const workspaceSection = await screen.findByTestId('category-section-workspace');
+    const summarizer = workspaceSection.querySelector(
+      '[data-feature-id="technical"]',
+    ) as HTMLButtonElement;
+    const parentRow = summarizer.parentElement as HTMLElement;
+    const transfer = createDataTransfer();
+
+    fireEvent.dragStart(summarizer, { dataTransfer: transfer });
+    fireEvent.dragOver(parentRow, { dataTransfer: transfer, clientY: 4 });
+    fireEvent.drop(parentRow, { dataTransfer: transfer, clientY: 4 });
+    fireEvent.dragEnd(summarizer, { dataTransfer: transfer });
+    fireEvent.click(summarizer);
+
+    await waitFor(() => {
+      expect(handleSelect).not.toHaveBeenCalled();
     });
   });
 

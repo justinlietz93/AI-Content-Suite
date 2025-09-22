@@ -44,7 +44,7 @@ interface CategoryHeaderProps {
   /** Blur handler that commits rename. */
   onRenameBlur: () => void;
   /** Drag start handler for the category header. */
-  onDragStart: (event: React.DragEvent<HTMLDivElement>) => void;
+  onDragStart: (event: React.DragEvent<HTMLElement>) => void;
   /** Drag end handler. */
   onDragEnd: () => void;
   /** Keyboard handler used for accessible drag toggling. */
@@ -97,8 +97,12 @@ export const CategoryHeader: React.FC<CategoryHeaderProps> = ({
   const dropAfterActive = categoryDropPosition === 'after';
   const isDropTarget = hasCategoryDrop || isFeatureDropTarget;
   const containerClasses = [
-    'group flex items-center justify-between rounded-md px-2 py-1 text-[0.65rem] uppercase tracking-widest text-text-secondary/70 transition-colors',
-    isFeatureDropTarget ? 'bg-primary/10 ring-2 ring-primary/60' : '',
+    'group flex items-center justify-between rounded-md px-2 py-1 text-[0.65rem] uppercase tracking-widest text-text-secondary/70 transition-colors transition-transform',
+    isDragging
+      ? 'scale-[1.01] ring-2 ring-primary/70 shadow-lg'
+      : isFeatureDropTarget
+        ? 'bg-primary/10 ring-2 ring-primary/60'
+        : '',
   ]
     .filter(Boolean)
     .join(' ');
@@ -278,6 +282,7 @@ export const CategoryHeader: React.FC<CategoryHeaderProps> = ({
         <div
           className={containerClasses}
           draggable={!isEditing}
+          data-drag-handle="category"
           onDragStart={event => {
             if (isEditing) {
               event.preventDefault();

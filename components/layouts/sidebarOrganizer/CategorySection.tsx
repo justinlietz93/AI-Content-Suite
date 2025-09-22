@@ -34,10 +34,10 @@ interface CategorySectionProps {
   onRenameKeyDown: (event: React.KeyboardEvent<HTMLInputElement>) => void;
   onRenameBlur: () => void;
   onFeatureKeyDown: (event: React.KeyboardEvent<HTMLButtonElement>, featureId: string) => void;
-  onFeatureDragStart: (event: React.DragEvent<HTMLButtonElement>, featureId: string) => void;
+  onFeatureDragStart: (event: React.DragEvent<HTMLElement>, featureId: string) => void;
   onFeatureDragEnd: () => void;
   onFeatureDrop: (featureId: string, categoryId: string | null, index: number) => void;
-  onCategoryDragStart: (event: React.DragEvent<HTMLDivElement>, categoryId: string) => void;
+  onCategoryDragStart: (event: React.DragEvent<HTMLElement>, categoryId: string) => void;
   onCategoryDragEnd: () => void;
   onCategoryKeyDown: (event: React.KeyboardEvent<HTMLDivElement>, categoryId: string) => void;
   onCategoryDrop: (categoryId: string, targetIndex: number) => void;

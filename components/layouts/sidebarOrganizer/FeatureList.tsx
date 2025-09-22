@@ -19,7 +19,7 @@ interface FeatureListProps {
   draggingItem: DraggingItem | null;
   featureDropTarget: FeatureDropTarget;
   onSelectMode?: (mode: Mode) => void;
-  onDragStart: (event: React.DragEvent<HTMLButtonElement>, featureId: string) => void;
+  onDragStart: (event: React.DragEvent<HTMLElement>, featureId: string) => void;
   onDragEnd: () => void;
   onKeyDown: (event: React.KeyboardEvent<HTMLButtonElement>, featureId: string) => void;
   onDrop: (featureId: string, categoryId: string | null, index: number) => void;
@@ -130,7 +130,7 @@ export const FeatureList: React.FC<FeatureListProps> = ({
                 return shouldClear ? null : prev;
               });
             }}
-            onDrop={event => {
+            onDropCapture={event => {
               const data = draggingItem ?? parseDragData(event);
               if (data?.type !== 'feature') {
                 return;
@@ -212,6 +212,7 @@ export const FeatureList: React.FC<FeatureListProps> = ({
               return;
             }
             event.preventDefault();
+            event.stopPropagation();
             onDrop(data.id, bucket.categoryId, bucket.features.length);
             setFeatureDropTarget(null);
           }}

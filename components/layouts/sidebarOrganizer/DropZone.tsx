@@ -39,11 +39,14 @@ export const DropZone: React.FC<DropZoneProps> = ({
     onDragLeave={onDragLeave}
     onDrop={onDrop}
     data-testid={testId}
+    data-drop-zone="true"
   >
     <span
       aria-hidden
-      className={`pointer-events-none h-1 w-full rounded-full transition-colors duration-150 ${
-        active ? 'bg-primary' : 'bg-transparent'
+      className={`pointer-events-none h-1.5 w-full rounded-full transform transition-all duration-150 ${
+        active
+          ? 'scale-y-125 bg-primary shadow-[0_0_0_2px_rgba(59,130,246,0.25)] opacity-100'
+          : 'scale-y-100 bg-border-color/60 opacity-80'
       }`}
     />
   </div>

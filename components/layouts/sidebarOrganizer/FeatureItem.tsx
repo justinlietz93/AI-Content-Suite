@@ -25,7 +25,7 @@ interface FeatureItemProps {
   /** Keyboard handler supporting drag shortcuts. */
   onKeyDown: (event: React.KeyboardEvent<HTMLButtonElement>, featureId: string) => void;
   /** Pointer drag start handler. */
-  onDragStart: (event: React.DragEvent<HTMLButtonElement>, featureId: string) => void;
+  onDragStart: (event: React.DragEvent<HTMLElement>, featureId: string) => void;
   /** Pointer drag end handler. */
   onDragEnd: () => void;
 }
@@ -47,12 +47,43 @@ export const FeatureItem: React.FC<FeatureItemProps> = ({
 }) => {
   const IconComponent = iconMap[feature.mode];
   const isActive = activeMode === feature.mode;
+  /** Tracks whether a drag interaction just completed so the click handler can be suppressed. */
+  const suppressClickRef = React.useRef(false);
+  const handleDragStart = React.useCallback(
+    (event: React.DragEvent<HTMLElement>) => {
+      suppressClickRef.current = true;
+      onDragStart(event, feature.id);
+    },
+    [feature.id, onDragStart],
+  );
+  const handleDragEnd = React.useCallback(() => {
+    onDragEnd();
+    setTimeout(() => {
+      suppressClickRef.current = false;
+    }, 0);
+  }, [onDragEnd]);
+  /**
+   * Prevents drag terminations from triggering a mode switch while still allowing regular clicks to activate features.
+   */
+  const handleClick = React.useCallback(
+    (event: React.MouseEvent<HTMLButtonElement>) => {
+      if (suppressClickRef.current) {
+        event.preventDefault();
+        event.stopPropagation();
+        suppressClickRef.current = false;
+        return;
+      }
+      onSelectMode?.(feature.mode);
+    },
+    [feature.mode, onSelectMode],
+  );
   const buttonClasses = [
-    'group flex w-full items-center gap-3 rounded-md px-2 py-2 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-surface',
+    'group flex w-full items-center gap-3 rounded-md px-2 py-2 text-left transition-colors transition-transform focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-surface cursor-grab active:cursor-grabbing',
     isActive
       ? 'bg-primary/20 text-primary'
       : 'text-text-secondary hover:bg-secondary/60 hover:text-text-primary focus-visible:text-text-primary',
     collapsed ? 'justify-center px-0' : '',
+    isDragging ? 'scale-[1.02] ring-2 ring-primary/70 shadow-lg' : '',
   ]
     .filter(Boolean)
     .join(' ');
@@ -61,11 +92,12 @@ export const FeatureItem: React.FC<FeatureItemProps> = ({
     <button
       type="button"
       className={buttonClasses}
+      data-drag-handle="feature"
       draggable
-      onDragStart={event => onDragStart(event, feature.id)}
-      onDragEnd={onDragEnd}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+      onClick={handleClick}
       onKeyDown={event => onKeyDown(event, feature.id)}
-      onClick={() => onSelectMode?.(feature.mode)}
       aria-grabbed={isDragging}
       data-feature-id={feature.id}
       role="listitem"
@@ -74,6 +106,9 @@ export const FeatureItem: React.FC<FeatureItemProps> = ({
         <IconComponent
           fontSize={collapsed ? 'large' : 'medium'}
           className={`shrink-0 ${isActive ? 'text-primary' : 'text-text-secondary'} ${collapsed ? 'mx-auto' : ''}`}
+          draggable
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
         />
       ) : null}
       {collapsed ? (

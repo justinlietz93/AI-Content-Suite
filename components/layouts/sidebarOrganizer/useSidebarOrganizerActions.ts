@@ -18,6 +18,7 @@ import {
 } from './actions';
 import { createCategoryId } from './constants';
 import type { DraggingItem, FeatureDropTarget, CategoryDropTarget } from './dragTypes';
+import { useDragPreview } from './useDragPreview';
 
 const DRAG_DATA_MIME = 'application/x-sidebar-item';
 const DRAG_DATA_TEXT_FEATURE_PREFIX = 'feature:';
@@ -50,8 +51,8 @@ interface UseSidebarOrganizerActionsResult {
   handleDeleteCategory: (categoryId: string) => void;
   handleFeatureKeyDown: (event: KeyboardEvent<HTMLButtonElement>, featureId: string) => void;
   handleCategoryKeyDown: (event: KeyboardEvent<HTMLDivElement>, categoryId: string) => void;
-  handleFeatureDragStart: (event: DragEvent<HTMLButtonElement>, featureId: string) => void;
-  handleCategoryDragStart: (event: DragEvent<HTMLDivElement>, categoryId: string) => void;
+  handleFeatureDragStart: (event: DragEvent<HTMLElement>, featureId: string) => void;
+  handleCategoryDragStart: (event: DragEvent<HTMLElement>, categoryId: string) => void;
   dropFeature: (featureId: string, categoryId: string | null, index: number) => void;
   parseDragData: (event: DragEvent) => DraggingItem | null;
   resetDragState: () => void;
@@ -77,6 +78,7 @@ export const useSidebarOrganizerActions = ({
   const [featureDropTarget, setFeatureDropTarget] = useState<FeatureDropTarget>(null);
   const [categoryDropTarget, setCategoryDropTarget] = useState<CategoryDropTarget>(null);
   const draggingItemRef = useRef<DraggingItem | null>(null);
+  const { applyDragPreview, clearDragPreview } = useDragPreview();
 
   /**
    * Keeps the latest drag payload available synchronously for DOM drag events while still updating React state.
@@ -90,10 +92,11 @@ export const useSidebarOrganizerActions = ({
    * Clears drag state for both features and categories.
    */
   const resetDragState = useCallback(() => {
+    clearDragPreview();
     setDraggingItem(null);
     setFeatureDropTarget(null);
     setCategoryDropTarget(null);
-  }, [setDraggingItem]);
+  }, [clearDragPreview, setDraggingItem]);
 
   /**
    * Clears rename state and optionally removes a newly created category that was never finalized.
@@ -433,8 +436,12 @@ export const useSidebarOrganizerActions = ({
    * Configures drag payloads for feature items.
    */
   const handleFeatureDragStart = useCallback(
-    (event: DragEvent<HTMLButtonElement>, featureId: string) => {
+    (event: DragEvent<HTMLElement>, featureId: string) => {
       const serialized = JSON.stringify({ type: 'feature', id: featureId });
+      const currentTarget = event.currentTarget as HTMLElement;
+      const dragHandle =
+        (currentTarget.closest('[data-drag-handle="feature"]') as HTMLElement | null) ??
+        currentTarget;
       if (event.dataTransfer) {
         event.dataTransfer.setData(DRAG_DATA_MIME, serialized);
         event.dataTransfer.setData(
@@ -442,20 +449,24 @@ export const useSidebarOrganizerActions = ({
           `${DRAG_DATA_TEXT_FEATURE_PREFIX}${featureId}`,
         );
         event.dataTransfer.effectAllowed = 'move';
-        event.dataTransfer.setDragImage(event.currentTarget, 0, 0);
+        applyDragPreview(event, dragHandle);
       }
       setDraggingItem({ type: 'feature', id: featureId, viaKeyboard: false });
       announce(labels.featureGrabAnnouncement);
     },
-    [announce, labels.featureGrabAnnouncement, setDraggingItem],
+    [announce, applyDragPreview, labels.featureGrabAnnouncement, setDraggingItem],
   );
 
   /**
    * Configures drag payloads for category headers.
    */
   const handleCategoryDragStart = useCallback(
-    (event: DragEvent<HTMLDivElement>, categoryId: string) => {
+    (event: DragEvent<HTMLElement>, categoryId: string) => {
       const serialized = JSON.stringify({ type: 'category', id: categoryId });
+      const currentTarget = event.currentTarget as HTMLElement;
+      const dragHandle =
+        (currentTarget.closest('[data-drag-handle="category"]') as HTMLElement | null) ??
+        currentTarget;
       if (event.dataTransfer) {
         event.dataTransfer.setData(DRAG_DATA_MIME, serialized);
         event.dataTransfer.setData(
@@ -463,12 +474,12 @@ export const useSidebarOrganizerActions = ({
           `${DRAG_DATA_TEXT_CATEGORY_PREFIX}${categoryId}`,
         );
         event.dataTransfer.effectAllowed = 'move';
-        event.dataTransfer.setDragImage(event.currentTarget, 0, 0);
+        applyDragPreview(event, dragHandle);
       }
       setDraggingItem({ type: 'category', id: categoryId, viaKeyboard: false });
       announce(labels.categoryGrabAnnouncement);
     },
-    [announce, labels.categoryGrabAnnouncement, setDraggingItem],
+    [announce, applyDragPreview, labels.categoryGrabAnnouncement, setDraggingItem],
   );
 
   return {
