@@ -266,56 +266,6 @@ describe('Sidebar', () => {
     });
   });
 
-  it('uses collapsed whitespace drop coordinates to position reordered features', async () => {
-    console.info('Ensuring collapsed whitespace drops reinsert features at pointer position.');
-
-    render(
-      <Sidebar
-        collapsed
-        onToggle={noop}
-        activeMode={'technical' as Mode}
-        onSelectMode={noop}
-      />,
-    );
-
-    const workspaceSection = await screen.findByTestId('category-section-workspace');
-    const featureButtons = Array.from(
-      workspaceSection.querySelectorAll<HTMLButtonElement>('[data-feature-id]'),
-    );
-
-    featureButtons.forEach((button, index) => {
-      Object.defineProperty(button, 'getBoundingClientRect', {
-        value: () =>
-          ({
-            width: 40,
-            height: 40,
-            top: index * 50,
-            bottom: index * 50 + 40,
-            left: 0,
-            right: 40,
-            x: 0,
-            y: index * 50,
-            toJSON: () => {},
-          }) as DOMRect,
-      });
-    });
-
-    const scaffolder = workspaceSection.querySelector(
-      '[data-feature-id="scaffolder"]',
-    ) as HTMLButtonElement;
-
-    const transfer = createDataTransfer();
-
-    fireEvent.dragStart(scaffolder, { dataTransfer: transfer });
-    fireEvent.dragOver(workspaceSection, { dataTransfer: transfer, clientY: 5 });
-    fireEvent.drop(workspaceSection, { dataTransfer: transfer, clientY: 5 });
-
-    await waitFor(() => {
-      const order = getFeatureOrder(workspaceSection);
-      expect(order.indexOf('scaffolder')).toBeLessThan(order.indexOf('technical'));
-    });
-  });
-
   it('moves a feature into another category while the sidebar is collapsed', async () => {
     console.info('Ensuring collapsed sidebar supports cross-category feature drops.');
 
@@ -350,8 +300,8 @@ describe('Sidebar', () => {
     });
   });
 
-  it('highlights collapsed category buckets while hovering a feature drop target', async () => {
-    console.info('Ensuring collapsed categories surface visible drop feedback while hovering features.');
+  it('hides category headers when the sidebar is collapsed', async () => {
+    console.info('Confirming collapsed sidebar remains icon-only without category drag handles.');
 
     render(
       <Sidebar
@@ -363,83 +313,12 @@ describe('Sidebar', () => {
     );
 
     const workspaceSection = await screen.findByTestId('category-section-workspace');
-    const orchestrationSection = await screen.findByTestId('category-section-orchestration');
-    const summarizer = workspaceSection.querySelector(
-      '[data-feature-id="technical"]',
-    ) as HTMLButtonElement;
-    expect(summarizer).toBeTruthy();
+    expect(workspaceSection.querySelector('[data-category-id="workspace"]')).toBeNull();
 
-    const transfer = createDataTransfer();
-
-    fireEvent.dragStart(summarizer, { dataTransfer: transfer });
-    fireEvent.dragOver(orchestrationSection, { dataTransfer: transfer });
-
-    await waitFor(() => {
-      expect(orchestrationSection).toHaveClass('ring-2', { exact: false });
-      expect(orchestrationSection).toHaveClass('bg-primary/10', { exact: false });
-    });
-
-    fireEvent.dragLeave(orchestrationSection, { relatedTarget: null });
-
-    await waitFor(() => {
-      expect(orchestrationSection).not.toHaveClass('ring-2', { exact: false });
-    });
-
-    fireEvent.dragEnd(summarizer, { dataTransfer: transfer });
-  });
-
-  it('reorders categories while the sidebar is collapsed', async () => {
-    console.info('Confirming collapsed sidebar retains category drag-and-drop ordering.');
-
-    render(
-      <Sidebar
-        collapsed
-        onToggle={noop}
-        activeMode={'technical' as Mode}
-        onSelectMode={noop}
-      />,
-    );
-
-    await screen.findByTestId('category-section-workspace');
-    const interactiveHandle = document.querySelector(
-      '[data-category-id="interactive"]',
-    ) as HTMLElement;
-    const workspaceHandle = document.querySelector(
-      '[data-category-id="workspace"]',
-    ) as HTMLElement;
-    expect(interactiveHandle).toBeTruthy();
-    expect(workspaceHandle).toBeTruthy();
-
-    Object.defineProperty(workspaceHandle, 'getBoundingClientRect', {
-      value: () =>
-        ({
-          top: 0,
-          bottom: 40,
-          left: 0,
-          right: 200,
-          height: 40,
-          width: 200,
-          x: 0,
-          y: 0,
-          toJSON: () => {},
-        }) as DOMRect,
-    });
-
-    const transfer = createDataTransfer();
-
-    fireEvent.dragStart(interactiveHandle, { dataTransfer: transfer });
-    fireEvent.dragOver(workspaceHandle, { dataTransfer: transfer, clientY: 5 });
-    fireEvent.drop(workspaceHandle, { dataTransfer: transfer, clientY: 5 });
-
-    await waitFor(() => {
-      const orderedIds = Array.from(
-        document.querySelectorAll('[data-testid^="category-section-"]'),
-      )
-        .map(element => element.getAttribute('data-testid')?.replace('category-section-', '') ?? '')
-        .filter(id => id && id !== 'uncategorized');
-
-      expect(orderedIds.slice(0, 3)).toEqual(['interactive', 'workspace', 'orchestration']);
-    });
+    const categoryHandles = document.querySelectorAll('[data-category-id]');
+    expect(categoryHandles.length).toBe(0);
+    expect(screen.queryByText('Workspace')).not.toBeInTheDocument();
+    expect(screen.queryByText('Interactive')).not.toBeInTheDocument();
   });
 
   it('does not switch modes when a feature drag ends on its original slot', async () => {
