@@ -92,7 +92,9 @@ export const useChatSubmission = ({
   return useCallback(
     async (event?: FormEvent<HTMLFormElement>) => {
       event?.preventDefault();
-      if (!canSubmit) return;
+      if (!canSubmit) {
+        return;
+      }
 
       const modeAtSubmit = activeMode;
       const { providerId } = resolveChatProviderConfig();

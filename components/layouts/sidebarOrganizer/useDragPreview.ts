@@ -43,8 +43,19 @@ export const useDragPreview = (): DragPreviewController => {
    * @param event - Drag event used to access the native data transfer payload.
    * @param handle - Element representing the item under drag; used to generate the preview snapshot.
    */
+  // Decide whether to use custom drag image.
+  // Temporarily disabled to diagnose environments where custom previews may cancel the drag
+  // immediately (e.g., some Linux/Wayland setups). If the browser rejects setDragImage, we
+  // already fall back to native previews; disabling here avoids any DOM cloning during drag.
+  const shouldUseCustomPreview = false;
+
   const applyDragPreview = React.useCallback(
     (event: React.DragEvent, handle: HTMLElement | null) => {
+      if (!shouldUseCustomPreview) {
+        clearDragPreview();
+        return;
+      }
+
       if (!event.dataTransfer || !handle) {
         clearDragPreview();
         return;
@@ -80,7 +91,7 @@ export const useDragPreview = (): DragPreviewController => {
         console.warn('Unable to set custom drag image for sidebar organizer handle.', error);
       }
     },
-    [clearDragPreview],
+    [clearDragPreview, shouldUseCustomPreview],
   );
 
   React.useEffect(() => clearDragPreview, [clearDragPreview]);

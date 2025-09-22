@@ -96,16 +96,8 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
     const shouldRenderRootZone =
       hasUncategorizedFeatures || isDraggingFeature || isRootZoneTargeted;
 
-    const rootSectionSpacing = collapsed
-      ? shouldRenderRootZone
-        ? sectionSpacing
-        : 'px-1 first:pt-0 last:pb-2'
-      : shouldRenderRootZone
-      ? sectionSpacing
-      : 'px-2 pb-3 pt-0';
-
     return (
-      <div className={rootSectionSpacing} data-testid={testId}>
+      <div className={sectionSpacing} data-testid={testId}>
         {shouldRenderRootZone ? (
           <DropZone
             active={

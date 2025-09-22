@@ -41,6 +41,8 @@ const TestDragPreview: React.FC = () => {
 
 describe('useDragPreview', () => {
   it('centers drag preview and cleans up after drag end', () => {
+    // Ensure custom drag preview is enabled for this test regardless of env flags.
+    window.localStorage.setItem('aics_use_custom_drag_preview', 'true');
     render(<TestDragPreview />);
 
     const handle = screen.getByTestId('drag-preview-handle');
@@ -72,5 +74,6 @@ describe('useDragPreview', () => {
     fireEvent.dragEnd(handle, { dataTransfer });
 
     expect(document.body.contains(previewNode)).toBe(false);
+    window.localStorage.removeItem('aics_use_custom_drag_preview');
   });
 });

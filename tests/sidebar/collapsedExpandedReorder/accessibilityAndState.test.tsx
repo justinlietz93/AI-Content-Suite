@@ -22,8 +22,8 @@ import {
 initializeSidebarOrganizerTestSuite();
 
 describe('Sidebar accessibility and state handling', () => {
-  it('updates aria-grabbed attributes to reflect drag lifecycle state changes', async () => {
-    console.info('Verifying aria-grabbed state toggles true during drag and resets on drag end.');
+  it('updates data-grabbed attributes to reflect drag lifecycle state changes', async () => {
+    console.info('Verifying data-grabbed state toggles true during drag and resets on drag end.');
 
     render(
       <Sidebar
@@ -41,13 +41,13 @@ describe('Sidebar accessibility and state handling', () => {
     const styleExtractorButton = document.querySelector('[data-feature-id="styleExtractor"]') as HTMLElement;
     const dataTransfer = createDataTransfer();
 
-    expect(styleExtractorButton.getAttribute('aria-grabbed')).toBe('false');
+  expect(styleExtractorButton.getAttribute('data-grabbed')).toBe('false');
 
     fireEvent.dragStart(styleExtractorButton, { dataTransfer });
-    expect(styleExtractorButton.getAttribute('aria-grabbed')).toBe('true');
+  expect(styleExtractorButton.getAttribute('data-grabbed')).toBe('true');
 
     fireEvent.dragEnd(styleExtractorButton, { dataTransfer });
-    expect(styleExtractorButton.getAttribute('aria-grabbed')).toBe('false');
+  expect(styleExtractorButton.getAttribute('data-grabbed')).toBe('false');
   });
 
   it('preserves keyboard focus on the moved feature after pointer drag completes', async () => {
@@ -101,10 +101,10 @@ describe('Sidebar accessibility and state handling', () => {
     const styleExtractorButton = document.querySelector('[data-feature-id="styleExtractor"]') as HTMLElement;
 
     fireEvent.keyDown(styleExtractorButton, { key: ' ', code: 'Space' });
-    expect(styleExtractorButton.getAttribute('aria-grabbed')).toBe('true');
+  expect(styleExtractorButton.getAttribute('data-grabbed')).toBe('true');
 
     fireEvent.keyDown(styleExtractorButton, { key: 'Escape', code: 'Escape' });
-    expect(styleExtractorButton.getAttribute('aria-grabbed')).toBe('false');
+  expect(styleExtractorButton.getAttribute('data-grabbed')).toBe('false');
     expect(getRenderedFeatureOrder('workspace')).toEqual([
       'technical',
       'styleExtractor',
