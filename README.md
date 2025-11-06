@@ -10,12 +10,6 @@ This contains everything you need to run your app locally.
 
 <img width="1049" height="1119" alt="image" src="https://github.com/user-attachments/assets/1f2eee39-a5be-4be1-94a7-82d8beff9265" />
 
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
-
-View your app in AI Studio: https://ai.studio/apps/drive/1AAdFi9Y_nFooagUjpfxZdOuWuzHCrgr4
-
 ## Run Locally
 
 **Prerequisites:**  Node.js
